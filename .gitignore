@@ -1,0 +1,28 @@
+# Node / npm
+node_modules/
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Electron
+dist/
+dist-electron/
+out/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# 本地数据
+data/
+*.db
+*.sqlite
