@@ -1,0 +1,6 @@
+# 领域层（渲染进程）
+
+与后端共享的资源/元数据/任务**类型定义与领域接口**（跨服务契约的影子）。
+
+- 实体类型：Resource / Metadata / Tag / DownloadTask…
+- 仓库接口：ResourceRepository、MetadataRepository…

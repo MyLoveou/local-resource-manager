@@ -1,0 +1,15 @@
+{
+  "name": "local-resource-manager",
+  "private": true,
+  "version": "0.0.0",
+  "description": "本地资源管理器：统一管理图片/视频，元数据自建抓取，内置下载",
+  "scripts": {
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm --filter desktop build",
+    "start": "pnpm --filter desktop start",
+    "scrape:install": "python -m venv apps/scrape-service/.venv && apps/scrape-service/.venv/Scripts/pip install -r apps/scrape-service/requirements.txt",
+    "download:install": "python -m venv apps/download-service/.venv && apps/download-service/.venv/Scripts/pip install -r apps/download-service/requirements.txt",
+    "scrape:start": "apps/scrape-service/.venv/Scripts/python -m uvicorn app.main:app --app-dir apps/scrape-service --host 127.0.0.1 --port 8001",
+    "download:start": "apps/download-service/.venv/Scripts/python -m uvicorn app.main:app --app-dir apps/download-service --host 127.0.0.1 --port 8002"
+  }
+}
