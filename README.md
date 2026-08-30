@@ -9,8 +9,7 @@
 | 模块 | 技术 | 位置 |
 |------|------|------|
 | 桌面端（UI 层） | Electron 44 + Vue 3 + Vite 8（TS） | `apps/desktop` |
-| 抓取服务 | Python FastAPI（SearXNG + 站点适配器） | `apps/scrape-service` |
-| 下载服务 | Python FastAPI（aria2c + rqbit 双引擎） | `apps/download-service` |
+| 后端服务 | Python FastAPI（**单进程双应用**：抓取 + 下载） | `apps/backend` |
 | 存储 | SQLite（待 L3 数据模型） | — |
 
 需求文档：`docs/requirements/features/`（主需求 / 模块 / 页面 / 技术栈，均已定稿）。
@@ -30,13 +29,16 @@
 │   │           ├── application/    #     业务层：状态与用例
 │   │           ├── domain/         #     领域层：类型与接口
 │   │           └── infrastructure/ #     基础设施层：API client/IPC
-│   ├── scrape-service/             # 抓取服务（FastAPI）
+│   ├── backend/                     # 后端服务（FastAPI 单进程双应用）
 │   │   └── app/
-│   │       ├── api/                #   接口适配层（路由）
-│   │       ├── application/        #   业务层（用例编排）
-│   │       ├── domain/             #   领域层（实体/端口）
-│   │       └── infrastructure/     #   基础设施层（httpx/适配器/缓存）
-│   └── download-service/           # 下载服务（FastAPI，同四层）
+│   │       ├── main.py              #   入口：挂载 /scrape /download + /health
+│   │       ├── shared/              #   共享层：config、db
+│   │       ├── scrape/              #   抓取应用
+│   │       │   ├── api/             #     接口适配层（路由）
+│   │       │   ├── application/     #     业务层（用例编排）
+│   │       │   ├── domain/          #     领域层（实体/端口）
+│   │       │   └── infrastructure/  #     基础设施层（httpx/适配器/缓存）
+│   │       └── download/            #   下载应用（同四层）
 └── docs/
     ├── requirements/features/      # L1 需求（已定稿）
     └── design/                     # L3 技术方案（落点）
@@ -50,13 +52,9 @@
 # 桌面端（开发模式，弹出 Electron 窗口）
 pnpm dev
 
-# 抓取服务（127.0.0.1:8001）
-pnpm scrape:install      # 首次：建 venv + 装依赖
-pnpm scrape:start
-
-# 下载服务（127.0.0.1:8002）
-pnpm download:install    # 首次
-pnpm download:start
+# 后端服务（127.0.0.1:8000，含 /scrape、/download 子应用）
+pnpm backend:install     # 首次：建 venv + 装依赖
+pnpm backend:start
 ```
 
 > pip 网络受限时：`pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/`

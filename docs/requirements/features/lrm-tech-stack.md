@@ -4,21 +4,24 @@
 > 主需求见 [local-resource-manager.md](local-resource-manager.md)
 > 调研：2026-08-30 双路检索（下载引擎 / 抓取生态）
 
-## 1. 架构总览（三进程）
+## 1. 架构总览（单进程双应用）
 
 ```
-┌─ Electron 渲染进程 (Vue/TS) ─────────────────────┐
-│        │ HTTP + SSE/WebSocket（自有 REST，token）  │
+┌─ Electron 渲染进程 (Vue/TS) ─────────────────────────┐
+│        │ HTTP + SSE/WebSocket（自有 REST，token）      │
 │  Electron 主进程 (TS)：窗口 / IPC / 进程编排 / 本地文件
-│        ├── 抓取服务 ── Python FastAPI，127.0.0.1 随机端口 + token
-│        └── 下载服务 ── Python FastAPI 编排层 + 下载引擎
-│             ├── aria2c 子进程    HTTP 分段 + BT/磁力/DHT
-│             └── rqbit 子进程     现代 BT / 磁力 / 流式
-└───────────────────────────────────────────────┘
+│        └── 后端服务 ── Python FastAPI，127.0.0.1:8000 + token
+│             ├── /scrape    抓取子应用（SearXNG + 站点适配器）
+│             ├── /download  下载子应用（aria2c + rqbit 双引擎）
+│             └── /health    总健康检查
+│  下载引擎以子进程运行：aria2c（HTTP/BT）、rqbit（BT/流式）、yt-dlp（站点兜底）
+└────────────────────────────────────────────────────┘
 ```
 
+- **单进程双应用**：一个后端进程内挂两个 FastAPI 子应用（`app.mount`），共享 SQLite/配置
+- 真正的隔离边界在「Python 编排层 ↔ 引擎二进制子进程」之间，引擎崩溃不拖垮后端
 - 服务间通信：localhost HTTP + SSE/WebSocket + token 鉴权，绑定 127.0.0.1
-- 存储：SQLite 共享库（单写者优先，其余短事务/只读），不引入 Redis/gRPC
+- 存储：SQLite 共享库（单写者优先），不引入 Redis/gRPC
 
 ## 2. 抓取服务（FastAPI）
 
