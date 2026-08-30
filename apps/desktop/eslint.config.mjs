@@ -12,6 +12,10 @@ export default tseslint.config(
     files: ['**/*.vue'],
     languageOptions: {
       parserOptions: { parser: tseslint.parser }
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
+      'vue/no-unused-vars': 'error'
     }
   },
   {
