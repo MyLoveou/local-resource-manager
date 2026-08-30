@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 
 /**
@@ -11,13 +11,15 @@ function createWindow(): void {
     height: 800,
     minWidth: 960,
     minHeight: 600,
-    title: '本地资源管理器',
+    title: 'Source Manager',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true
-    }
+    },
   })
+  // 隐藏顶部菜单栏
+  Menu.setApplicationMenu(null)
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])

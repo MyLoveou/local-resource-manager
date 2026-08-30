@@ -1,11 +1,10 @@
-# UI 层（渲染进程）
+# UI 层（布局 + 样式，非页面）
 
-用户界面层。仅负责展示与交互，不直接触达后端/存储。
+页面的**骨架与外观**，不含业务页面逻辑。
 
-- `layouts/` — 三栏布局（顶栏 / 左侧菜单 / 中间列表 / 右侧元数据面板）
-- `views/` — 视图页（图片库 / 视频库 / 回收站 / 设置弹窗）
-- `styles/` — 全局样式（less + 主题变量）
+- `layouts/` — 三栏布局组件（`MenuBar` 左菜单 / `ToolBar` 顶栏 / `InfoPanel` 元数据面板）
+- `styles/` — 全局样式（less 主题变量 `variables.less` + 基础 `global.css`）
 
-> 通用可复用组件 → 独立 `components/` 目录；组合式逻辑 → `hooks/` 目录。
+> 页面（路由组件）→ 顶层 `views/`；通用可复用组件 → `components/`；逻辑 → `hooks/`。
 
 依赖方向：UI → application（业务层）

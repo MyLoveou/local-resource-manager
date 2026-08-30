@@ -1,55 +1,39 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed } from 'vue'
+import MenuBar from '@/ui/layouts/MenuBar/index.vue'
+import ToolBar from '@/ui/layouts/ToolBar/index.vue'
+import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
+import { routes } from '@/router/route'
+import { menuFromRoutes } from '@/domain/menu'
 
-const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Chrome ${window.electron?.versions.chrome ?? '?'}`)
+const menuItems = computed(() => menuFromRoutes(routes))
 </script>
 
 <template>
-  <router-view />
+  <!-- 顶部工具栏 -->
+  <ToolBar />
+  <!-- 左侧导航栏 -->
+  <div class="app-container">
+    <MenuBar :items="menuItems" />
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+      <router-view />
+    </main>
+    <!-- 右侧信息面板 -->
+    <InfoPanel />
+  </div>
 </template>
 
 <style scoped lang="less">
-@import '@/ui/styles/variables.less';
-
-.app-shell {
-  height: 100vh;
+.app-container {
   display: flex;
-  flex-direction: column;
-  font-family: system-ui, 'Microsoft YaHei', sans-serif;
+  flex-direction: row;
+  height: 100%;
 }
 
-.topbar {
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid @border;
-}
-
-.topbar h1 {
-  font-size: 16px;
-  font-weight: 600;
-  color: @primary;
-}
-
-.version {
-  font-size: 12px;
-  color: @text-muted;
-}
-
-.placeholder {
+.main-content {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: @text-main;
-}
-
-.hint {
-  font-size: 13px;
-  color: @text-muted;
+  overflow: auto;
 }
 </style>
