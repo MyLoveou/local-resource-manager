@@ -5,18 +5,7 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="topbar">
-      <h1>本地资源管理器</h1>
-      <span class="version">{{ version }}</span>
-    </header>
-    <main class="placeholder">
-      <p>项目骨架已就绪，业务功能按需求逐步实现。</p>
-      <p class="hint">
-        分层目录：ui / application / domain / infrastructure
-      </p>
-    </main>
-  </div>
+  <router-view />
 </template>
 
 <style scoped lang="less">
@@ -28,6 +17,7 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
   flex-direction: column;
   font-family: system-ui, 'Microsoft YaHei', sans-serif;
 }
+
 .topbar {
   height: 48px;
   display: flex;
@@ -36,15 +26,18 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
   padding: 0 16px;
   border-bottom: 1px solid @border;
 }
+
 .topbar h1 {
   font-size: 16px;
   font-weight: 600;
   color: @primary;
 }
+
 .version {
   font-size: 12px;
   color: @text-muted;
 }
+
 .placeholder {
   flex: 1;
   display: flex;
@@ -54,6 +47,7 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
   gap: 8px;
   color: @text-main;
 }
+
 .hint {
   font-size: 13px;
   color: @text-muted;
