@@ -12,12 +12,16 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
     </header>
     <main class="placeholder">
       <p>项目骨架已就绪，业务功能按需求逐步实现。</p>
-      <p class="hint">分层目录：ui / application / domain / infrastructure</p>
+      <p class="hint">
+        分层目录：ui / application / domain / infrastructure
+      </p>
     </main>
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="less">
+@import '@/ui/styles/variables.less';
+
 .app-shell {
   height: 100vh;
   display: flex;
@@ -30,15 +34,16 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid @border;
 }
 .topbar h1 {
   font-size: 16px;
   font-weight: 600;
+  color: @primary;
 }
 .version {
   font-size: 12px;
-  color: #6b7280;
+  color: @text-muted;
 }
 .placeholder {
   flex: 1;
@@ -47,10 +52,10 @@ const version = ref(`Electron ${window.electron?.versions.electron ?? '?'} · Ch
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #374151;
+  color: @text-main;
 }
 .hint {
   font-size: 13px;
-  color: #9ca3af;
+  color: @text-muted;
 }
 </style>

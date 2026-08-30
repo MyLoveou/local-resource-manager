@@ -19,6 +19,13 @@ export default defineConfig({
         '@infrastructure': resolve(__dirname, 'src/renderer/src/infrastructure')
       }
     },
-    plugins: [vue()]
+    plugins: [vue()],
+    css: {
+      preprocessorOptions: {
+        less: {
+          javascriptEnabled: true
+        }
+      }
+    }
   }
 })
