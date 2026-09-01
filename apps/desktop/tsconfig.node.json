@@ -12,6 +12,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*"],
-  "references": [{ "path": "./tsconfig.web.json" }]
+  "include": [
+    "electron.vite.config.ts",
+    "src/main/**/*",
+    "src/preload/index.ts"
+  ]
 }
