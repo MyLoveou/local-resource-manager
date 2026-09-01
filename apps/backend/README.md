@@ -1,23 +1,26 @@
-# backend · 后端服务（FastAPI，单进程双应用）
+# backend · 后端服务（FastAPI，单进程多应用）
 
-独立后端进程，内挂**两个子应用**（FastAPI mount）。见 `docs/requirements/features/lrm-tech-stack.md`。
+独立后端进程，内挂**多个子应用**（FastAPI mount）。见 `docs/requirements/features/lrm-tech-stack.md` 与 `docs/design/02-数据模型.md`。
 
 ## 结构
 
 ```
 app/
-├── main.py              # 入口：挂载 /scrape 与 /download 两个子应用 + /health
-├── shared/              # 共享：config、db、通用工具
+├── main.py              # 入口：挂载 /library /scrape /download + /health；lifespan 建库迁移
+├── shared/              # 共享层
+│   ├── config.py        #   配置（端口/token/db_path）
+│   ├── constants.py     #   领域常量（Protocol/Engine/AdapterKey）
+│   ├── models.py        #   共享实体（Resource/ResourceFile/Tag/Settings/SiteAdapter）
+│   ├── value_objects.py #   值对象（Rating/Dimension/Progress）
+│   ├── errors.py        #   领域异常
+│   └── db/              #   SQLite：连接(WAL) + 迁移执行器 + migrations/
+├── library/             # 资源库应用（概览/资源查询）
+│   ├── api/             #   路由（/overview /resources）
+│   ├── application/     #   用例 + DTO（LibraryQueryService / Overview）
+│   ├── domain/          #   复用 shared 实体
+│   └── infrastructure/  #   仓储实现（ResourceRepository / TaskSummaryRepository）
 ├── scrape/              # 抓取应用
-│   ├── api/             #   接口适配层（路由）
-│   ├── application/     #   业务层（用例编排）
-│   ├── domain/          #   领域层（实体/端口）
-│   └── infrastructure/  #   基础设施层（httpx/适配器/缓存）
-└── download/            # 下载应用（同四层）
-    ├── api/
-    ├── application/
-    ├── domain/
-    └── infrastructure/
+└── download/            # 下载应用
 ```
 
 ## 端点
@@ -25,8 +28,15 @@ app/
 | 路径 | 说明 |
 |------|------|
 | `/health` | 后端总健康检查 |
+| `/library/health` · `/overview` · `/resources` | 资源库应用（概览/资源） |
 | `/scrape/health` | 抓取应用 |
 | `/download/health` | 下载应用 |
+
+## 数据存储
+
+- SQLite 单文件 `apps/backend/data/library.db`（WAL + foreign_keys + busy_timeout）
+- 启动时自动建库并执行 `shared/db/migrations/*.sql`（`schema_version` 追踪版本）
+- 仓储层：`library/infrastructure/repositories.py`；DB 列 snake_case ↔ API JSON camelCase
 
 ## 启动
 
