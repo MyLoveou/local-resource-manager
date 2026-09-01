@@ -11,7 +11,7 @@ import { NLayout } from 'naive-ui'
 </script>
 
 <style scoped lang="less">
-@import '@/ui/styles/variables.less';
+// @import '@/ui/styles/variables.less';
 
 .info-panel {
   width: 200px;

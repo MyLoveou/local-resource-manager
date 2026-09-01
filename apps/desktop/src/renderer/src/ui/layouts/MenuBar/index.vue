@@ -1,7 +1,16 @@
 <template>
-  <nav class="menu-bar" :class="{ collapsed }">
-    <n-menu :options="menuOptions" :value="activeKey" :collapsed="collapsed" :collapsed-width="64"
-      :collapsed-icon-size="22" @update:value="onSelect" />
+  <nav
+    class="menu-bar"
+    :class="{ collapsed }"
+  >
+    <n-menu
+      :options="menuOptions"
+      :value="activeKey"
+      :collapsed="collapsed"
+      :collapsed-width="64"
+      :collapsed-icon-size="22"
+      @update:value="onSelect"
+    />
   </nav>
 </template>
 

@@ -10,26 +10,34 @@ const menuItems = computed(() => menuFromRoutes(routes))
 </script>
 
 <template>
-  <!-- 顶部工具栏 -->
-  <ToolBar />
-  <!-- 左侧导航栏 -->
-  <div class="app-container">
-    <MenuBar :items="menuItems" />
+  <div class="container">
+    <!-- 顶部工具栏 -->
+    <ToolBar />
+    <div class="app-container">
+      <!-- 左侧导航栏 -->
+      <MenuBar :items="menuItems" />
 
-    <!-- 主内容区域 -->
-    <main class="main-content">
-      <router-view />
-    </main>
-    <!-- 右侧信息面板 -->
-    <InfoPanel />
+      <!-- 主内容区域 -->
+      <main class="main-content">
+        <router-view />
+      </main>
+      <!-- 右侧信息面板 -->
+      <InfoPanel />
+    </div>
   </div>
 </template>
 
 <style scoped lang="less">
-.app-container {
+.container {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   height: 100%;
+
+  .app-container {
+    display: flex;
+    flex-direction: row;
+    height: 100%;
+  }
 }
 
 .main-content {
