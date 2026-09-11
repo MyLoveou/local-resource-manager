@@ -22,17 +22,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref, computed, watch } from 'vue'
 import { getOverview } from '@/infrastructure/http'
-import { NCard, NEmpty } from 'naive-ui'
-import type { Overview, ResourceType } from '@/domain'
+import { NCard } from 'naive-ui'
+import type { Overview } from '@/domain'
 import { typeMap } from '@/utils/typeMap'
+import { useLibraryStore } from '@/application/stores/library'
 
 /** 首页概览数据（统计 + 最近添加 + 任务） */
 const overviewData = ref<Overview | null>(null)
 // 判断后端返回数据是否正常
 const hasOverviewData = computed(() => {
-  return overviewData.value?.stats.byType !== {} as Record<ResourceType, number>
+  const byType = overviewData.value?.stats.byType
+  return !!byType && Object.keys(byType).length > 0
 })
 const initOverviewData = async () => {
   try {
@@ -47,6 +49,14 @@ const initOverviewData = async () => {
 onMounted(async () => {
   initOverviewData()
 })
+
+const library = useLibraryStore()
+watch(
+  () => library.revision,
+  () => {
+    void initOverviewData()
+  }
+)
 </script>
 
 <style scoped lang="less">

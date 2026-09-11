@@ -36,6 +36,7 @@ class FileRow(Base):
     sha256: Mapped[str | None] = mapped_column(String)
     size: Mapped[int | None] = mapped_column(Integer)
     format: Mapped[str | None] = mapped_column(String)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="primary")
     duration: Mapped[float | None] = mapped_column(Float)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.download.api.router import router as download_router
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
-from app.library.infrastructure.seed import replace_remote_demo_covers, seed_demo_if_empty
+from app.library.infrastructure.seed import replace_remote_demo_covers
 from app.scrape.api.router import router as scrape_router
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
@@ -27,11 +27,7 @@ async def lifespan(_: FastAPI):
         factory = get_session_factory()
         async with factory() as session:
             repo = ResourceRepository(session)
-            if is_new:
-                inserted = await seed_demo_if_empty(repo)
-                if inserted:
-                    logger.info("空库已写入 %s 条演示资源", inserted)
-            else:
+            if not is_new:
                 rewritten = await replace_remote_demo_covers(repo)
                 if rewritten:
                     logger.info("已将 %s 条远程演示封面改为本地图", rewritten)

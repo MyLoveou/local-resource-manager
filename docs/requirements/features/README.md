@@ -1,6 +1,16 @@
 # L1 需求文档
 
-需求沉淀维护的定稿需求。文件名：`<feature-id>.md`，文首含状态（草案 / 评审中 / 已定稿）。
+需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
+
+## import-directory-scan（**评审中**）
+
+> 导入：分步向导、一次选择文件或目录、**复制**进库。**已定稿并已实现**（待验收）。
+
+| 文档 | 内容 |
+|------|------|
+| [`import-directory-scan/需求.md`](import-directory-scan/需求.md) | 本轮范围、故事、验收、契约草案 |
+| [`import-directory-scan/实现方案.md`](import-directory-scan/实现方案.md) | 路径清单与数据流 |
+| OpenSpec | `openspec/changes/import-directory-scan/` |
 
 ## local-resource-manager（**已定稿**）
 

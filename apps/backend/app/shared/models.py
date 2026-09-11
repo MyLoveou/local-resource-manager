@@ -98,6 +98,7 @@ class ResourceFile(ApiModel):
     sha256: str | None = None  # 文件哈希，图片元数据匹配键（唯一索引）
     size: int | None = None
     format: str | None = None  # 扩展名/格式
+    role: str = "primary"  # primary / cover / subtitle
     duration: float | None = None  # 视频时长（秒）
     width: int | None = None
     height: int | None = None

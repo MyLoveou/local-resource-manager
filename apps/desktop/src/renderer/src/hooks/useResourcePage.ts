@@ -1,8 +1,9 @@
 /**
  * 资源分页状态机：首屏替换、触底追加、请求单飞。
  */
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { getResources } from '@/infrastructure/http'
+import { useLibraryStore } from '@/application/stores/library'
 import type { Resource, ResourceStatus, ResourceType } from '@/domain'
 
 const DEFAULT_LIMIT = 80
@@ -80,6 +81,16 @@ export function useResourcePage(options: {
   onMounted(() => {
     void reset()
   })
+
+  const library = useLibraryStore()
+  watch(
+    () => library.revision,
+    () => {
+      if (library.importedType === options.type) {
+        void reset()
+      }
+    }
+  )
 
   return {
     items,

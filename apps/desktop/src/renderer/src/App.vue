@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { NMessageProvider } from 'naive-ui'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
@@ -10,16 +11,18 @@ const menuItems = computed(() => menuFromRoutes(routes))
 </script>
 
 <template>
-  <div class="container">
-    <ToolBar />
-    <div class="app-container">
-      <MenuBar :items="menuItems" />
-      <main class="main-content">
-        <router-view />
-      </main>
-      <InfoPanel />
+  <n-message-provider>
+    <div class="container">
+      <ToolBar />
+      <div class="app-container">
+        <MenuBar :items="menuItems" />
+        <main class="main-content">
+          <router-view />
+        </main>
+        <InfoPanel />
+      </div>
     </div>
-  </div>
+  </n-message-provider>
 </template>
 
 <style scoped lang="less">

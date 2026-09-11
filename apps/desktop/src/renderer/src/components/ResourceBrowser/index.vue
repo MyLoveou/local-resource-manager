@@ -24,6 +24,7 @@ import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useSelectionStore } from '@/application/stores/selection'
+import { resolveLibraryMediaUrl } from '@/infrastructure/http'
 import type { ResourceType } from '@/domain'
 
 const props = defineProps<{
@@ -48,11 +49,17 @@ onUnmounted(() => {
 })
 
 const gridItems = computed(() =>
-  items.value.map((item) => ({
-    id: item.id,
-    title: item.title,
-    coverUrl: item.coverPath ?? '',
-  }))
+  items.value.flatMap((item) =>
+    item.id === undefined
+      ? []
+      : [
+          {
+            id: item.id,
+            title: item.title,
+            coverUrl: resolveLibraryMediaUrl(item.coverPath),
+          },
+        ]
+  )
 )
 </script>
 

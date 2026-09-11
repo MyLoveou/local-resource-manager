@@ -1,4 +1,4 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 /** 在 contextIsolation 下把 __electronLog 桥到渲染进程，配合主进程 log.initialize() */
 import 'electron-log/preload'
 
@@ -24,7 +24,10 @@ const api = {
   backend: {
     baseUrl: readArg('backend-url') ?? process.env.BACKEND_URL ?? 'http://127.0.0.1:8000',
     token: readArg('backend-token') ?? process.env.BACKEND_TOKEN ?? ''
-  }
+  },
+  selectFiles: (filters?: { name: string; extensions: string[] }[]): Promise<string[]> =>
+    ipcRenderer.invoke('dialog:selectFiles', filters),
+  selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory')
 }
 
 contextBridge.exposeInMainWorld('electron', api)

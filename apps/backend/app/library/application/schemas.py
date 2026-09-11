@@ -3,7 +3,7 @@ from enum import Enum
 
 from pydantic import Field
 
-from app.shared.models import ApiModel, Resource
+from app.shared.models import ApiModel, Resource, ResourceType
 from app.shared.value_objects import Rating
 
 
@@ -54,3 +54,38 @@ class ResourcePatch(ApiModel):
     title: str | None = None
     description: str | None = None
     rating: Rating | None = None
+
+
+class SourceKind(str, Enum):
+    """导入来源。"""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
+class ImportCreate(ApiModel):
+    """创建导入任务。"""
+
+    type: ResourceType
+    source_kind: SourceKind
+    paths: list[str] = Field(min_length=1)
+
+
+class ImportJobCreated(ApiModel):
+    """已接受的导入任务。"""
+
+    job_id: str
+
+
+class ImportJob(ApiModel):
+    """导入进度。"""
+
+    job_id: str
+    status: str
+    phase: str
+    total: int
+    done: int
+    imported: int
+    skipped_duplicate: int
+    skipped_error: int
+    error: str | None = None

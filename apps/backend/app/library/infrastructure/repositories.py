@@ -53,7 +53,7 @@ class ResourceRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    async def create(self, resource: Resource) -> Resource:
+    async def create(self, resource: Resource, *, commit: bool = True) -> Resource:
         """插入并返回带 id 的完整实体。"""
         ts = _now()
         row = ResourceRow(
@@ -68,7 +68,10 @@ class ResourceRepository:
             updated_at=ts,
         )
         self._session.add(row)
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         await self._session.refresh(row)
         return _orm_to_resource(row)
 
@@ -85,15 +88,24 @@ class ResourceRepository:
         row.extra = json.dumps(resource.extra, ensure_ascii=False)
         row.updated_at = _now()
 
-    async def update(self, resource_id: int, resource: Resource) -> Resource | None:
+    async def update(self, resource_id: int, resource: Resource, *, commit: bool = True) -> Resource | None:
         """按路径 id 更新可变字段；不存在则 None。"""
         row = await self._session.get(ResourceRow, resource_id)
         if row is None:
             return None
         self._apply_resource(row, resource)
-        await self._session.commit()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
         await self._session.refresh(row)
         return _orm_to_resource(row)
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
+    async def rollback(self) -> None:
+        await self._session.rollback()
 
     async def trash(self, resource_id: int) -> Resource | None:
         """软删：已在回收站则原样返回。"""
@@ -181,6 +193,50 @@ class ResourceRepository:
         if rows:
             await self._session.commit()
         return len(rows)
+
+    async def file_exists_by_sha256(self, sha256: str) -> bool:
+        stmt = select(FileRow.id).where(FileRow.sha256 == sha256).limit(1)
+        return (await self._session.scalar(stmt)) is not None
+
+    async def add_file(
+        self,
+        resource_id: int,
+        *,
+        path: str,
+        sha256: str | None,
+        size: int | None,
+        format_: str | None,
+        role: str,
+        commit: bool = True,
+    ) -> None:
+        """写入库内文件行。"""
+        ts = _now()
+        row = FileRow(
+            resource_id=resource_id,
+            path=path,
+            sha256=sha256,
+            size=size,
+            format=format_,
+            role=role,
+            created_at=ts,
+        )
+        self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def get_file_by_role(self, resource_id: int, role: str) -> FileRow | None:
+        stmt = (
+            select(FileRow)
+            .where(FileRow.resource_id == resource_id, FileRow.role == role)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalars().first()
+
+    async def get_file(self, resource_id: int, file_id: int) -> FileRow | None:
+        stmt = select(FileRow).where(FileRow.id == file_id, FileRow.resource_id == resource_id)
+        return (await self._session.execute(stmt)).scalars().first()
 
     async def recent(self, limit: int = 12) -> list[Resource]:
         """最近入库的活跃资源。"""

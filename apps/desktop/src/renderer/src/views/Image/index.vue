@@ -1,6 +1,6 @@
 <template>
   <div class="image-page">
-    <ResourceBrowser type="image" empty-hint="暂无图片" />
+    <ResourceBrowser type="image" empty-hint="暂无图片，请先在顶栏导入" />
   </div>
 </template>
 

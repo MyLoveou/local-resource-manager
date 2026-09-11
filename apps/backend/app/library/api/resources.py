@@ -1,15 +1,31 @@
 """资源集合与单项。"""
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from app.library.api.deps import get_repos
+from app.library.application.packages.resource_package import default_library_store
 from app.library.application.schemas import ResourcePage, ResourcePatch, ResourceSortField
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
+from app.shared.config import settings
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 router = APIRouter(prefix="/resources", tags=["library-resources"])
+
+
+def _library_file_or_404(raw_path: str) -> Path:
+    """只允许打开库目录内的文件。"""
+    store = default_library_store(settings.db_path).resolve()
+    try:
+        resolved = Path(raw_path).resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="file not found") from exc
+    if not resolved.is_file() or not resolved.is_relative_to(store):
+        raise HTTPException(status_code=404, detail="file not found")
+    return resolved
 
 
 @router.get("", response_model=ResourcePage)
@@ -27,6 +43,33 @@ async def list_resources(
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order
     )
+
+
+@router.get("/{resource_id}/content")
+async def get_resource_content(
+    resource_id: int,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> FileResponse:
+    """流式返回库内 primary 副本。"""
+    resources, _ = repos
+    row = await resources.get_file_by_role(resource_id, "primary")
+    if row is None:
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(_library_file_or_404(row.path))
+
+
+@router.get("/{resource_id}/files/{file_id}/content")
+async def get_resource_file_content(
+    resource_id: int,
+    file_id: int,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> FileResponse:
+    """流式返回包内指定文件。"""
+    resources, _ = repos
+    row = await resources.get_file(resource_id, file_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(_library_file_or_404(row.path))
 
 
 @router.get("/{resource_id}", response_model=Resource)

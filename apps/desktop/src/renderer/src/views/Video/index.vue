@@ -1,6 +1,6 @@
 <template>
   <div class="video-page">
-    <ResourceBrowser type="video" empty-hint="暂无视频" />
+    <ResourceBrowser type="video" empty-hint="暂无视频，请先在顶栏导入" />
   </div>
 </template>
 

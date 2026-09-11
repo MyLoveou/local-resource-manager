@@ -1,10 +1,37 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { startServices, stopServices } from './infrastructure/services/index'
 import { initMainLog, log } from './log'
 
 /** 尽早初始化，否则启动失败写不进日志，渲染进程也无法用 electron-log */
 initMainLog()
+
+function registerDialogIpc(): void {
+  ipcMain.handle(
+    'dialog:selectFiles',
+    async (_event, filters?: { name: string; extensions: string[] }[]): Promise<string[]> => {
+      const options: Electron.OpenDialogOptions = {
+        properties: ['openFile', 'multiSelections'],
+        filters: filters && filters.length > 0 ? filters : undefined,
+      }
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+      if (result.canceled) return []
+      return result.filePaths
+    }
+  )
+  ipcMain.handle('dialog:selectDirectory', async (): Promise<string | null> => {
+    const options: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+}
 
 /**
  * Electron 主进程（UI 层外壳）。
@@ -43,6 +70,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  registerDialogIpc()
   try {
     log.info('[main] starting backend…')
     const backend = await startServices()
