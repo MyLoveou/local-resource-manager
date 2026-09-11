@@ -30,7 +30,7 @@ import type { Resource } from '@/domain'
 
 const selection = useSelectionStore()
 const { selectedId } = storeToRefs(selection)
-const { removeResource } = useResourceHandle()
+const { deleteResource } = useResourceHandle()
 
 const resource = ref<Resource | null>(null)
 const deleting = ref(false)
@@ -61,7 +61,7 @@ async function handleDelete(): Promise<void> {
   deleting.value = true
   errorMessage.value = ''
   try {
-    await removeResource(id)
+    await deleteResource(id)
     selection.clear()
   } catch (error) {
     errorMessage.value = '删除失败'
