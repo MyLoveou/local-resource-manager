@@ -9,14 +9,15 @@ from pathlib import Path
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-def migrate(conn: sqlite3.Connection) -> None:
-    """应用所有版本号高于当前记录的迁移。"""
+def migrate(conn: sqlite3.Connection) -> int:
+    """应用所有版本号高于当前记录的迁移，返回本次执行的条数。"""
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL PRIMARY KEY)"
     )
     row = conn.execute("SELECT MAX(version) AS v FROM schema_version").fetchone()
     current = int(row["v"]) if row and row["v"] is not None else 0
 
+    applied = 0
     for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
         version = int(path.name.split("_", 1)[0])
         if version <= current:
@@ -24,3 +25,5 @@ def migrate(conn: sqlite3.Connection) -> None:
         conn.executescript(path.read_text(encoding="utf-8"))
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
         conn.commit()
+        applied += 1
+    return applied

@@ -5,26 +5,42 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.download.api.routes import app as download_app
 from app.library.api.routes import app as library_app
+from app.library.infrastructure.repositories import ResourceRepository
+from app.library.infrastructure.seed import replace_remote_demo_covers, seed_demo_if_empty
 from app.scrape.api.routes import app as scrape_app
 from app.shared.config import settings
-from app.shared.db.db import init_db
+from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
 from app.shared.log import logger
 from app.shared.middleware.logging import log_requests
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """启动时初始化数据库并执行迁移。"""
-    logger.info("启动时初始化数据库并执行迁移")
-    try: 
-        logger.info("正在初始化数据库")
-        init_db()
-        logger.info("数据库初始化完成")
+    """启动：已有库则连接；无库则创建。演示封面仅在需要时处理。"""
+    db_path = settings.db_path.resolve()
+    try:
+        is_new = ensure_db()
+        if is_new:
+            logger.info("已创建数据库 %s", db_path)
+        else:
+            logger.info("已连接数据库 %s", db_path)
+        factory = get_session_factory()
+        async with factory() as session:
+            repo = ResourceRepository(session)
+            if is_new:
+                inserted = await seed_demo_if_empty(repo)
+                if inserted:
+                    logger.info("空库已写入 %s 条演示资源", inserted)
+            else:
+                rewritten = await replace_remote_demo_covers(repo)
+                if rewritten:
+                    logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
     except Exception as e:
-        logger.error(f"初始化数据库失败: {e}")
+        logger.error(f"数据库启动失败: {e}")
         raise
     yield
     logger.info("数据库关闭连接")
+    await dispose_engine()
 
 
 app = FastAPI(
@@ -44,7 +60,6 @@ app.add_middleware(
 )
 
 app.middleware("http")(log_requests)
-
 app.mount("/library", library_app)
 app.mount("/scrape", scrape_app)
 app.mount("/download", download_app)
