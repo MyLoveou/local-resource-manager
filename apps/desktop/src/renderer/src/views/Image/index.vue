@@ -1,9 +1,16 @@
 <template>
-  <div>
-    <h1>图片</h1>
+  <div class="image-page">
+    <ResourceBrowser type="image" empty-hint="暂无图片" />
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import ResourceBrowser from '@/components/ResourceBrowser/index.vue'
+</script>
 
-<style scoped lang="less"></style>
+<style scoped lang="less">
+.image-page {
+  height: 100%;
+  min-height: 0;
+}
+</style>

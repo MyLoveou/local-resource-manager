@@ -24,7 +24,10 @@ client.interceptors.request.use((config) => {
 
 /** 响应拦截：失败写入日志（不记录 token） */
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    logger.info('Response: %s %s -> %s', response.config.method, response.config.url, response.data)
+    return response
+  },
   (error) => {
     const method = error.config?.method?.toUpperCase() ?? '?'
     const url = error.config?.url ?? '?'

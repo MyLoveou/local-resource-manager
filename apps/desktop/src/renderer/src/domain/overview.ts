@@ -3,11 +3,10 @@
  * 后端对应：apps/backend/app/library/application/schemas.py
  */
 import type { Resource } from './resource'
-
+import type { ResourceType } from './resource'
 /** 资源统计 */
 export interface ResourceStats {
-  imageCount: number
-  videoCount: number
+  byType: Record<ResourceType, number>
   totalSizeBytes: number
   trashedCount: number
   lostCount: number

@@ -1,25 +1,73 @@
 <template>
   <div class="home">
-    <h1>首页</h1>
-    <pre>{{ overviewData }}</pre>
+    <div v-if="hasOverviewData">
+      <div class="overview-container">
+        <div class="overview-content">
+          <h2>概览</h2>
+          <div class="overview-content-cards">
+            <n-card v-for="(count, type) in overviewData?.stats.byType" :key="type" :title="typeMap[type] ?? type"
+              class="overview-content-card" hoverable>
+              {{ count }}
+            </n-card>
+          </div>
+        </div>
+        <div class="overview-task"></div>
+        <div class="overview-current"></div>
+      </div>
+    </div>
+    <div v-else>
+      暂无数据
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { getOverview } from '@/infrastructure/http'
-import type { Overview } from '@/domain'
+import { NCard, NEmpty } from 'naive-ui'
+import type { Overview, ResourceType } from '@/domain'
+import { typeMap } from '@/utils/typeMap'
 
 /** 首页概览数据（统计 + 最近添加 + 任务） */
 const overviewData = ref<Overview | null>(null)
-
-onMounted(async () => {
+// 判断后端返回数据是否正常
+const hasOverviewData = computed(() => {
+  return overviewData.value?.stats.byType !== {} as Record<ResourceType, number>
+})
+const initOverviewData = async () => {
   try {
     overviewData.value = await getOverview()
+    console.log(overviewData.value)
+    console.log(overviewData.value?.stats.byType)
   } catch (err) {
     console.error('获取首页概览失败', err)
   }
+}
+
+onMounted(async () => {
+  initOverviewData()
 })
 </script>
 
-<style scoped lang="less"></style>
+<style scoped lang="less">
+.home {
+  height: 100%;
+  overflow: auto;
+
+  .overview-container {
+    .overview-content {
+      padding: 20px;
+
+      .overview-content-cards {
+        display: flex;
+        flex-direction: row;
+
+        .overview-content-card {
+          flex: 1;
+          margin: 10px 10px 0 0;
+        }
+      }
+    }
+  }
+}
+</style>

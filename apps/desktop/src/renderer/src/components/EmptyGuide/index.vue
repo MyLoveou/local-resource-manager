@@ -2,13 +2,18 @@
   <div class="empty-guide">
     <slot />
     <p class="hint">
-      暂无资源
+      {{ hint }}
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
-// 空状态引导组件（首页无资源目录时展示）—— 结构占位
+withDefaults(
+  defineProps<{
+    hint?: string
+  }>(),
+  { hint: '暂无资源' }
+)
 </script>
 
 <style scoped lang="less">

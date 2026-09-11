@@ -30,6 +30,9 @@ export interface Resource {
   extra?: Record<string, unknown>
   createdAt?: string | null
   updatedAt?: string | null
+  tags?: Tag[]
+  basicData?: Record<string, unknown>
+  category?: string
 }
 
 /** 资源关联的物理文件（一个资源可含多文件） */
@@ -56,4 +59,23 @@ export interface ResourceFile {
 export interface Tag {
   id?: number
   name: string
+}
+
+/** 资源列表查询 */
+export interface ResourcePageQuery {
+  type?: ResourceType
+  status?: ResourceStatus
+  limit?: number
+  offset?: number
+  sort?: 'createdAt'
+  order?: 'asc' | 'desc'
+}
+
+/** 资源列表分页信封 */
+export interface ResourcePage {
+  items: Resource[]
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
 }
