@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
+import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
 import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
 
@@ -10,16 +11,13 @@ const menuItems = computed(() => menuFromRoutes(routes))
 
 <template>
   <div class="container">
-    <!-- 顶部工具栏 -->
     <ToolBar />
     <div class="app-container">
-      <!-- 左侧导航栏 -->
       <MenuBar :items="menuItems" />
-
-      <!-- 主内容区域 -->
       <main class="main-content">
         <router-view />
       </main>
+      <InfoPanel />
     </div>
   </div>
 </template>
