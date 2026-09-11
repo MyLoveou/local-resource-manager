@@ -2,15 +2,25 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## import-directory-scan（**评审中**）
+## metadata-panel（**已定稿 / 实现待验收**）
 
-> 导入：分步向导、一次选择文件或目录、**复制**进库。**已定稿并已实现**（待验收）。
+> 右侧元数据面板：通用字段；独立词表；草稿点保存；编辑弹窗含换封面；删除确认。
+
+| 文档 | 内容 |
+|------|------|
+| [`metadata-panel/需求.md`](metadata-panel/需求.md) | 范围、故事、验收、契约草案、开放问题 |
+| [`metadata-panel/实现方案.md`](metadata-panel/实现方案.md) | 沿用 InfoPanel + library；文件清单 |
+| OpenSpec | `openspec/changes/metadata-panel/` |
+
+## import-directory-scan（**已定稿 / 已归档**）
+
+> 导入：分步向导、一次选择文件或目录、**复制**进库。**已落地 master**。
 
 | 文档 | 内容 |
 |------|------|
 | [`import-directory-scan/需求.md`](import-directory-scan/需求.md) | 本轮范围、故事、验收、契约草案 |
 | [`import-directory-scan/实现方案.md`](import-directory-scan/实现方案.md) | 路径清单与数据流 |
-| OpenSpec | `openspec/changes/import-directory-scan/` |
+| OpenSpec | 已归档 `openspec/changes/archive/2026-09-12-import-directory-scan/` |
 
 ## local-resource-manager（**已定稿**）
 

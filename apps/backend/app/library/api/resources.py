@@ -7,7 +7,12 @@ from fastapi.responses import FileResponse
 
 from app.library.api.deps import get_repos
 from app.library.application.packages.resource_package import default_library_store
-from app.library.application.schemas import ResourcePage, ResourcePatch, ResourceSortField
+from app.library.application.schemas import (
+    CoverReplace,
+    ResourcePage,
+    ResourcePatch,
+    ResourceSortField,
+)
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
@@ -85,6 +90,23 @@ async def get_resource(
     return resource
 
 
+@router.post("/{resource_id}/cover", response_model=Resource)
+async def replace_cover(
+    resource_id: int,
+    body: CoverReplace,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> Resource:
+    """将本机图片复制为包内 cover，不替换 primary。"""
+    resources, tasks = repos
+    try:
+        resource = await LibraryQueryService(resources, tasks).replace_cover(resource_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if resource is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return resource
+
+
 @router.post("", response_model=Resource)
 async def create_resource(
     resource: Resource,
@@ -101,7 +123,7 @@ async def patch_resource(
     body: ResourcePatch,
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> Resource:
-    """部分更新标题/描述/评分。"""
+    """部分更新标题/描述/评分/分类名/标签名。"""
     resources, tasks = repos
     resource = await LibraryQueryService(resources, tasks).patch(resource_id, body)
     if resource is None:

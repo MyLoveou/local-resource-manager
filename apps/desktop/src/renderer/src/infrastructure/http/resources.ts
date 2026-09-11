@@ -9,6 +9,8 @@ export interface ResourcePatch {
   title?: string | null
   description?: string | null
   rating?: number | null
+  categoryName?: string | null
+  tagNames?: string[]
 }
 
 /** 分页获取资源 */
@@ -33,6 +35,11 @@ export async function getResource(resourceId: number): Promise<Resource> {
 
 export async function patchResource(resourceId: number, patch: ResourcePatch): Promise<Resource> {
   const { data } = await client.patch<Resource>(`/library/resources/${resourceId}`, patch)
+  return data
+}
+
+export async function postResourceCover(resourceId: number, path: string): Promise<Resource> {
+  const { data } = await client.post<Resource>(`/library/resources/${resourceId}/cover`, { path })
   return data
 }
 

@@ -3,7 +3,7 @@ from enum import Enum
 
 from pydantic import Field
 
-from app.shared.models import ApiModel, Resource, ResourceType
+from app.shared.models import ApiModel, Category, Resource, ResourceType, Tag
 from app.shared.value_objects import Rating
 
 
@@ -49,11 +49,31 @@ class ResourcePage(ApiModel):
 
 
 class ResourcePatch(ApiModel):
-    """资源部分更新（仅标题/描述/评分）。"""
+    """资源部分更新。tag_names 若出现则整表替换该资源标签；category_name 按名查找或创建分类。"""
 
     title: str | None = None
     description: str | None = None
     rating: Rating | None = None
+    category_name: str | None = None
+    tag_names: list[str] | None = None
+
+
+class CoverReplace(ApiModel):
+    """更换封面：本机已存在的图片路径。"""
+
+    path: str
+
+
+class CategoryList(ApiModel):
+    """分类词表只读列表。"""
+
+    items: list[Category]
+
+
+class TagList(ApiModel):
+    """标签词表只读列表。"""
+
+    items: list[Tag]
 
 
 class SourceKind(str, Enum):

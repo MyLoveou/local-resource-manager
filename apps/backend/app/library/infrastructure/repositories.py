@@ -10,8 +10,16 @@ from typing import Any
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.db.orm import DownloadTaskRow, FileRow, ResourceRow, ScrapeJobRow
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.shared.db.orm import (
+    CategoryRow,
+    DownloadTaskRow,
+    FileRow,
+    ResourceRow,
+    ResourceTagRow,
+    ScrapeJobRow,
+    TagRow,
+)
+from app.shared.models import Category, Resource, ResourceFile, ResourceStatus, ResourceType, Tag
 
 
 def _now() -> str:
@@ -99,7 +107,7 @@ class ResourceRepository:
         else:
             await self._session.flush()
         await self._session.refresh(row)
-        return _orm_to_resource(row)
+        return await self._hydrate(row)
 
     async def commit(self) -> None:
         await self._session.commit()
@@ -117,9 +125,48 @@ class ResourceRepository:
         existing.to_trash()
         return await self.update(resource_id, existing)
 
+    async def _hydrate(self, row: ResourceRow) -> Resource:
+        """详情：带分类、标签、文件摘要。"""
+        resource = _orm_to_resource(row)
+        if row.category_id is not None:
+            cat = await self._session.get(CategoryRow, row.category_id)
+            if cat is not None:
+                resource.category = Category(id=cat.id, name=cat.name)
+        tag_stmt = (
+            select(TagRow)
+            .join(ResourceTagRow, ResourceTagRow.tag_id == TagRow.id)
+            .where(ResourceTagRow.resource_id == row.id)
+            .order_by(TagRow.name)
+        )
+        tags = (await self._session.execute(tag_stmt)).scalars().all()
+        resource.tags = [Tag(id=t.id, name=t.name) for t in tags]
+        file_stmt = select(FileRow).where(FileRow.resource_id == row.id).order_by(FileRow.id)
+        files = (await self._session.execute(file_stmt)).scalars().all()
+        resource.files = [
+            ResourceFile(
+                id=f.id,
+                resource_id=f.resource_id,
+                path=f.path,
+                sha256=f.sha256,
+                size=f.size,
+                format=f.format,
+                role=f.role,
+                duration=f.duration,
+                width=f.width,
+                height=f.height,
+                codec=f.codec,
+                exif_taken_at=f.exif_taken_at,
+                created_at=f.created_at,
+            )
+            for f in files
+        ]
+        return resource
+
     async def get(self, resource_id: int) -> Resource | None:
         row = await self._session.get(ResourceRow, resource_id)
-        return _orm_to_resource(row) if row else None
+        if row is None:
+            return None
+        return await self._hydrate(row)
 
     def _filter(
         self,
@@ -208,7 +255,7 @@ class ResourceRepository:
         format_: str | None,
         role: str,
         commit: bool = True,
-    ) -> None:
+    ) -> FileRow:
         """写入库内文件行。"""
         ts = _now()
         row = FileRow(
@@ -225,6 +272,94 @@ class ResourceRepository:
             await self._session.commit()
         else:
             await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def delete_file_row(self, file_id: int, *, commit: bool = True) -> None:
+        row = await self._session.get(FileRow, file_id)
+        if row is None:
+            return
+        await self._session.delete(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def ensure_category(self, name: str, *, commit: bool = True) -> Category:
+        """按名查找或创建分类词条。"""
+        trimmed = name.strip()
+        stmt = select(CategoryRow).where(CategoryRow.name == trimmed)
+        row = (await self._session.execute(stmt)).scalars().first()
+        if row is None:
+            row = CategoryRow(name=trimmed)
+            self._session.add(row)
+            if commit:
+                await self._session.commit()
+            else:
+                await self._session.flush()
+            await self._session.refresh(row)
+        return Category(id=row.id, name=row.name)
+
+    async def set_category_id(
+        self, resource_id: int, category_id: int | None, *, commit: bool = True
+    ) -> None:
+        row = await self._session.get(ResourceRow, resource_id)
+        if row is None:
+            return
+        row.category_id = category_id
+        row.updated_at = _now()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def ensure_tag(self, name: str, *, commit: bool = True) -> Tag:
+        """按名查找或创建标签词条。"""
+        trimmed = name.strip()
+        stmt = select(TagRow).where(TagRow.name == trimmed)
+        row = (await self._session.execute(stmt)).scalars().first()
+        if row is None:
+            row = TagRow(name=trimmed)
+            self._session.add(row)
+            if commit:
+                await self._session.commit()
+            else:
+                await self._session.flush()
+            await self._session.refresh(row)
+        return Tag(id=row.id, name=row.name)
+
+    async def replace_tags(
+        self, resource_id: int, names: list[str], *, commit: bool = True
+    ) -> None:
+        """整表替换该资源的标签关联。"""
+        existing = await self._session.execute(
+            select(ResourceTagRow).where(ResourceTagRow.resource_id == resource_id)
+        )
+        for link in existing.scalars().all():
+            await self._session.delete(link)
+        seen: set[str] = set()
+        for raw in names:
+            name = raw.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            tag = await self.ensure_tag(name, commit=False)
+            assert tag.id is not None
+            self._session.add(ResourceTagRow(resource_id=resource_id, tag_id=tag.id))
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def list_categories(self) -> list[Category]:
+        rows = (
+            await self._session.execute(select(CategoryRow).order_by(CategoryRow.name))
+        ).scalars().all()
+        return [Category(id=r.id, name=r.name) for r in rows]
+
+    async def list_tags(self) -> list[Tag]:
+        rows = (await self._session.execute(select(TagRow).order_by(TagRow.name))).scalars().all()
+        return [Tag(id=r.id, name=r.name) for r in rows]
 
     async def get_file_by_role(self, resource_id: int, role: str) -> FileRow | None:
         stmt = (

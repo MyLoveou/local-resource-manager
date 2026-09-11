@@ -54,6 +54,9 @@ class Resource(ApiModel):
     extra: dict[str, Any] = Field(default_factory=dict)  # 站点特有元数据兜底
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    category: "Category | None" = None
+    tags: list["Tag"] = Field(default_factory=list)
+    files: list["ResourceFile"] = Field(default_factory=list)
 
     @property
     def is_trashed(self) -> bool:
@@ -125,7 +128,14 @@ class ResourceFile(ApiModel):
 
 
 class Tag(ApiModel):
-    """标签。"""
+    """标签词条。"""
+
+    id: int | None = None
+    name: str
+
+
+class Category(ApiModel):
+    """分类词条（资源单选）。"""
 
     id: int | None = None
     name: str

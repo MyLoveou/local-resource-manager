@@ -23,8 +23,36 @@ class ResourceRow(Base):
     last_scraped_at: Mapped[str | None] = mapped_column(String)
     scraped_source: Mapped[str | None] = mapped_column(String)
     extra: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    category_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("categories.id", ondelete="SET NULL")
+    )
     created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
+class CategoryRow(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+
+class TagRow(Base):
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+
+class ResourceTagRow(Base):
+    __tablename__ = "resource_tags"
+
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class FileRow(Base):

@@ -31,8 +31,9 @@ export interface Resource {
   createdAt?: string | null
   updatedAt?: string | null
   tags?: Tag[]
-  basicData?: Record<string, unknown>
-  category?: string
+  files?: ResourceFile[]
+  /** 独立分类词条，不是资源 type */
+  category?: Category | null
 }
 
 /** 资源关联的物理文件（一个资源可含多文件） */
@@ -44,6 +45,7 @@ export interface ResourceFile {
   sha256?: string | null
   size?: number | null
   format?: string | null
+  role?: string
   /** 视频时长（秒） */
   duration?: number | null
   width?: number | null
@@ -55,10 +57,27 @@ export interface ResourceFile {
   createdAt?: string | null
 }
 
+/** 分类词条（资源单选） */
+export interface Category {
+  id?: number
+  name: string
+}
+
 /** 标签 */
 export interface Tag {
   id?: number
   name: string
+}
+
+/** 面板/弹窗共用的未保存草稿（点保存才 PATCH） */
+export interface MetadataDraft {
+  title: string
+  description: string
+  ratingStars: number
+  categoryName: string | null
+  tagNames: string[]
+  tagInput: string
+  pendingCoverPath: string | null
 }
 
 /** 资源列表查询 */
