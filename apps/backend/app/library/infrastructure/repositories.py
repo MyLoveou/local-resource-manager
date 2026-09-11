@@ -19,6 +19,15 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _ts(value: datetime | str | None) -> str | None:
+    """领域 datetime / 已有字符串 → SQLite 文本列。"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _orm_to_resource(row: ResourceRow) -> Resource:
     """ORM 行 → 领域模型。"""
     return Resource(
@@ -62,6 +71,39 @@ class ResourceRepository:
         await self._session.commit()
         await self._session.refresh(row)
         return _orm_to_resource(row)
+
+    def _apply_resource(self, row: ResourceRow, resource: Resource) -> None:
+        row.type = resource.type.value
+        row.title = resource.title
+        row.description = resource.description
+        row.rating = resource.rating
+        row.cover_path = resource.cover_path
+        row.status = resource.status.value
+        row.deleted_at = _ts(resource.deleted_at)
+        row.last_scraped_at = _ts(resource.last_scraped_at)
+        row.scraped_source = resource.scraped_source
+        row.extra = json.dumps(resource.extra, ensure_ascii=False)
+        row.updated_at = _now()
+
+    async def update(self, resource_id: int, resource: Resource) -> Resource | None:
+        """按路径 id 更新可变字段；不存在则 None。"""
+        row = await self._session.get(ResourceRow, resource_id)
+        if row is None:
+            return None
+        self._apply_resource(row, resource)
+        await self._session.commit()
+        await self._session.refresh(row)
+        return _orm_to_resource(row)
+
+    async def trash(self, resource_id: int) -> Resource | None:
+        """软删：已在回收站则原样返回。"""
+        existing = await self.get(resource_id)
+        if existing is None:
+            return None
+        if existing.is_trashed:
+            return existing
+        existing.to_trash()
+        return await self.update(resource_id, existing)
 
     async def get(self, resource_id: int) -> Resource | None:
         row = await self._session.get(ResourceRow, resource_id)

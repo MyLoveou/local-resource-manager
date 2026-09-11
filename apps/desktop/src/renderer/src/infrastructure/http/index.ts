@@ -4,5 +4,5 @@
  */
 export { default as client } from './client'
 export { getOverview } from './overview'
-export { getResources } from './resources'
-export { getResource } from './resources'
+export { getResources, getResource, patchResource, deleteResource } from './resources'
+export type { ResourcePatch } from './resources'

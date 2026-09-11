@@ -2,16 +2,17 @@
 from app.library.application.schemas import (
     Overview,
     ResourcePage,
+    ResourcePatch,
     ResourceSortField,
     ResourceStats,
     TaskSummary,
 )
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
-from app.shared.models import ResourceStatus, ResourceType
+from app.shared.models import Resource, ResourceStatus, ResourceType
 
 
 class LibraryQueryService:
-    """资源库只读用例：概览、资源查询。"""
+    """资源库用例：概览、列表、部分更新、软删。"""
 
     def __init__(self, resources: ResourceRepository, tasks: TaskSummaryRepository):
         self._resources = resources
@@ -45,3 +46,18 @@ class LibraryQueryService:
             offset=offset,
             has_more=offset + len(items) < total,
         )
+
+    async def patch(self, resource_id: int, body: ResourcePatch) -> Resource | None:
+        """部分更新标题/描述/评分。"""
+        existing = await self._resources.get(resource_id)
+        if existing is None:
+            return None
+        data = body.model_dump(exclude_unset=True)
+        for key, value in data.items():
+            setattr(existing, key, value)
+        existing._touch()
+        return await self._resources.update(resource_id, existing)
+
+    async def trash(self, resource_id: int) -> Resource | None:
+        """软删入回收站（已 trashed 则原样写回）。"""
+        return await self._resources.trash(resource_id)

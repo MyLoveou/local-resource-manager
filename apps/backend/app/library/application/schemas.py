@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import Field
 
 from app.shared.models import ApiModel, Resource
+from app.shared.value_objects import Rating
 
 
 class ResourceStats(ApiModel):
@@ -45,3 +46,11 @@ class ResourcePage(ApiModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class ResourcePatch(ApiModel):
+    """资源部分更新（仅标题/描述/评分）。"""
+
+    title: str | None = None
+    description: str | None = None
+    rating: Rating | None = None

@@ -4,6 +4,13 @@
 import client from './client'
 import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 
+/** 资源部分更新（与后端 ResourcePatch 对齐） */
+export interface ResourcePatch {
+  title?: string | null
+  description?: string | null
+  rating?: number | null
+}
+
 /** 分页获取资源 */
 export async function getResources(query: ResourcePageQuery = {}): Promise<ResourcePage> {
   const { data } = await client.get<ResourcePage>('/library/resources', {
@@ -16,13 +23,20 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       order: query.order,
     },
   })
-  if (Array.isArray(data) || !data || !Array.isArray(data.items)) {
-    throw new Error('资源列表接口已改为分页，请重启桌面端以加载新后端')
-  }
   return data
 }
 
-export async function getResource(resourceId: number) {
+export async function getResource(resourceId: number): Promise<Resource> {
   const { data } = await client.get<Resource>(`/library/resources/${resourceId}`)
+  return data
+}
+
+export async function patchResource(resourceId: number, patch: ResourcePatch): Promise<Resource> {
+  const { data } = await client.patch<Resource>(`/library/resources/${resourceId}`, patch)
+  return data
+}
+
+export async function deleteResource(resourceId: number): Promise<Resource> {
+  const { data } = await client.delete<Resource>(`/library/resources/${resourceId}`)
   return data
 }

@@ -4,6 +4,7 @@
 
 规划 hooks：
 - `useResourcePage.ts` — 资源分页（首屏 + 触底加载）
+- `useResourceHandle.ts` — 资源 PATCH / 软删（错误向上抛）
 - `useVirtualList.ts` — 虚拟滚动封装
 - `useSearch.ts` — 搜索/排序状态
 - `useApi.ts` — axios 封装（基础 URL、token、错误处理）

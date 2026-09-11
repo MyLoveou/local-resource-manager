@@ -4,10 +4,9 @@ from typing import Literal
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.library.application.schemas import ResourcePage, ResourceSortField
+from app.library.application.schemas import ResourcePage, ResourcePatch, ResourceSortField
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
-from app.library.infrastructure.seed import seed_demo_if_empty
 from app.shared.db.db import get_session
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
@@ -72,9 +71,23 @@ async def create_resource(resource: Resource, repos=Depends(_service)) -> Resour
     return await resources.create(resource)
 
 
-@app.post("/dev/seed")
-async def seed_demo(repos=Depends(_service)) -> dict:
-    """空库时写入演示资源；已有数据则跳过。"""
-    resources, _ = repos
-    inserted = await seed_demo_if_empty(resources)
-    return {"inserted": inserted}
+@app.patch("/resources/{resource_id}", response_model=Resource)
+async def patch_resource(
+    resource_id: int, body: ResourcePatch, repos=Depends(_service)
+) -> Resource:
+    """部分更新标题/描述/评分。"""
+    resources, tasks = repos
+    resource = await LibraryQueryService(resources, tasks).patch(resource_id, body)
+    if resource is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return resource
+
+
+@app.delete("/resources/{resource_id}", response_model=Resource)
+async def delete_resource(resource_id: int, repos=Depends(_service)) -> Resource:
+    """软删：移入回收站。"""
+    resources, tasks = repos
+    resource = await LibraryQueryService(resources, tasks).trash(resource_id)
+    if resource is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return resource
