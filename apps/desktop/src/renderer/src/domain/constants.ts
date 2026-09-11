@@ -30,6 +30,21 @@ export const AdapterKey = {
 } as const
 export type AdapterKey = (typeof AdapterKey)[keyof typeof AdapterKey]
 
+/** 导入来源（与后端 SourceKind 对齐） */
+export const SourceKind = {
+  FILE: 'file',
+  DIRECTORY: 'directory',
+} as const
+export type SourceKind = (typeof SourceKind)[keyof typeof SourceKind]
+
+/** 点开头的文件/目录不参与导入收集 */
+export const HIDDEN_NAME_PREFIX = '.'
+
+export const API_CODE_OK = 0
+export const API_STATUS_SUCCESS = 'success'
+export const API_STATUS_ERROR = 'error'
+
+
 /** 协议 → 默认引擎 路由表（aria2 兼 BT 兜底；rqbit 负责现代 BT/流式） */
 export const PROTOCOL_TO_ENGINE: Record<Protocol, DownloadEngine> = {
   [Protocol.HTTP]: DownloadEngine.ARIA2,

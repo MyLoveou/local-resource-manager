@@ -27,8 +27,8 @@
       <p class="hint">选择来源</p>
       <n-radio-group v-model:value="sourceKind">
         <n-space>
-          <n-radio value="file">文件</n-radio>
-          <n-radio value="directory">文件夹</n-radio>
+          <n-radio :value="SourceKind.FILE">文件</n-radio>
+          <n-radio :value="SourceKind.DIRECTORY">文件夹</n-radio>
         </n-space>
       </n-radio-group>
       <div class="actions">
@@ -55,6 +55,7 @@
 import { computed } from 'vue'
 import { NModal, NButton, NRadio, NRadioGroup, NSpace, NProgress } from 'naive-ui'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
+import { SourceKind } from '@/domain'
 
 const {
   visible,

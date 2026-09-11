@@ -3,3 +3,5 @@ uvicorn[standard]
 pydantic-settings
 sqlalchemy[asyncio]>=2.0
 aiosqlite
+Pillow
+httpx

@@ -30,8 +30,11 @@ export interface Resource {
   extra?: Record<string, unknown>
   createdAt?: string | null
   updatedAt?: string | null
+  /** 资源级作者（自由文本） */
+  author?: string | null
   tags?: Tag[]
   files?: ResourceFile[]
+  todos?: ResourceTodo[]
   /** 独立分类词条，不是资源 type */
   category?: Category | null
 }
@@ -52,8 +55,20 @@ export interface ResourceFile {
   height?: number | null
   /** 视频编码 */
   codec?: string | null
+  fps?: number | null
+  /** 比特/秒 */
+  bitrate?: number | null
   /** 图片拍摄时间（EXIF） */
   exifTakenAt?: string | null
+  createdAt?: string | null
+}
+
+export interface ResourceTodo {
+  id?: number
+  resourceId: number
+  content: string
+  done: boolean
+  sort: number
   createdAt?: string | null
 }
 
@@ -73,6 +88,7 @@ export interface Tag {
 export interface MetadataDraft {
   title: string
   description: string
+  author: string
   ratingStars: number
   categoryName: string | null
   tagNames: string[]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
@@ -12,11 +13,13 @@ from app.library.application.importers import importer_for
 from app.library.application.packages import ResourcePackage, layout_for
 from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
+from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
+from app.shared.media_types import FILE_ROLE_PRIMARY
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 
@@ -43,10 +46,12 @@ class ImportService:
         *,
         store_root: Path | None = None,
         file_ops: FileOps | None = None,
+        probe: Callable[[ResourceType, Path], ProbeFields] | None = None,
     ) -> None:
         self._resources = resources
         self._store_root = store_root or default_library_store(settings.db_path)
         self._ops = file_ops or FileOps()
+        self._probe = probe or probe_media
 
     async def run(
         self,
@@ -107,13 +112,25 @@ class ImportService:
             role_paths = await asyncio.to_thread(layout.place_primary, package, source)
             job.phase = "probe"
             for role, dest in role_paths.items():
+                probed = ProbeFields()
+                if role == FILE_ROLE_PRIMARY:
+                    probed = await asyncio.to_thread(self._probe, type_, dest)
+                file_size = size
+                if role != FILE_ROLE_PRIMARY:
+                    file_size = (await asyncio.to_thread(dest.stat)).st_size
                 await self._resources.add_file(
                     resource.id,
                     path=str(dest),
-                    sha256=digest if role == "primary" else None,
-                    size=size if role == "primary" else dest.stat().st_size,
+                    sha256=digest if role == FILE_ROLE_PRIMARY else None,
+                    size=file_size,
                     format_=dest.suffix.lower().lstrip("."),
                     role=role,
+                    duration=probed.duration,
+                    width=probed.width,
+                    height=probed.height,
+                    codec=probed.codec,
+                    fps=probed.fps,
+                    bitrate=probed.bitrate,
                     commit=False,
                 )
             cover = package.resolve_cover(role_paths)

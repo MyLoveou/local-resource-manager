@@ -5,21 +5,15 @@ import { ref } from 'vue'
 import { createImport, getImportJob } from '@/infrastructure/http'
 import type { ImportJob, ImportSourceKind } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
+import {
+  ENABLED_IMPORT_TYPES,
+  IMPORT_POLL_INTERVAL_MS,
+  SourceKind,
+  fileFilterForResourceType,
+} from '@/domain'
 import type { ResourceType } from '@/domain'
 
-const IMAGE_FILTER = {
-  name: '图片',
-  extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic', 'avif'],
-}
-const VIDEO_FILTER = {
-  name: '视频',
-  extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'ts', 'm4v'],
-}
-
-export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = [
-  { value: 'image', label: '图片' },
-  { value: 'video', label: '视频' },
-]
+export { ENABLED_IMPORT_TYPES }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -30,7 +24,7 @@ export function useLibraryImport() {
   const visible = ref(false)
   const step = ref<'type' | 'source' | 'progress'>('type')
   const resourceType = ref<ResourceType>('image')
-  const sourceKind = ref<ImportSourceKind>('file')
+  const sourceKind = ref<ImportSourceKind>(SourceKind.FILE)
   const job = ref<ImportJob | null>(null)
   const busy = ref(false)
   const picking = ref(false)
@@ -57,17 +51,23 @@ export function useLibraryImport() {
     if (busy.value || picking.value) return
     picking.value = true
     errorMessage.value = ''
-    const filter = resourceType.value === 'image' ? IMAGE_FILTER : VIDEO_FILTER
+    const filter = fileFilterForResourceType(resourceType.value)
+    if (!filter) {
+      errorMessage.value = '不支持的资源类型'
+      picking.value = false
+      return
+    }
     let paths: string[] = []
     try {
-      if (sourceKind.value === 'file') {
-        paths = (await window.electron.selectFiles([filter])) ?? []
-        if (paths.length === 0) return
-      } else {
-        const dir = await window.electron.selectDirectory()
-        if (!dir) return
-        paths = [dir]
+      const pickers: Record<SourceKind, () => Promise<string[]>> = {
+        [SourceKind.FILE]: async () => (await window.electron.selectFiles([filter])) ?? [],
+        [SourceKind.DIRECTORY]: async () => {
+          const dir = await window.electron.selectDirectory()
+          return dir ? [dir] : []
+        },
       }
+      paths = await pickers[sourceKind.value]()
+      if (paths.length === 0) return
     } catch {
       errorMessage.value = '无法打开文件选择框'
       step.value = 'progress'
@@ -87,7 +87,7 @@ export function useLibraryImport() {
       let current = await getImportJob(created.jobId)
       job.value = current
       while (current.status === 'queued' || current.status === 'running') {
-        await sleep(300)
+        await sleep(IMPORT_POLL_INTERVAL_MS)
         current = await getImportJob(created.jobId)
         job.value = current
       }

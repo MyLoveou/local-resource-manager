@@ -12,6 +12,7 @@ from app.library.application.schemas import (
     ResourcePage,
     ResourcePatch,
     ResourceSortField,
+    SubtitleAdd,
 )
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
@@ -100,6 +101,23 @@ async def replace_cover(
     resources, tasks = repos
     try:
         resource = await LibraryQueryService(resources, tasks).replace_cover(resource_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if resource is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return resource
+
+
+@router.post("/{resource_id}/subtitles", response_model=Resource)
+async def add_subtitle(
+    resource_id: int,
+    body: SubtitleAdd,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> Resource:
+    """将本机字幕复制进包内，按原始视频名改名。"""
+    resources, tasks = repos
+    try:
+        resource = await LibraryQueryService(resources, tasks).add_subtitle(resource_id, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if resource is None:

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.library.application.packages.resource_package import ResourcePackage
+from app.shared.media_types import FILE_ROLE_PRIMARY
 from app.shared.models import ResourceType
 
 
@@ -17,7 +18,7 @@ class PackageLayout:
     def place_primary(self, package: ResourcePackage, source: Path) -> dict[str, Path]:
         """本轮各类型都只放 primary；后续视频可在此扩展字幕/封面。"""
         dest = package.put_primary(source)
-        return {"primary": dest}
+        return {FILE_ROLE_PRIMARY: dest}
 
 
 IMAGE_LAYOUT = PackageLayout(ResourceType.IMAGE, cover_falls_back_to_primary=True)

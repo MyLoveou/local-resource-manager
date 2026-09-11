@@ -21,6 +21,7 @@
 - **尚未实现**（需求有、代码无或仅 health）：
   - 视频专项（字幕/封面抽帧）、预览/播放/回收站完整流（M2 大部分）、抓取（M3）、检索打标（M4）、下载引擎（M5）、设置（含库路径，M6）、全局 Notify、token 校验。
   - scrape / download 子路由目前只有 `/health`。
+  - 网格封面仍拉原图 HTTP；窗口缩放会连续重算虚拟列。体验债见 `grid-media-performance`（草案）。
 
 ### 怎么做的（路径级）
 
@@ -48,6 +49,7 @@
   - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 删除后网格仍显示该卡。
   - README 仍写「无业务代码 / mount 双应用」，与现状不符。
   - 路线图 `docs/design/00-路线图与里程碑.md` 日期 2026-09-07，M2 描述已过时。
+  - 导入 `phase=probe` 已由 `metadata-panel-fields` 用 Pillow/ffprobe 写入宽高/时长/帧率/码率/编码；旧资源不回填，缺列面板显示「—」。
 
 ---
 
@@ -69,7 +71,7 @@
 - 分类与标签为**独立词表**；资源面板可新建词条并点保存挂上。词条统计/删除管理见 `tag-category-hygiene`（尚未实现）。
 - 三栏信息栏默认不折叠（L1，未改口）。
 - 技术：Electron+Vue；单一 FastAPI 进程；SQLite；下载/抓取引擎选型仍以 L1 为准（未落地）。
-- 契约：DB snake_case ↔ API JSON camelCase。
+- 契约：DB snake_case ↔ API JSON camelCase。JSON 业务响应统一信封 `{ code, status, message, data }`（成功 `code=0`）；文件流与 OpenAPI 不包；前端 axios 解开 `data`。
 
 ### 近期顺序
 

@@ -8,6 +8,7 @@ import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 export interface ResourcePatch {
   title?: string | null
   description?: string | null
+  author?: string | null
   rating?: number | null
   categoryName?: string | null
   tagNames?: string[]
@@ -40,6 +41,38 @@ export async function patchResource(resourceId: number, patch: ResourcePatch): P
 
 export async function postResourceCover(resourceId: number, path: string): Promise<Resource> {
   const { data } = await client.post<Resource>(`/library/resources/${resourceId}/cover`, { path })
+  return data
+}
+
+export async function postResourceSubtitle(resourceId: number, path: string): Promise<Resource> {
+  const { data } = await client.post<Resource>(`/library/resources/${resourceId}/subtitles`, { path })
+  return data
+}
+
+export async function postResourceTodo(resourceId: number, content: string): Promise<Resource> {
+  const { data } = await client.post<Resource>(`/library/resources/${resourceId}/todos`, { content })
+  return data
+}
+
+export interface TodoPatch {
+  content?: string
+  done?: boolean
+}
+
+export async function patchResourceTodo(
+  resourceId: number,
+  todoId: number,
+  patch: TodoPatch
+): Promise<Resource> {
+  const { data } = await client.patch<Resource>(
+    `/library/resources/${resourceId}/todos/${todoId}`,
+    patch
+  )
+  return data
+}
+
+export async function deleteResourceTodo(resourceId: number, todoId: number): Promise<Resource> {
+  const { data } = await client.delete<Resource>(`/library/resources/${resourceId}/todos/${todoId}`)
   return data
 }
 

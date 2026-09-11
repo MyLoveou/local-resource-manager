@@ -45,6 +45,7 @@ class Resource(ApiModel):
     type: ResourceType
     title: str = ""
     description: str | None = None
+    author: str | None = None
     rating: Rating | None = None  # 评分 0-10（约束类型值对象）
     cover_path: str | None = None  # 封面本地缓存路径
     status: ResourceStatus = ResourceStatus.ACTIVE
@@ -57,6 +58,7 @@ class Resource(ApiModel):
     category: "Category | None" = None
     tags: list["Tag"] = Field(default_factory=list)
     files: list["ResourceFile"] = Field(default_factory=list)
+    todos: list["ResourceTodo"] = Field(default_factory=list)
 
     @property
     def is_trashed(self) -> bool:
@@ -106,6 +108,8 @@ class ResourceFile(ApiModel):
     width: int | None = None
     height: int | None = None
     codec: str | None = None  # 视频编码
+    fps: float | None = None
+    bitrate: int | None = None  # 比特/秒
     exif_taken_at: datetime | None = None  # 图片拍摄时间（EXIF）
     created_at: datetime | None = None
 
@@ -125,6 +129,17 @@ class ResourceFile(ApiModel):
     def matches_hash(self, sha256: str) -> bool:
         """是否为指定哈希的文件（图片元数据匹配键）。"""
         return self.sha256 is not None and self.sha256.lower() == sha256.lower()
+
+
+class ResourceTodo(ApiModel):
+    """挂在单条资源上的待办。"""
+
+    id: int | None = None
+    resource_id: int
+    content: str
+    done: bool = False
+    sort: int = 0
+    created_at: datetime | None = None
 
 
 class Tag(ApiModel):

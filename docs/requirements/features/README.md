@@ -2,7 +2,25 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## metadata-panel（**已定稿 / 实现待验收**）
+## grid-media-performance（**草案**）
+
+> 网格封面加载慢、拖窗口卡。补上 M2「缩略图懒加载 / 滚动流畅」未落地部分。评审中，待拍板缩略图策略与缩放行为。
+
+| 文档 | 内容 |
+|------|------|
+| [`grid-media-performance/需求.md`](grid-media-performance/需求.md) | 范围、现状、开放问题 |
+
+## metadata-panel-fields（**已定稿 / 实现中**）
+
+> 描述、立刻待办、图/视频技术字段（含帧率码率画质）、导入 Pillow/ffprobe、多语言字幕。评审中，待「可以按此实现」。
+
+| 文档 | 内容 |
+|------|------|
+| [`metadata-panel-fields/需求.md`](metadata-panel-fields/需求.md) | 范围与开放问题 |
+| [`metadata-panel-fields/实现方案.md`](metadata-panel-fields/实现方案.md) | 包内 `subtitles/` 命名与文件清单 |
+| OpenSpec | `openspec/changes/metadata-panel-fields/` |
+
+## metadata-panel（**已定稿 / 已合入 master**）
 
 > 右侧元数据面板：通用字段；独立词表；草稿点保存；编辑弹窗含换封面；删除确认。
 

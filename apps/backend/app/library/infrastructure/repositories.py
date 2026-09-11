@@ -16,10 +16,11 @@ from app.shared.db.orm import (
     FileRow,
     ResourceRow,
     ResourceTagRow,
+    ResourceTodoRow,
     ScrapeJobRow,
     TagRow,
 )
-from app.shared.models import Category, Resource, ResourceFile, ResourceStatus, ResourceType, Tag
+from app.shared.models import Category, Resource, ResourceFile, ResourceStatus, ResourceTodo, ResourceType, Tag
 
 
 def _now() -> str:
@@ -43,6 +44,7 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
         type=ResourceType(row.type),
         title=row.title,
         description=row.description,
+        author=row.author,
         rating=row.rating,
         cover_path=row.cover_path,
         status=ResourceStatus(row.status),
@@ -68,6 +70,7 @@ class ResourceRepository:
             type=resource.type.value,
             title=resource.title,
             description=resource.description,
+            author=resource.author,
             rating=resource.rating,
             cover_path=resource.cover_path,
             status=resource.status.value,
@@ -87,6 +90,7 @@ class ResourceRepository:
         row.type = resource.type.value
         row.title = resource.title
         row.description = resource.description
+        row.author = resource.author
         row.rating = resource.rating
         row.cover_path = resource.cover_path
         row.status = resource.status.value
@@ -155,10 +159,29 @@ class ResourceRepository:
                 width=f.width,
                 height=f.height,
                 codec=f.codec,
+                fps=f.fps,
+                bitrate=f.bitrate,
                 exif_taken_at=f.exif_taken_at,
                 created_at=f.created_at,
             )
             for f in files
+        ]
+        todo_stmt = (
+            select(ResourceTodoRow)
+            .where(ResourceTodoRow.resource_id == row.id)
+            .order_by(ResourceTodoRow.sort, ResourceTodoRow.id)
+        )
+        todos = (await self._session.execute(todo_stmt)).scalars().all()
+        resource.todos = [
+            ResourceTodo(
+                id=t.id,
+                resource_id=t.resource_id,
+                content=t.content,
+                done=bool(t.done),
+                sort=t.sort,
+                created_at=t.created_at,
+            )
+            for t in todos
         ]
         return resource
 
@@ -254,6 +277,12 @@ class ResourceRepository:
         size: int | None,
         format_: str | None,
         role: str,
+        duration: float | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        codec: str | None = None,
+        fps: float | None = None,
+        bitrate: int | None = None,
         commit: bool = True,
     ) -> FileRow:
         """写入库内文件行。"""
@@ -265,6 +294,12 @@ class ResourceRepository:
             size=size,
             format=format_,
             role=role,
+            duration=duration,
+            width=width,
+            height=height,
+            codec=codec,
+            fps=fps,
+            bitrate=bitrate,
             created_at=ts,
         )
         self._session.add(row)
@@ -368,6 +403,79 @@ class ResourceRepository:
             .limit(1)
         )
         return (await self._session.execute(stmt)).scalars().first()
+
+    async def get_file_by_path(self, resource_id: int, path: str) -> FileRow | None:
+        stmt = select(FileRow).where(FileRow.resource_id == resource_id, FileRow.path == path)
+        return (await self._session.execute(stmt)).scalars().first()
+
+    async def add_todo(self, resource_id: int, content: str, *, commit: bool = True) -> ResourceTodo:
+        max_sort = await self._session.scalar(
+            select(func.coalesce(func.max(ResourceTodoRow.sort), -1)).where(
+                ResourceTodoRow.resource_id == resource_id
+            )
+        )
+        row = ResourceTodoRow(
+            resource_id=resource_id,
+            content=content.strip(),
+            done=0,
+            sort=int(max_sort or -1) + 1,
+            created_at=_now(),
+        )
+        self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return ResourceTodo(
+            id=row.id,
+            resource_id=row.resource_id,
+            content=row.content,
+            done=bool(row.done),
+            sort=row.sort,
+            created_at=row.created_at,
+        )
+
+    async def patch_todo(
+        self,
+        resource_id: int,
+        todo_id: int,
+        *,
+        content: str | None = None,
+        done: bool | None = None,
+        commit: bool = True,
+    ) -> ResourceTodo | None:
+        row = await self._session.get(ResourceTodoRow, todo_id)
+        if row is None or row.resource_id != resource_id:
+            return None
+        if content is not None:
+            row.content = content.strip()
+        if done is not None:
+            row.done = 1 if done else 0
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return ResourceTodo(
+            id=row.id,
+            resource_id=row.resource_id,
+            content=row.content,
+            done=bool(row.done),
+            sort=row.sort,
+            created_at=row.created_at,
+        )
+
+    async def delete_todo(self, resource_id: int, todo_id: int, *, commit: bool = True) -> bool:
+        row = await self._session.get(ResourceTodoRow, todo_id)
+        if row is None or row.resource_id != resource_id:
+            return False
+        await self._session.delete(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        return True
 
     async def get_file(self, resource_id: int, file_id: int) -> FileRow | None:
         stmt = select(FileRow).where(FileRow.id == file_id, FileRow.resource_id == resource_id)

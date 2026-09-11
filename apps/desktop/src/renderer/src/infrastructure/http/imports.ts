@@ -3,8 +3,9 @@
  */
 import client from './client'
 import type { ResourceType } from '@/domain'
+import { SourceKind } from '@/domain'
 
-export type ImportSourceKind = 'file' | 'directory'
+export type ImportSourceKind = SourceKind
 
 export interface ImportCreate {
   type: ResourceType

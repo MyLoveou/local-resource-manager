@@ -1,13 +1,21 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.download.api.router import router as download_router
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
 from app.scrape.api.router import router as scrape_router
+from app.shared.api_envelope import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+    wrap_json_envelope,
+)
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
 from app.shared.log import logger
@@ -56,6 +64,10 @@ app.add_middleware(
 )
 
 app.middleware("http")(log_requests)
+app.middleware("http")(wrap_json_envelope)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
 app.include_router(scrape_router, prefix="/scrape")
 app.include_router(download_router, prefix="/download")

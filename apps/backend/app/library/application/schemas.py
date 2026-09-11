@@ -3,6 +3,7 @@ from enum import Enum
 
 from pydantic import Field
 
+from app.shared.constants import SourceKind
 from app.shared.models import ApiModel, Category, Resource, ResourceType, Tag
 from app.shared.value_objects import Rating
 
@@ -53,6 +54,7 @@ class ResourcePatch(ApiModel):
 
     title: str | None = None
     description: str | None = None
+    author: str | None = None
     rating: Rating | None = None
     category_name: str | None = None
     tag_names: list[str] | None = None
@@ -62,6 +64,25 @@ class CoverReplace(ApiModel):
     """更换封面：本机已存在的图片路径。"""
 
     path: str
+
+
+class SubtitleAdd(ApiModel):
+    """添加字幕：本机已存在的字幕路径。"""
+
+    path: str
+
+
+class TodoCreate(ApiModel):
+    """新增待办。"""
+
+    content: str
+
+
+class TodoPatch(ApiModel):
+    """待办部分更新。"""
+
+    content: str | None = None
+    done: bool | None = None
 
 
 class CategoryList(ApiModel):
@@ -74,13 +95,6 @@ class TagList(ApiModel):
     """标签词表只读列表。"""
 
     items: list[Tag]
-
-
-class SourceKind(str, Enum):
-    """导入来源。"""
-
-    FILE = "file"
-    DIRECTORY = "directory"
 
 
 class ImportCreate(ApiModel):

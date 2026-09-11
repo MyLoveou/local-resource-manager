@@ -32,6 +32,28 @@ class AdapterKey(str, Enum):
     DOUBAN = "douban"
 
 
+class SourceKind(str, Enum):
+    """导入来源：文件或多文件 / 一次选目录。"""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
+HIDDEN_NAME_PREFIX = "."
+
+API_CODE_OK = 0
+API_STATUS_SUCCESS = "success"
+API_STATUS_ERROR = "error"
+API_MESSAGE_OK = "ok"
+
+ENVELOPE_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+
+def is_hidden_fs_name(name: str) -> bool:
+    """点开头的文件或目录不参与导入收集。"""
+    return name.startswith(HIDDEN_NAME_PREFIX)
+
+
 # 协议 → 默认引擎 路由表（aria2 兼 BT 兜底；rqbit 负责现代 BT/流式）
 PROTOCOL_TO_ENGINE: dict[Protocol, DownloadEngine] = {
     Protocol.HTTP: DownloadEngine.ARIA2,

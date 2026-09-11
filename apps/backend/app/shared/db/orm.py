@@ -16,6 +16,7 @@ class ResourceRow(Base):
     type: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False, default="")
     description: Mapped[str | None] = mapped_column(Text)
+    author: Mapped[str | None] = mapped_column(String)
     rating: Mapped[float | None] = mapped_column(Float)
     cover_path: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
@@ -69,7 +70,20 @@ class FileRow(Base):
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
     codec: Mapped[str | None] = mapped_column(String)
+    fps: Mapped[float | None] = mapped_column(Float)
+    bitrate: Mapped[int | None] = mapped_column(Integer)
     exif_taken_at: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str | None] = mapped_column(String)
+
+
+class ResourceTodoRow(Base):
+    __tablename__ = "resource_todos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id", ondelete="CASCADE"))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    done: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[str | None] = mapped_column(String)
 
 

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from app.shared.fs.file_ops import FileOps
+from app.shared.media_types import FILE_ROLE_SUBTITLE
 from app.shared.models import ResourceType
 
 
@@ -38,14 +39,23 @@ class ResourcePackage:
         self.root.mkdir(parents=True, exist_ok=True)
         return self.root
 
-    def put_role(self, role: str, src: Path) -> Path:
-        """按角色复制进包内。"""
+    def put_role(self, role: str, src: Path, dest_name: str | None = None) -> Path:
+        """按角色复制进包内。字幕可用 dest_name 覆盖源文件名。"""
         self.ensure_dir()
-        if role == "subtitle":
-            dest = self.root / "subtitles" / src.name
+        if role == FILE_ROLE_SUBTITLE:
+            name = Path(dest_name or src.name).name
+            dest = (self.root / "subtitles" / name).resolve()
         else:
-            dest = self.root / f"{role}{src.suffix.lower()}"
+            dest = (self.root / f"{role}{src.suffix.lower()}").resolve()
+        try:
+            dest.relative_to(self.root.resolve())
+        except ValueError as exc:
+            raise ValueError("destination outside package") from exc
         return self._ops.copy(src, dest)
+
+    def put_subtitle(self, src: Path, dest_name: str) -> Path:
+        """复制字幕并使用给定文件名。"""
+        return self.put_role("subtitle", src, dest_name)
 
     def put_primary(self, src: Path) -> Path:
         return self.put_role("primary", src)
