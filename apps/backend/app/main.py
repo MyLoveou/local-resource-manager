@@ -3,11 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.download.api.routes import app as download_app
-from app.library.api.routes import app as library_app
+from app.download.api.router import router as download_router
+from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers, seed_demo_if_empty
-from app.scrape.api.routes import app as scrape_app
+from app.scrape.api.router import router as scrape_router
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
 from app.shared.log import logger
@@ -46,7 +46,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="backend",
     version="0.0.0",
-    description="本地资源管理器后端服务：内挂资源库/抓取/下载三个子应用",
+    description="本地资源管理器后端：library / scrape / download 以 APIRouter 挂入",
     lifespan=lifespan,
 )
 
@@ -60,9 +60,9 @@ app.add_middleware(
 )
 
 app.middleware("http")(log_requests)
-app.mount("/library", library_app)
-app.mount("/scrape", scrape_app)
-app.mount("/download", download_app)
+app.include_router(library_router, prefix="/library")
+app.include_router(scrape_router, prefix="/scrape")
+app.include_router(download_router, prefix="/download")
 
 
 @app.get("/health")
