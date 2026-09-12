@@ -2,7 +2,15 @@
   <aside class="info-panel">
     <div v-if="resource" class="info-panel-content">
       <div class="info-panel-body">
-        <img v-if="coverUrl" class="info-panel-cover" :src="coverUrl" alt="封面" />
+        <img
+          v-if="coverUrl"
+          class="info-panel-cover"
+          :class="{ 'info-panel-cover--open': isImage }"
+          :src="coverUrl"
+          alt="封面"
+          decoding="async"
+          @click="openViewerFromCover"
+        />
         <div class="info-panel-title">{{ resource.title }}</div>
         <div class="info-panel-meta">类型 {{ typeLabel }}</div>
         <div class="info-panel-meta">格式 {{ formatLabel }}</div>
@@ -96,14 +104,18 @@
           />
         </div>
       </div>
-      <div class="info-panel-footer">
+        <div class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
-          <n-button v-if="canChangeCover" size="small" @click="pickCoverImmediate">更换封面</n-button>
-          <n-button v-if="isVideo" size="small" :loading="subtitleBusy" @click="pickSubtitle">
-            添加字幕
-          </n-button>
+          <n-dropdown
+            v-if="moreOptions.length > 0"
+            trigger="click"
+            :options="moreOptions"
+            @select="onMoreSelect"
+          >
+            <n-button size="small">更多</n-button>
+          </n-dropdown>
           <n-popconfirm
             v-if="resource.status !== 'trashed'"
             positive-text="移入"
@@ -159,11 +171,18 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { NButton, NCheckbox, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
+import { NButton, NCheckbox, NDropdown, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
+import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
-import { getResource, getCategories, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResource, getCategories, invalidateCategories, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
+import { useImageViewerStore } from '@/application/stores/imageViewer'
+import {
+  openPrimaryDefault,
+  openPrimaryWithOther,
+  revealPrimary,
+} from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { storeToRefs } from 'pinia'
 import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo } from '@/domain'
@@ -182,6 +201,8 @@ import {
 
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const imageViewer = useImageViewerStore()
+const shellBusy = ref(false)
 const { selectedId } = storeToRefs(selection)
 const { deleteResource, restoreResource, purgeResource, patchResource, replaceCover, addSubtitle, addTodo, patchTodo, removeTodo } =
   useResourceHandle()
@@ -247,6 +268,20 @@ const isImage = computed(() => resource.value?.type === 'image')
 /** 图片主文件即封面，不提供更换封面；仅视频可换海报。 */
 const canChangeCover = computed(() => isVideo.value)
 
+const moreOptions = computed((): DropdownOption[] => {
+  const items: DropdownOption[] = []
+  if (canChangeCover.value) items.push({ label: '更换封面', key: 'cover' })
+  if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
+  if (isImage.value) {
+    items.push(
+      { label: '打开所在位置', key: 'reveal', disabled: shellBusy.value },
+      { label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value },
+      { label: '选择其他应用', key: 'openWith', disabled: shellBusy.value }
+    )
+  }
+  return items
+})
+
 function primaryFile(): ResourceFile | undefined {
   const files = resource.value?.files ?? []
   return files.find((f) => f.role === FILE_ROLE.PRIMARY) ?? files[0]
@@ -274,7 +309,9 @@ const subtitleNames = computed(() =>
     .map((f) => f.path.replace(/\\/g, '/').split('/').pop() || f.path)
 )
 
-const coverUrl = computed(() => resolveLibraryMediaUrl(resource.value?.coverPath))
+const coverUrl = computed(() =>
+  resolveLibraryMediaUrl(resource.value?.thumbnailPath ?? resource.value?.coverPath)
+)
 
 const modalCoverUrl = computed(() => coverUrl.value)
 
@@ -296,11 +333,13 @@ watch(
       return
     }
     try {
-      const [row, cats] = await Promise.all([getResource(id), getCategories()])
+      const row = await getResource(id)
       if (gen !== loadGen) return
       resource.value = row
-      categories.value = cats
       applyResourceToDraft(row)
+      const cats = await getCategories()
+      if (gen !== loadGen) return
+      categories.value = cats
     } catch (error) {
       if (gen !== loadGen) return
       resource.value = null
@@ -352,6 +391,7 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
       tagNames: [...draft.tagNames],
     })
     resource.value = patched
+    invalidateCategories()
     const pending = draft.pendingCoverPath
     applyResourceToDraft(patched)
     draft.pendingCoverPath = pending
@@ -548,6 +588,64 @@ async function removeTodoRow(todo: ResourceTodo): Promise<void> {
   }
 }
 
+function openViewerFromCover(): void {
+  const row = resource.value
+  const id = row?.id
+  if (id == null || row?.type !== 'image') return
+  const ids = imageViewer.playlistIds.includes(id) ? imageViewer.playlistIds : [id]
+  imageViewer.open(id, ids)
+}
+
+async function runShell(
+  action: (row: Resource | null) => Promise<string | null>
+): Promise<void> {
+  shellBusy.value = true
+  errorMessage.value = ''
+  try {
+    const message = await action(resource.value)
+    if (message) errorMessage.value = message
+  } catch (error) {
+    errorMessage.value = '打开失败'
+    console.error(error)
+  } finally {
+    shellBusy.value = false
+  }
+}
+
+function onReveal(): void {
+  void runShell(revealPrimary)
+}
+
+function onOpenDefault(): void {
+  void runShell(openPrimaryDefault)
+}
+
+function onOpenWith(): void {
+  void runShell(openPrimaryWithOther)
+}
+
+function onMoreSelect(key: string | number): void {
+  if (key === 'cover') {
+    void pickCoverImmediate()
+    return
+  }
+  if (key === 'subtitle') {
+    void pickSubtitle()
+    return
+  }
+  if (key === 'reveal') {
+    onReveal()
+    return
+  }
+  if (key === 'openDefault') {
+    onOpenDefault()
+    return
+  }
+  if (key === 'openWith') {
+    onOpenWith()
+  }
+}
+
 async function handleDelete(): Promise<void> {
   const id = selectedId.value
   const row = resource.value
@@ -557,6 +655,7 @@ async function handleDelete(): Promise<void> {
   try {
     await deleteResource(id)
     library.bump(null)
+    imageViewer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '删除失败'
@@ -574,6 +673,7 @@ async function handleRestore(): Promise<void> {
   try {
     await restoreResource(id)
     library.bump(null)
+    imageViewer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '恢复失败'
@@ -591,6 +691,7 @@ async function handlePurge(): Promise<void> {
   try {
     await purgeResource(id)
     library.bump(null)
+    imageViewer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '彻底删除失败'
@@ -643,6 +744,10 @@ async function handlePurge(): Promise<void> {
   width: 100%;
   max-height: 180px;
   object-fit: contain;
+
+  &--open {
+    cursor: zoom-in;
+  }
 }
 
 .info-panel-title {

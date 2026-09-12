@@ -16,5 +16,6 @@
     "electron.vite.config.ts",
     "src/main/**/*",
     "src/preload/index.ts"
-  ]
+  ],
+  "exclude": ["src/main/**/*.test.ts"]
 }

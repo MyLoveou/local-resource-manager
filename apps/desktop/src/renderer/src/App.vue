@@ -4,6 +4,7 @@ import { NMessageProvider } from 'naive-ui'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
+import ImageViewerOverlay from '@/components/ImageViewerOverlay/index.vue'
 import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
 
@@ -18,6 +19,7 @@ const menuItems = computed(() => menuFromRoutes(routes))
         <MenuBar :items="menuItems" />
         <main class="main-content">
           <router-view />
+          <ImageViewerOverlay />
         </main>
         <InfoPanel />
       </div>
@@ -40,6 +42,7 @@ const menuItems = computed(() => menuFromRoutes(routes))
 }
 
 .main-content {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;

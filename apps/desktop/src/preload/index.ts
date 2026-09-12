@@ -27,7 +27,13 @@ const api = {
   },
   selectFiles: (filters?: { name: string; extensions: string[] }[]): Promise<string[]> =>
     ipcRenderer.invoke('dialog:selectFiles', filters),
-  selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory')
+  selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory'),
+  showItemInFolder: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:showItemInFolder', { path }),
+  openPath: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:openPath', { path }),
+  openWith: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:openWith', { path }),
 }
 
 contextBridge.exposeInMainWorld('electron', api)

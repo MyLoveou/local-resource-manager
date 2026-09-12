@@ -2,6 +2,26 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## image-viewer-ux（**已定稿 / 实现中**）
+
+> 查看器只盖中间网格；信息栏底部收纳；导航按钮上图。待确认。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-viewer-ux/需求.md`](image-viewer-ux/需求.md) | 占位与动作区 |
+| [`image-viewer-ux/实现方案.md`](image-viewer-ux/实现方案.md) | Overlay 进 main + 封装性能 |
+| OpenSpec | `openspec/changes/image-viewer-ux/` |
+
+## image-consume（**已定稿 / 实现中**）
+
+> 图片消费：二次点击打开左元数据+右完整查看器；打开所在位置；系统默认应用打开。待「可以按此实现」。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-consume/需求.md`](image-consume/需求.md) | 范围、故事、IPC 草案 |
+| [`image-consume/实现方案.md`](image-consume/实现方案.md) | 覆盖层 + Viewer.js + shell IPC |
+| OpenSpec | `openspec/changes/image-consume/` |
+
 ## library-trash（**已定稿 / 实现中**）
 
 > 回收站页、多选批量移入/恢复/彻底删除（删库内包）。规划待「可以按此实现」。

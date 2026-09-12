@@ -100,6 +100,7 @@ import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { getResources, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
@@ -115,6 +116,7 @@ const props = defineProps<{
 const isTrash = computed(() => props.status === 'trashed')
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const imageViewer = useImageViewerStore()
 const { selectedIds } = storeToRefs(selection)
 const selectedCount = computed(() => selectedIds.value.length)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
@@ -142,10 +144,21 @@ function exitBatchMode(): void {
   selection.clear()
 }
 
+function imageIds(): number[] {
+  return items.value.flatMap((item) =>
+    item.id !== undefined && item.type === 'image' ? [item.id] : []
+  )
+}
+
 function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
   if (batchMode.value) {
     selection.toggle(itemId)
+    return
+  }
+  const item = items.value.find((row) => row.id === itemId)
+  if (item?.type === 'image' && selection.selectedId === itemId) {
+    imageViewer.open(itemId, imageIds())
     return
   }
   selection.select(itemId)
@@ -210,6 +223,7 @@ async function emptyTrash(): Promise<void> {
 
 onUnmounted(() => {
   exitBatchMode()
+  imageViewer.close()
 })
 
 const gridItems = computed(() =>

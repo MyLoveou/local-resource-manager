@@ -4,9 +4,26 @@
 import client from './client'
 import type { Category, Tag } from '@/domain'
 
+let categoryCache: Category[] | null = null
+let categoryInflight: Promise<Category[]> | null = null
+
 export async function getCategories(): Promise<Category[]> {
-  const { data } = await client.get<{ items: Category[] }>('/library/categories')
-  return data.items
+  if (categoryCache) return categoryCache
+  if (categoryInflight) return categoryInflight
+  categoryInflight = client
+    .get<{ items: Category[] }>('/library/categories')
+    .then(({ data }) => {
+      categoryCache = data.items
+      return data.items
+    })
+    .finally(() => {
+      categoryInflight = null
+    })
+  return categoryInflight
+}
+
+export function invalidateCategories(): void {
+  categoryCache = null
 }
 
 export async function getTags(): Promise<Tag[]> {

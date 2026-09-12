@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { startServices, stopServices } from './infrastructure/services/index'
+import { registerShellOpenIpc } from './infrastructure/shellOpen'
 import { initMainLog, log } from './log'
 
 /** 尽早初始化，否则启动失败写不进日志，渲染进程也无法用 electron-log */
@@ -71,6 +72,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   registerDialogIpc()
+  registerShellOpenIpc()
   try {
     log.info('[main] starting backend…')
     const backend = await startServices()
