@@ -27,6 +27,9 @@ def _apply_sqlite_pragmas(dbapi_conn: sqlite3.Connection) -> None:
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA busy_timeout=5000")
+    # 单机读多写少：NORMAL 比 FULL 少 fsync；负值 cache_size 为 KiB
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA cache_size=-8000")
     cursor.close()
 
 

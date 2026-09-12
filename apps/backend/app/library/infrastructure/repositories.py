@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import and_, asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.db.orm import (
@@ -153,22 +153,31 @@ class ResourceRepository:
         return True
 
     async def _hydrate(self, row: ResourceRow) -> Resource:
-        """详情：带分类、标签、文件摘要。"""
+        """详情：分类/标签/文件/待办一次加载（同 session 仍串行查询，避免 N 次 get）。"""
         resource = _orm_to_resource(row)
-        if row.category_id is not None:
-            cat = await self._session.get(CategoryRow, row.category_id)
-            if cat is not None:
-                resource.category = Category(id=cat.id, name=cat.name)
         tag_stmt = (
             select(TagRow)
             .join(ResourceTagRow, ResourceTagRow.tag_id == TagRow.id)
             .where(ResourceTagRow.resource_id == row.id)
             .order_by(TagRow.name)
         )
-        tags = (await self._session.execute(tag_stmt)).scalars().all()
-        resource.tags = [Tag(id=t.id, name=t.name) for t in tags]
         file_stmt = select(FileRow).where(FileRow.resource_id == row.id).order_by(FileRow.id)
+        todo_stmt = (
+            select(ResourceTodoRow)
+            .where(ResourceTodoRow.resource_id == row.id)
+            .order_by(ResourceTodoRow.sort, ResourceTodoRow.id)
+        )
+        cat = (
+            await self._session.get(CategoryRow, row.category_id)
+            if row.category_id is not None
+            else None
+        )
+        tags = (await self._session.execute(tag_stmt)).scalars().all()
         files = (await self._session.execute(file_stmt)).scalars().all()
+        todos = (await self._session.execute(todo_stmt)).scalars().all()
+        if cat is not None:
+            resource.category = Category(id=cat.id, name=cat.name)
+        resource.tags = [Tag(id=t.id, name=t.name) for t in tags]
         resource.files = [
             ResourceFile(
                 id=f.id,
@@ -189,12 +198,6 @@ class ResourceRepository:
             )
             for f in files
         ]
-        todo_stmt = (
-            select(ResourceTodoRow)
-            .where(ResourceTodoRow.resource_id == row.id)
-            .order_by(ResourceTodoRow.sort, ResourceTodoRow.id)
-        )
-        todos = (await self._session.execute(todo_stmt)).scalars().all()
         resource.todos = [
             ResourceTodo(
                 id=t.id,
@@ -270,14 +273,51 @@ class ResourceRepository:
         limit: int = 50,
         offset: int = 0,
         order: str = "desc",
+        *,
+        after_created_at: str | None = None,
+        after_id: int | None = None,
     ) -> list[Resource]:
-        """条件列表查询（type/status 可空）。按创建时间 + id 排序，保证翻页稳定。"""
+        """条件列表。优先 keyset（created_at+id）；否则 offset。多取 1 条由调用方判断 has_more。"""
         stmt = self._filter(select(ResourceRow), type_, status)
         direction = desc if order == "desc" else asc
         stmt = stmt.order_by(direction(ResourceRow.created_at), direction(ResourceRow.id))
-        stmt = stmt.limit(limit).offset(offset)
+        if after_created_at is not None and after_id is not None:
+            if order == "desc":
+                stmt = stmt.where(
+                    or_(
+                        ResourceRow.created_at < after_created_at,
+                        and_(
+                            ResourceRow.created_at == after_created_at,
+                            ResourceRow.id < after_id,
+                        ),
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    or_(
+                        ResourceRow.created_at > after_created_at,
+                        and_(
+                            ResourceRow.created_at == after_created_at,
+                            ResourceRow.id > after_id,
+                        ),
+                    )
+                )
+            stmt = stmt.limit(limit)
+        else:
+            stmt = stmt.limit(limit).offset(offset)
         rows = (await self._session.execute(stmt)).scalars().all()
         return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
+
+    async def ids_missing_thumbnail(self) -> list[int]:
+        """有资源行但没有 thumbnail 文件行的 id（卫生脚本）。"""
+        thumb_ids = select(FileRow.resource_id).where(FileRow.role == FILE_ROLE_THUMBNAIL)
+        stmt = select(ResourceRow.id).where(ResourceRow.id.not_in(thumb_ids))
+        rows = (await self._session.execute(stmt)).all()
+        return [int(r[0]) for r in rows]
+
+    async def list_resource_ids(self) -> list[int]:
+        rows = (await self._session.execute(select(ResourceRow.id))).all()
+        return [int(r[0]) for r in rows]
 
     async def create_many(self, resources: list[Resource]) -> int:
         """批量插入（演示 seed），一次提交。"""
@@ -566,36 +606,34 @@ class ResourceRepository:
         return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
 
     async def stats(self) -> dict[str, Any]:
-        """资源统计（供概览）：by_type + 库级指标。"""
-        by_type_stmt = (
-            select(ResourceRow.type, func.count())
-            .where(ResourceRow.status == ResourceStatus.ACTIVE.value)
-            .group_by(ResourceRow.type)
-        )
-        by_type_rows = (await self._session.execute(by_type_stmt)).all()
-        by_type = {t: c for t, c in by_type_rows}
-
-        trashed_count = await self._session.scalar(
-            select(func.count())
-            .select_from(ResourceRow)
-            .where(ResourceRow.status == ResourceStatus.TRASHED.value)
-        )
-        lost_count = await self._session.scalar(
-            select(func.count())
-            .select_from(ResourceRow)
-            .where(ResourceRow.status == ResourceStatus.LOST.value)
-        )
-
+        """资源统计：一次 GROUP BY status+type，再 SUM 体积。"""
+        grouped = (
+            await self._session.execute(
+                select(ResourceRow.status, ResourceRow.type, func.count())
+                .select_from(ResourceRow)
+                .group_by(ResourceRow.status, ResourceRow.type)
+            )
+        ).all()
+        by_type: dict[str, int] = {}
+        trashed_count = 0
+        lost_count = 0
+        for status, type_, count in grouped:
+            n = int(count)
+            if status == ResourceStatus.ACTIVE.value:
+                by_type[type_] = n
+            elif status == ResourceStatus.TRASHED.value:
+                trashed_count += n
+            elif status == ResourceStatus.LOST.value:
+                lost_count += n
         active_ids = select(ResourceRow.id).where(ResourceRow.status == ResourceStatus.ACTIVE.value)
         total_size_bytes = await self._session.scalar(
             select(func.coalesce(func.sum(FileRow.size), 0)).where(FileRow.resource_id.in_(active_ids))
         )
-
         return {
             "by_type": by_type,
             "total_size_bytes": int(total_size_bytes or 0),
-            "trashed_count": int(trashed_count or 0),
-            "lost_count": int(lost_count or 0),
+            "trashed_count": trashed_count,
+            "lost_count": lost_count,
         }
 
 

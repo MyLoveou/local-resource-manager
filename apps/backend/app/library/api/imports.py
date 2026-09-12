@@ -10,7 +10,6 @@ from app.library.application.import_service import ImportService
 from app.library.application.packages.layouts import layout_for
 from app.library.application.schemas import ImportCreate, ImportJob, ImportJobCreated, SourceKind
 from app.library.infrastructure.import_job_store import ImportJobState, job_store
-from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.db import get_session_factory
 
 router = APIRouter(prefix="/imports", tags=["library-imports"])
@@ -51,9 +50,8 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
     job_store.mark_running(job)
     factory = get_session_factory()
     try:
-        async with factory() as session:
-            service = ImportService(ResourceRepository(session))
-            await service.run(job, body.type, body.source_kind.value, body.paths)
+        service = ImportService(session_factory=factory)
+        await service.run(job, body.type, body.source_kind.value, body.paths)
         await job_store.finish(job)
     except asyncio.CancelledError:
         await job_store.finish(job, failed="cancelled")

@@ -5,7 +5,11 @@ from ..log import logger
 
 
 async def log_requests(request: Request, call_next):
-    logger.info("Request: %s %s", request.method, request.url.path)
+    path = request.url.path
+    quiet = path.endswith("/content")
+    if not quiet:
+        logger.info("Request: %s %s", request.method, path)
     response = await call_next(request)
-    logger.info("Response: %s %s -> %s", request.method, request.url.path, response.status_code)
+    if not quiet:
+        logger.info("Response: %s %s -> %s", request.method, path, response.status_code)
     return response

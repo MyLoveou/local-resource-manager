@@ -11,7 +11,7 @@
           decoding="async"
           @click="openViewerFromCover"
         />
-        <div class="info-panel-title">{{ resource.title }}</div>
+        <div class="info-panel-title" :title="resource.title">{{ resource.title }}</div>
         <div class="info-panel-meta">类型 {{ typeLabel }}</div>
         <div class="info-panel-meta">格式 {{ formatLabel }}</div>
         <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
@@ -174,7 +174,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { NButton, NCheckbox, NDropdown, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
-import { getResource, getCategories, invalidateCategories, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResource, getCategories, invalidateCategories, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
@@ -309,9 +309,7 @@ const subtitleNames = computed(() =>
     .map((f) => f.path.replace(/\\/g, '/').split('/').pop() || f.path)
 )
 
-const coverUrl = computed(() =>
-  resolveLibraryMediaUrl(resource.value?.thumbnailPath ?? resource.value?.coverPath)
-)
+const coverUrl = computed(() => resolveCardImageUrl(resource.value ?? {}))
 
 const modalCoverUrl = computed(() => coverUrl.value)
 
@@ -337,9 +335,10 @@ watch(
       if (gen !== loadGen) return
       resource.value = row
       applyResourceToDraft(row)
-      const cats = await getCategories()
-      if (gen !== loadGen) return
-      categories.value = cats
+      void getCategories().then((cats) => {
+        if (gen !== loadGen) return
+        categories.value = cats
+      })
     } catch (error) {
       if (gen !== loadGen) return
       resource.value = null
@@ -348,6 +347,25 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => library.revision,
+  async () => {
+    const id = selectedId.value
+    if (id === null || editOpen.value) return
+    invalidateResourceCache(id)
+    const gen = ++loadGen
+    try {
+      const row = await getResource(id)
+      if (gen !== loadGen) return
+      resource.value = row
+      applyResourceToDraft(row)
+    } catch (error) {
+      if (gen !== loadGen) return
+      console.error(error)
+    }
+  }
 )
 
 function formatBytes(n: number | null | undefined): string {
@@ -704,7 +722,10 @@ async function handlePurge(): Promise<void> {
 
 <style scoped lang="less">
 .info-panel {
+  flex: 0 0 350px;
   width: 350px;
+  max-width: 350px;
+  min-width: 0;
   height: 100%;
   min-height: 0;
   display: flex;
@@ -717,6 +738,7 @@ async function handlePurge(): Promise<void> {
 
 .info-panel-content {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -724,12 +746,21 @@ async function handlePurge(): Promise<void> {
 
 .info-panel-body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }
 
+.info-panel-body :deep(.n-input),
+.info-panel-body :deep(.n-select),
+.info-panel-body :deep(.n-base-selection) {
+  width: 100%;
+  max-width: 100%;
+}
+
 .info-panel-footer {
   flex-shrink: 0;
+  min-width: 0;
   padding-top: 12px;
   margin-top: 8px;
   border-top: 1px solid #e5e7eb;
@@ -741,7 +772,9 @@ async function handlePurge(): Promise<void> {
 }
 
 .info-panel-cover {
+  display: block;
   width: 100%;
+  max-width: 100%;
   max-height: 180px;
   object-fit: contain;
 
@@ -753,6 +786,8 @@ async function handlePurge(): Promise<void> {
 .info-panel-title {
   font-weight: 600;
   margin: 8px 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .info-panel-meta,
@@ -760,6 +795,8 @@ async function handlePurge(): Promise<void> {
   font-size: 12px;
   color: #6b7280;
   margin-top: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .info-panel-tags {
@@ -768,11 +805,21 @@ async function handlePurge(): Promise<void> {
   gap: 6px;
   align-items: center;
   margin-top: 4px;
+  min-width: 0;
+}
+
+.info-panel-tags :deep(.n-tag) {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .info-panel-error {
   color: #b91c1c;
   margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .info-panel-actions {
@@ -786,6 +833,7 @@ async function handlePurge(): Promise<void> {
   flex-direction: column;
   gap: 6px;
   margin-top: 4px;
+  min-width: 0;
 }
 
 .info-panel-todo {
@@ -793,13 +841,16 @@ async function handlePurge(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .info-panel-todo :deep(.n-input) {
   flex: 1;
+  min-width: 0;
 }
 
 .info-panel-todo-add {
   margin-top: 4px;
+  min-width: 0;
 }
 </style>

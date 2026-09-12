@@ -7,6 +7,7 @@ export { getOverview } from './overview'
 export {
   getResources,
   getResource,
+  invalidateResourceCache,
   patchResource,
   postResourceCover,
   postResourceSubtitle,
@@ -19,7 +20,7 @@ export {
   batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
-export { getCategories, invalidateCategories, getTags } from './vocab'
+export { getCategories, invalidateCategories, getTags, invalidateTags } from './vocab'
+export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
 export type { ImportCreate, ImportJob, ImportJobCreated, ImportSourceKind } from './imports'
-export { resolveLibraryMediaUrl } from './mediaUrl'

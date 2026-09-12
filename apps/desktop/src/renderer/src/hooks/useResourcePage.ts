@@ -1,8 +1,8 @@
 /**
- * 资源分页状态机：首屏替换、触底追加、请求单飞。
+ * 资源分页状态机：首屏替换、触底 keyset 追加、bump 只重拉首页。
  */
 import { onMounted, ref, watch } from 'vue'
-import { getResources } from '@/infrastructure/http'
+import { getResources, invalidateResourceCache } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type { Resource, ResourceStatus, ResourceType } from '@/domain'
 
@@ -21,10 +21,12 @@ export function useResourcePage(options: {
   const error = ref<unknown>(null)
 
   let requestId = 0
+  let cursorCreatedAt: string | undefined
+  let cursorId: number | undefined
   const limit = options.limit ?? DEFAULT_LIMIT
   const status = options.status ?? 'active'
 
-  async function fetchPage(offset: number, append: boolean): Promise<void> {
+  async function fetchPage(append: boolean): Promise<void> {
     const id = ++requestId
     loading.value = true
     loadingMore.value = append
@@ -34,15 +36,14 @@ export function useResourcePage(options: {
         type: options.type,
         status,
         limit,
-        offset,
         sort: 'createdAt',
         order: 'desc',
+        afterCreatedAt: append ? cursorCreatedAt : undefined,
+        afterId: append ? cursorId : undefined,
       })
-      // 如果请求ID不匹配，说明请求已经完成，直接返回
       if (id !== requestId) return
       total.value = page.total
       hasMore.value = page.hasMore
-      // 如果追加请求，则将新数据添加到已有数据中
       if (append) {
         const seen = new Set(items.value.map((item) => item.id))
         items.value = [
@@ -52,6 +53,9 @@ export function useResourcePage(options: {
       } else {
         items.value = page.items
       }
+      const last = items.value[items.value.length - 1]
+      cursorCreatedAt = page.nextCreatedAt ?? last?.createdAt ?? undefined
+      cursorId = page.nextId ?? last?.id
     } catch (err) {
       if (id !== requestId) return
       error.value = err
@@ -70,12 +74,14 @@ export function useResourcePage(options: {
 
   async function reset(): Promise<void> {
     hasMore.value = true
-    await fetchPage(0, false)
+    cursorCreatedAt = undefined
+    cursorId = undefined
+    await fetchPage(false)
   }
 
   async function loadMore(): Promise<void> {
     if (!hasMore.value || loading.value) return
-    await fetchPage(items.value.length, true)
+    await fetchPage(true)
   }
 
   onMounted(() => {
@@ -86,6 +92,7 @@ export function useResourcePage(options: {
   watch(
     () => library.revision,
     () => {
+      invalidateResourceCache()
       if (
         options.type === undefined ||
         library.importedType === null ||

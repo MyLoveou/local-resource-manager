@@ -53,7 +53,10 @@ function onSelect(key: string): void {
 @import '@/ui/styles/variables.less';
 
 .menu-bar {
+  flex: 0 0 200px;
   width: 200px;
+  max-width: 200px;
+  min-width: 0;
   height: 100%;
   border-right: 1px solid @border;
   box-sizing: border-box;
@@ -61,7 +64,9 @@ function onSelect(key: string): void {
   transition: width 0.2s ease;
 
   &.collapsed {
+    flex-basis: 64px;
     width: 64px;
+    max-width: 64px;
   }
 }
 </style>

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.library.application.thumbnails import source_for_grid_thumbnail
 from app.library.application.importers import importer_for
@@ -38,21 +40,31 @@ def hash_file(path: Path) -> tuple[str, int]:
     return digest.hexdigest(), size
 
 
+def import_cpu_workers() -> int:
+    """CPU 工人上限：min(4, CPU-1)，至少 1。"""
+    n = os.cpu_count() or 2
+    return max(1, min(4, n - 1))
+
+
 class ImportService:
     """列举 → 去重 → 建资源 → Layout 复制 → 写 files。"""
 
     def __init__(
         self,
-        resources: ResourceRepository,
+        resources: ResourceRepository | None = None,
         *,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
         store_root: Path | None = None,
         file_ops: FileOps | None = None,
         probe: Callable[[ResourceType, Path], ProbeFields] | None = None,
+        workers: int | None = None,
     ) -> None:
         self._resources = resources
+        self._session_factory = session_factory
         self._store_root = store_root or default_library_store(settings.db_path)
         self._ops = file_ops or FileOps()
         self._probe = probe or probe_media
+        self._workers = workers if workers is not None else import_cpu_workers()
 
     async def run(
         self,
@@ -69,12 +81,51 @@ class ImportService:
         candidates = await asyncio.to_thread(importer.collect, source_kind, [Path(p) for p in paths])
         job.total = len(candidates)
         job.phase = "hash"
+        if self._session_factory is not None:
+            await self._run_pooled(job, type_, layout, candidates)
+            return
+        if self._resources is None:
+            raise RuntimeError("ImportService needs resources or session_factory")
         for candidate in candidates:
-            await self._ingest_one(job, type_, layout, candidate)
+            await self._ingest_one(self._resources, job, type_, layout, candidate)
             job.done += 1
+            await asyncio.sleep(0)
+
+    async def _run_pooled(
+        self,
+        job: ImportJobState,
+        type_: ResourceType,
+        layout: PackageLayout,
+        candidates: list[Path],
+    ) -> None:
+        factory = self._session_factory
+        assert factory is not None
+        sem = asyncio.Semaphore(self._workers)
+
+        async def one(source: Path) -> None:
+            async with sem:
+                last_error: Exception | None = None
+                for attempt in range(4):
+                    try:
+                        async with factory() as session:
+                            repo = ResourceRepository(session)
+                            await self._ingest_one(repo, job, type_, layout, source)
+                        last_error = None
+                        break
+                    except OperationalError as exc:
+                        last_error = exc
+                        await asyncio.sleep(0.05 * (attempt + 1))
+                if last_error is not None:
+                    logger.warning("导入写库重试耗尽 %s: %s", source, last_error)
+                    job.skipped_error += 1
+                job.done += 1
+                await asyncio.sleep(0)
+
+        await asyncio.gather(*(one(path) for path in candidates))
 
     async def _try_register_thumbnail(
         self,
+        resources: ResourceRepository,
         resource_id: int,
         package: ResourcePackage,
         type_: ResourceType,
@@ -89,7 +140,7 @@ class ImportService:
             if thumb_dest is None:
                 return
             thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
-            await self._resources.add_file(
+            await resources.add_file(
                 resource_id,
                 path=str(thumb_dest),
                 sha256=None,
@@ -100,10 +151,11 @@ class ImportService:
             )
         except Exception as exc:
             logger.warning("缩略图登记失败 resource=%s: %s", resource_id, exc)
-            await self._resources.rollback()
+            await resources.rollback()
 
     async def _ingest_one(
         self,
+        resources: ResourceRepository,
         job: ImportJobState,
         type_: ResourceType,
         layout: PackageLayout,
@@ -115,13 +167,13 @@ class ImportService:
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
             return
-        if await self._resources.file_exists_by_sha256(digest):
+        if await resources.file_exists_by_sha256(digest):
             job.skipped_duplicate += 1
             return
         extra = {"importSourcePath": str(source)}
         package: ResourcePackage | None = None
         try:
-            resource = await self._resources.create(
+            resource = await resources.create(
                 Resource(
                     type=type_,
                     title=source.stem,
@@ -148,7 +200,7 @@ class ImportService:
                 file_size = size
                 if role != FILE_ROLE_PRIMARY:
                     file_size = (await asyncio.to_thread(dest.stat)).st_size
-                await self._resources.add_file(
+                await resources.add_file(
                     resource.id,
                     path=str(dest),
                     sha256=digest if role == FILE_ROLE_PRIMARY else None,
@@ -166,18 +218,18 @@ class ImportService:
             cover = package.resolve_cover(role_paths)
             if cover is not None:
                 resource.cover_path = f"/library/resources/{resource.id}/content"
-                await self._resources.update(resource.id, resource, commit=False)
-            await self._resources.commit()
+                await resources.update(resource.id, resource, commit=False)
+            await resources.commit()
             job.imported += 1
             job.phase = "thumb"
-            await self._try_register_thumbnail(resource.id, package, type_, role_paths)
+            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
-            await self._resources.rollback()
+            await resources.rollback()
             if package is not None:
                 self._ops.remove_tree(package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
-            await self._resources.rollback()
+            await resources.rollback()
             if package is not None:
                 self._ops.remove_tree(package.root)
             logger.warning("导入跳过 %s: %s", source, exc)

@@ -59,7 +59,9 @@ function createWindow(): void {
       ],
     },
   })
-  win.webContents.openDevTools();
+  if (process.env['ELECTRON_DEVTOOLS'] === '1') {
+    win.webContents.openDevTools()
+  }
   // 隐藏顶部菜单栏
   Menu.setApplicationMenu(null)
 

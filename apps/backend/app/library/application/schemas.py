@@ -48,6 +48,8 @@ class ResourcePage(ApiModel):
     limit: int
     offset: int
     has_more: bool
+    next_created_at: str | None = None
+    next_id: int | None = None
 
 
 class ResourcePatch(ApiModel):

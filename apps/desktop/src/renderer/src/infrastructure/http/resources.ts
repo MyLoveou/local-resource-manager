@@ -4,6 +4,27 @@
 import client from './client'
 import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 
+const DETAIL_CACHE_LIMIT = 50
+const detailCache = new Map<number, Resource>()
+
+export function invalidateResourceCache(resourceId?: number): void {
+  if (resourceId === undefined) {
+    detailCache.clear()
+    return
+  }
+  detailCache.delete(resourceId)
+}
+
+function rememberDetail(row: Resource): Resource {
+  if (row.id === undefined) return row
+  detailCache.set(row.id, row)
+  if (detailCache.size > DETAIL_CACHE_LIMIT) {
+    const oldest = detailCache.keys().next().value
+    if (typeof oldest === 'number') detailCache.delete(oldest)
+  }
+  return row
+}
+
 /** 资源部分更新（与后端 ResourcePatch 对齐） */
 export interface ResourcePatch {
   title?: string | null
@@ -22,6 +43,8 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       status: query.status,
       limit: query.limit,
       offset: query.offset,
+      afterCreatedAt: query.afterCreatedAt,
+      afterId: query.afterId,
       sort: query.sort,
       order: query.order,
     },
@@ -30,28 +53,30 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
 }
 
 export async function getResource(resourceId: number): Promise<Resource> {
+  const cached = detailCache.get(resourceId)
+  if (cached) return cached
   const { data } = await client.get<Resource>(`/library/resources/${resourceId}`)
-  return data
+  return rememberDetail(data)
 }
 
 export async function patchResource(resourceId: number, patch: ResourcePatch): Promise<Resource> {
   const { data } = await client.patch<Resource>(`/library/resources/${resourceId}`, patch)
-  return data
+  return rememberDetail(data)
 }
 
 export async function postResourceCover(resourceId: number, path: string): Promise<Resource> {
   const { data } = await client.post<Resource>(`/library/resources/${resourceId}/cover`, { path })
-  return data
+  return rememberDetail(data)
 }
 
 export async function postResourceSubtitle(resourceId: number, path: string): Promise<Resource> {
   const { data } = await client.post<Resource>(`/library/resources/${resourceId}/subtitles`, { path })
-  return data
+  return rememberDetail(data)
 }
 
 export async function postResourceTodo(resourceId: number, content: string): Promise<Resource> {
   const { data } = await client.post<Resource>(`/library/resources/${resourceId}/todos`, { content })
-  return data
+  return rememberDetail(data)
 }
 
 export interface TodoPatch {
@@ -68,25 +93,26 @@ export async function patchResourceTodo(
     `/library/resources/${resourceId}/todos/${todoId}`,
     patch
   )
-  return data
+  return rememberDetail(data)
 }
 
 export async function deleteResourceTodo(resourceId: number, todoId: number): Promise<Resource> {
   const { data } = await client.delete<Resource>(`/library/resources/${resourceId}/todos/${todoId}`)
-  return data
+  return rememberDetail(data)
 }
 
 export async function deleteResource(resourceId: number): Promise<Resource> {
   const { data } = await client.delete<Resource>(`/library/resources/${resourceId}`)
-  return data
+  return rememberDetail(data)
 }
 
 export async function restoreResource(resourceId: number): Promise<Resource> {
   const { data } = await client.post<Resource>(`/library/resources/${resourceId}/restore`)
-  return data
+  return rememberDetail(data)
 }
 
 export async function purgeResource(resourceId: number): Promise<{ ok: boolean }> {
+  invalidateResourceCache(resourceId)
   const { data } = await client.post<{ ok: boolean }>(`/library/resources/${resourceId}/purge`)
   return data
 }
@@ -108,5 +134,6 @@ export async function batchResources(
   ids: number[]
 ): Promise<ResourceBatchResult> {
   const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', { action, ids })
+  for (const id of ids) invalidateResourceCache(id)
   return data
 }

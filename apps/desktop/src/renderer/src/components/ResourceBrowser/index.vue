@@ -99,7 +99,7 @@ import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
-import { getResources, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
@@ -186,13 +186,20 @@ async function runBatch(action: ResourceBatchAction): Promise<void> {
 
 async function collectTrashedIds(): Promise<number[]> {
   const ids: number[] = []
-  let offset = 0
+  let afterCreatedAt: string | undefined
+  let afterId: number | undefined
   for (;;) {
-    const page = await getResources({ status: 'trashed', limit: BATCH_LIMIT, offset })
+    const page = await getResources({
+      status: 'trashed',
+      limit: BATCH_LIMIT,
+      afterCreatedAt,
+      afterId,
+    })
     ids.push(...page.items.flatMap((item) => (item.id === undefined ? [] : [item.id])))
-    if (!page.hasMore) break
-    offset += page.items.length
-    if (page.items.length === 0) break
+    if (!page.hasMore || page.items.length === 0) break
+    afterCreatedAt = page.nextCreatedAt ?? page.items[page.items.length - 1]?.createdAt ?? undefined
+    afterId = page.nextId ?? page.items[page.items.length - 1]?.id
+    if (afterId === undefined) break
   }
   return ids
 }
@@ -234,7 +241,7 @@ const gridItems = computed(() =>
           {
             id: item.id,
             title: item.title,
-            coverUrl: resolveLibraryMediaUrl(item.thumbnailPath ?? item.coverPath),
+            coverUrl: resolveCardImageUrl(item),
           },
         ]
   )

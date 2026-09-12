@@ -2,6 +2,26 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## app-performance（**已定稿 / 实现中**）
+
+> 全项目性能：DB / 导入 / HTTP / 万级显示 / 查看器 / 清脏库；API 保持可远程。
+
+| 文档 | 内容 |
+|------|------|
+| [`app-performance/需求.md`](app-performance/需求.md) | 现状分析、验收、阶段 |
+| [`app-performance/实现方案.md`](app-performance/实现方案.md) | S0–S5 文件清单 |
+| OpenSpec | `openspec/changes/app-performance/` |
+
+## image-consume-perf（**已并入 app-performance**）
+
+> 看图跟手与缓存不再单独落地，见全项目方案 S5。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-consume-perf/需求.md`](image-consume-perf/需求.md) | 验收与开放问题（换库） |
+| [`image-consume-perf/实现方案.md`](image-consume-perf/实现方案.md) | 封装 + 缓存文件清单 |
+| OpenSpec | `openspec/changes/image-consume-perf/` |
+
 ## image-viewer-ux（**已定稿 / 实现中**）
 
 > 查看器只盖中间网格；信息栏底部收纳；导航按钮上图。待确认。

@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import ImageViewerHost from '@/components/ImageViewerHost/index.vue'
@@ -44,11 +44,31 @@ import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { resolveLibraryMediaUrl } from '@/infrastructure/http'
 
 const viewer = useImageViewerStore()
-const { visible, currentId, hasPrev, hasNext } = storeToRefs(viewer)
+const { visible, currentId, hasPrev, hasNext, playlistIds } = storeToRefs(viewer)
 const { close, prev, next } = viewer
 
 const imageSrc = computed(() =>
-  currentId.value == null ? '' : resolveLibraryMediaUrl(`/library/resources/${currentId.value}/content`)
+  currentId.value == null || !visible.value
+    ? ''
+    : resolveLibraryMediaUrl(`/library/resources/${currentId.value}/content`)
+)
+
+function prefetchNeighbors(id: number): void {
+  const ids = playlistIds.value
+  const i = ids.indexOf(id)
+  for (const n of [i - 1, i + 1]) {
+    if (n < 0 || n >= ids.length) continue
+    const img = new Image()
+    img.src = resolveLibraryMediaUrl(`/library/resources/${ids[n]}/content`)
+  }
+}
+
+watch(
+  () => [visible.value, currentId.value] as const,
+  ([open, id]) => {
+    if (!open || id == null) return
+    prefetchNeighbors(id)
+  }
 )
 
 function isTypingTarget(target: EventTarget | null): boolean {

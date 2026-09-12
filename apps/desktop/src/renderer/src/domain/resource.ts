@@ -19,7 +19,7 @@ export interface Resource {
   rating?: number | null
   /** 封面本地缓存路径 */
   coverPath?: string | null
-  /** 网格缩略图 URL，信息栏仍用 coverPath */
+  /** 网格/面板缩略图 URL；展示面禁止回退 coverPath */
   thumbnailPath?: string | null
   status: ResourceStatus
   /** 回收站删除时间 */
@@ -104,6 +104,8 @@ export interface ResourcePageQuery {
   status?: ResourceStatus
   limit?: number
   offset?: number
+  afterCreatedAt?: string | null
+  afterId?: number | null
   sort?: 'createdAt'
   order?: 'asc' | 'desc'
 }
@@ -115,4 +117,6 @@ export interface ResourcePage {
   limit: number
   offset: number
   hasMore: boolean
+  nextCreatedAt?: string | null
+  nextId?: number | null
 }

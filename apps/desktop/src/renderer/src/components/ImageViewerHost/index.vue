@@ -22,6 +22,7 @@ const hostRef = ref<HTMLElement | null>(null)
 const loadError = ref(false)
 let viewer: InlineImageViewer | null = null
 let resizeFrame = 0
+let resizeTimer = 0
 let observer: ResizeObserver | null = null
 
 function ensureViewer(): void {
@@ -40,7 +41,11 @@ function scheduleResize(): void {
   if (resizeFrame !== 0) return
   resizeFrame = window.requestAnimationFrame(() => {
     resizeFrame = 0
-    viewer?.resize()
+    if (resizeTimer !== 0) window.clearTimeout(resizeTimer)
+    resizeTimer = window.setTimeout(() => {
+      resizeTimer = 0
+      viewer?.resize()
+    }, 80)
   })
 }
 
@@ -70,6 +75,10 @@ onBeforeUnmount(() => {
   if (resizeFrame !== 0) {
     window.cancelAnimationFrame(resizeFrame)
     resizeFrame = 0
+  }
+  if (resizeTimer !== 0) {
+    window.clearTimeout(resizeTimer)
+    resizeTimer = 0
   }
   viewer?.destroy()
   viewer = null

@@ -6,6 +6,8 @@ import type { Category, Tag } from '@/domain'
 
 let categoryCache: Category[] | null = null
 let categoryInflight: Promise<Category[]> | null = null
+let tagCache: Tag[] | null = null
+let tagInflight: Promise<Tag[]> | null = null
 
 export async function getCategories(): Promise<Category[]> {
   if (categoryCache) return categoryCache
@@ -27,6 +29,20 @@ export function invalidateCategories(): void {
 }
 
 export async function getTags(): Promise<Tag[]> {
-  const { data } = await client.get<{ items: Tag[] }>('/library/tags')
-  return data.items
+  if (tagCache) return tagCache
+  if (tagInflight) return tagInflight
+  tagInflight = client
+    .get<{ items: Tag[] }>('/library/tags')
+    .then(({ data }) => {
+      tagCache = data.items
+      return data.items
+    })
+    .finally(() => {
+      tagInflight = null
+    })
+  return tagInflight
+}
+
+export function invalidateTags(): void {
+  tagCache = null
 }

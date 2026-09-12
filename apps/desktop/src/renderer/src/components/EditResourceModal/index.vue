@@ -102,10 +102,13 @@ function removeTag(name: string): void {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .edit-resource__cover {
+  display: block;
   width: 100%;
+  max-width: 100%;
   max-height: 180px;
   object-fit: contain;
 }
@@ -114,6 +117,8 @@ function removeTag(name: string): void {
   font-size: 12px;
   color: #6b7280;
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .edit-resource__label {
@@ -126,5 +131,13 @@ function removeTag(name: string): void {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  min-width: 0;
+}
+
+.edit-resource__tags :deep(.n-tag) {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>

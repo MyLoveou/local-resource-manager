@@ -37,12 +37,24 @@ def _library_file_or_404(raw_path: str) -> Path:
     return resolved
 
 
+def _file_response(path: Path, *, long_cache: bool) -> FileResponse:
+    """缩略图长缓存；原片短缓存。"""
+    response = FileResponse(path)
+    if long_cache:
+        response.headers["Cache-Control"] = "private, max-age=86400"
+    else:
+        response.headers["Cache-Control"] = "private, max-age=120"
+    return response
+
+
 @router.get("", response_model=ResourcePage)
 async def list_resources(
     type_: ResourceType | None = Query(default=None, alias="type"),
     status: ResourceStatus | None = Query(default=None),
     limit: int = Query(default=80, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    after_created_at: str | None = Query(default=None, alias="afterCreatedAt"),
+    after_id: int | None = Query(default=None, alias="afterId"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
@@ -50,7 +62,9 @@ async def list_resources(
     """资源分页列表（可按类型/状态过滤）。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).list_page(
-        type_, status, limit, offset, sort, order
+        type_, status, limit, offset, sort, order,
+        after_created_at=after_created_at,
+        after_id=after_id,
     )
 
 
@@ -74,7 +88,7 @@ async def get_resource_content(
     row = await resources.get_file_by_role(resource_id, "primary")
     if row is None:
         raise HTTPException(status_code=404, detail="file not found")
-    return FileResponse(_library_file_or_404(row.path))
+    return _file_response(_library_file_or_404(row.path), long_cache=False)
 
 
 @router.get("/{resource_id}/files/{file_id}/content")
@@ -88,7 +102,8 @@ async def get_resource_file_content(
     row = await resources.get_file(resource_id, file_id)
     if row is None:
         raise HTTPException(status_code=404, detail="file not found")
-    return FileResponse(_library_file_or_404(row.path))
+    long_cache = row.role == "thumbnail"
+    return _file_response(_library_file_or_404(row.path), long_cache=long_cache)
 
 
 @router.get("/{resource_id}", response_model=Resource)

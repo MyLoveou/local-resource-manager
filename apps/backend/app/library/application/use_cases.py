@@ -1,5 +1,6 @@
 """资源库应用用例（编排仓储 → DTO）。"""
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 from app.library.application.packages.layouts import layout_for
@@ -60,17 +61,41 @@ class LibraryQueryService:
         offset: int,
         sort: ResourceSortField,
         order: str,
+        *,
+        after_created_at: str | None = None,
+        after_id: int | None = None,
     ) -> ResourcePage:
-        """分页列表。sort 预留；MVP 仅 createdAt。"""
+        """分页列表。sort 预留；MVP 仅 createdAt。keyset 优先于 offset。"""
         _ = sort
+        fetch = limit + 1
+        use_keyset = after_created_at is not None and after_id is not None
+        items = await self._resources.list(
+            type_,
+            status,
+            fetch,
+            0 if use_keyset else offset,
+            order,
+            after_created_at=after_created_at if use_keyset else None,
+            after_id=after_id if use_keyset else None,
+        )
+        has_more = len(items) > limit
+        items = items[:limit]
         total = await self._resources.count(type_, status)
-        items = await self._resources.list(type_, status, limit, offset, order)
+        last = items[-1] if items else None
+        cursor_ts = None
+        if last is not None and last.created_at is not None:
+            if isinstance(last.created_at, datetime):
+                cursor_ts = last.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                cursor_ts = str(last.created_at)
         return ResourcePage(
             items=items,
             total=total,
             limit=limit,
             offset=offset,
-            has_more=offset + len(items) < total,
+            has_more=has_more,
+            next_created_at=cursor_ts if has_more else None,
+            next_id=last.id if has_more and last is not None else None,
         )
 
     async def patch(self, resource_id: int, body: ResourcePatch) -> Resource | None:

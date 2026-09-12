@@ -50,7 +50,7 @@ client.interceptors.response.use(
     if (responseType === 'blob' || responseType === 'arraybuffer') {
       return response
     }
-    logger.info('Response: %s %s -> %s', response.config.method, response.config.url, response.status)
+    logger.debug('Response: %s %s -> %s', response.config.method, response.config.url, response.status)
     const payload = response.data
     if (isEnvelope(payload)) {
       if (payload.status !== API_STATUS_SUCCESS || payload.code !== API_CODE_OK) {
