@@ -56,7 +56,7 @@ const gridItems = computed(() =>
           {
             id: item.id,
             title: item.title,
-            coverUrl: resolveLibraryMediaUrl(item.coverPath),
+            coverUrl: resolveLibraryMediaUrl(item.thumbnailPath ?? item.coverPath),
           },
         ]
   )

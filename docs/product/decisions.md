@@ -7,6 +7,17 @@
 
 ## 有效决策
 
+### D-20260912-14 · 导入时在资源包内生成网格缩略图
+
+- 日期：2026-09-12
+- 场景：`grid-media-performance`；网格拉原图、窗口缩放卡
+- **决定**：导入 copy/probe 后生成一档网格 WebP，路径 `{store}/{type}/{id}/thumbs/grid.webp`，`files.role=thumbnail`。列表用 `thumbnailPath`；`coverPath` 仍是原封面。无封面视频不抽帧、不造空文件。不回填旧库。失败不挡导入。
+- **为何**：小图必须跟资源走，删除/回滚才干净；改 cover_path 会糊掉信息栏。
+- **不选**：浏览时现算；库根 `_cache/{hash}`；根目录 `thumb.webp` 与 primary/cover 混放。
+- **落点**：`grid-media-performance` 需求 §7 / 实现方案
+- 状态：有效（规范已记；实现待 apply）
+
+
 ### D-20260912-13 · JSON 接口统一信封
 
 - 日期：2026-09-12

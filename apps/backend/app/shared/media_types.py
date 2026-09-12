@@ -26,6 +26,12 @@ IMPORT_EXTENSIONS: dict[ResourceType, frozenset[str]] = {
 FILE_ROLE_PRIMARY = "primary"
 FILE_ROLE_COVER = "cover"
 FILE_ROLE_SUBTITLE = "subtitle"
+FILE_ROLE_THUMBNAIL = "thumbnail"
+
+THUMB_DIR = "thumbs"
+THUMB_GRID_NAME = "grid.webp"
+THUMB_MAX_EDGE_PX = 480
+THUMB_WEBP_QUALITY = 80
 
 FFPROBE_BIN = "ffprobe"
 FFPROBE_TIMEOUT_SEC = 30

@@ -2,13 +2,15 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## grid-media-performance（**草案**）
+## grid-media-performance（**已定稿 / 实现中**）
 
-> 网格封面加载慢、拖窗口卡。补上 M2「缩略图懒加载 / 滚动流畅」未落地部分。评审中，待拍板缩略图策略与缩放行为。
+> 导入时在包内生成网格缩略图；列表 `thumbnailPath`；窗口宽度节流。待 Electron 手工验 T6–T8。
 
 | 文档 | 内容 |
 |------|------|
-| [`grid-media-performance/需求.md`](grid-media-performance/需求.md) | 范围、现状、开放问题 |
+| [`grid-media-performance/需求.md`](grid-media-performance/需求.md) | 范围、路径约定、验收 |
+| [`grid-media-performance/实现方案.md`](grid-media-performance/实现方案.md) | ResourcePackage / 文件清单 |
+| OpenSpec | `openspec/changes/grid-media-performance/` |
 
 ## metadata-panel-fields（**已定稿 / 实现中**）
 

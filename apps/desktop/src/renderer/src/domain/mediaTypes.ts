@@ -59,7 +59,13 @@ export const FILE_ROLE = {
   PRIMARY: 'primary',
   COVER: 'cover',
   SUBTITLE: 'subtitle',
+  THUMBNAIL: 'thumbnail',
 } as const
+
+export const THUMB_DIR = 'thumbs'
+export const THUMB_GRID_NAME = 'grid.webp'
+export const THUMB_MAX_EDGE_PX = 480
+export const THUMB_WEBP_QUALITY = 80
 
 export const IMPORT_POLL_INTERVAL_MS = 300
 

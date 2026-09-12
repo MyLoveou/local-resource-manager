@@ -47,7 +47,8 @@ class Resource(ApiModel):
     description: str | None = None
     author: str | None = None
     rating: Rating | None = None  # 评分 0-10（约束类型值对象）
-    cover_path: str | None = None  # 封面本地缓存路径
+    cover_path: str | None = None  # 封面本地缓存路径（原图，信息栏用）
+    thumbnail_path: str | None = None  # 网格缩略图 content URL，不是 cover_path
     status: ResourceStatus = ResourceStatus.ACTIVE
     deleted_at: datetime | None = None  # 回收站删除时间
     last_scraped_at: datetime | None = None  # 上次元数据抓取时间
@@ -103,7 +104,7 @@ class ResourceFile(ApiModel):
     sha256: str | None = None  # 文件哈希，图片元数据匹配键（唯一索引）
     size: int | None = None
     format: str | None = None  # 扩展名/格式
-    role: str = "primary"  # primary / cover / subtitle
+    role: str = "primary"  # primary / cover / subtitle / thumbnail
     duration: float | None = None  # 视频时长（秒）
     width: int | None = None
     height: int | None = None

@@ -20,6 +20,7 @@ from app.shared.db.orm import (
     ScrapeJobRow,
     TagRow,
 )
+from app.shared.media_types import FILE_ROLE_THUMBNAIL
 from app.shared.models import Category, Resource, ResourceFile, ResourceStatus, ResourceTodo, ResourceType, Tag
 
 
@@ -35,6 +36,11 @@ def _ts(value: datetime | str | None) -> str | None:
     if isinstance(value, str):
         return value
     return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _file_content_url(resource_id: int, file_id: int) -> str:
+    """已有文件流路由，网格缩略图也走它。"""
+    return f"/library/resources/{resource_id}/files/{file_id}/content"
 
 
 def _orm_to_resource(row: ResourceRow) -> Resource:
@@ -183,7 +189,34 @@ class ResourceRepository:
             )
             for t in todos
         ]
+        self._apply_thumbnail_path(resource)
         return resource
+
+    def _apply_thumbnail_path(self, resource: Resource) -> None:
+        """从已加载 files 填 thumbnail_path，不改 cover_path。"""
+        if resource.id is None:
+            return
+        thumb = next((f for f in resource.files if f.role == FILE_ROLE_THUMBNAIL and f.id is not None), None)
+        if thumb is None:
+            resource.thumbnail_path = None
+            return
+        resource.thumbnail_path = _file_content_url(resource.id, thumb.id)
+
+    async def _attach_thumbnail_paths(self, resources: list[Resource]) -> list[Resource]:
+        ids = [r.id for r in resources if r.id is not None]
+        if not ids:
+            return resources
+        stmt = select(FileRow).where(FileRow.resource_id.in_(ids), FileRow.role == FILE_ROLE_THUMBNAIL)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        by_rid = {row.resource_id: row for row in rows}
+        for resource in resources:
+            if resource.id is None:
+                continue
+            file_row = by_rid.get(resource.id)
+            if file_row is None:
+                continue
+            resource.thumbnail_path = _file_content_url(resource.id, file_row.id)
+        return resources
 
     async def get(self, resource_id: int) -> Resource | None:
         row = await self._session.get(ResourceRow, resource_id)
@@ -227,7 +260,7 @@ class ResourceRepository:
         stmt = stmt.order_by(direction(ResourceRow.created_at), direction(ResourceRow.id))
         stmt = stmt.limit(limit).offset(offset)
         rows = (await self._session.execute(stmt)).scalars().all()
-        return [_orm_to_resource(r) for r in rows]
+        return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
 
     async def create_many(self, resources: list[Resource]) -> int:
         """批量插入（演示 seed），一次提交。"""
@@ -303,6 +336,29 @@ class ResourceRepository:
             created_at=ts,
         )
         self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def update_file_stat(
+        self,
+        file_id: int,
+        *,
+        path: str,
+        size: int | None,
+        format_: str | None,
+        commit: bool = True,
+    ) -> FileRow | None:
+        """覆盖同角色文件时更新路径与体积，不插新行。"""
+        row = await self._session.get(FileRow, file_id)
+        if row is None:
+            return None
+        row.path = path
+        row.size = size
+        row.format = format_
         if commit:
             await self._session.commit()
         else:
@@ -490,7 +546,7 @@ class ResourceRepository:
             .limit(limit)
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return [_orm_to_resource(r) for r in rows]
+        return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
 
     async def stats(self) -> dict[str, Any]:
         """资源统计（供概览）：by_type + 库级指标。"""

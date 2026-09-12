@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 
+from app.library.application.thumbnails import source_for_grid_thumbnail
 from app.library.application.importers import importer_for
 from app.library.application.packages import ResourcePackage, layout_for
 from app.library.application.packages.layouts import PackageLayout
@@ -19,7 +20,7 @@ from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
-from app.shared.media_types import FILE_ROLE_PRIMARY
+from app.shared.media_types import FILE_ROLE_PRIMARY, FILE_ROLE_THUMBNAIL
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 
@@ -71,6 +72,35 @@ class ImportService:
         for candidate in candidates:
             await self._ingest_one(job, type_, layout, candidate)
             job.done += 1
+
+    async def _try_register_thumbnail(
+        self,
+        resource_id: int,
+        package: ResourcePackage,
+        type_: ResourceType,
+        role_paths: dict[str, Path],
+    ) -> None:
+        """缩略图失败只记日志，不回滚已复制的资源。"""
+        thumb_src = source_for_grid_thumbnail(type_, role_paths)
+        if thumb_src is None:
+            return
+        try:
+            thumb_dest = await asyncio.to_thread(package.put_thumbnail, thumb_src)
+            if thumb_dest is None:
+                return
+            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
+            await self._resources.add_file(
+                resource_id,
+                path=str(thumb_dest),
+                sha256=None,
+                size=thumb_size,
+                format_=thumb_dest.suffix.lower().lstrip("."),
+                role=FILE_ROLE_THUMBNAIL,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("缩略图登记失败 resource=%s: %s", resource_id, exc)
+            await self._resources.rollback()
 
     async def _ingest_one(
         self,
@@ -139,6 +169,8 @@ class ImportService:
                 await self._resources.update(resource.id, resource, commit=False)
             await self._resources.commit()
             job.imported += 1
+            job.phase = "thumb"
+            await self._try_register_thumbnail(resource.id, package, type_, role_paths)
         except IntegrityError:
             await self._resources.rollback()
             if package is not None:

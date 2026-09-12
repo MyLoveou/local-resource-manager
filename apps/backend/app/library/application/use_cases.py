@@ -20,7 +20,8 @@ from app.library.application.subtitle_naming import original_stem_from_extra, su
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
-from app.shared.media_types import COVER_EXTENSIONS, SUBTITLE_EXTENSIONS
+from app.shared.log import logger
+from app.shared.media_types import COVER_EXTENSIONS, FILE_ROLE_THUMBNAIL, SUBTITLE_EXTENSIONS
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 
@@ -137,7 +138,38 @@ class LibraryQueryService:
         existing._touch()
         await self._resources.update(existing.id, existing, commit=False)
         await self._resources.commit()
+        await self._try_refresh_thumbnail(existing.id, package, dest)
         return await self._resources.get(existing.id)
+
+    async def _try_refresh_thumbnail(self, resource_id: int, package: ResourcePackage, source_image: Path) -> None:
+        """换封面后覆盖网格缩略图；失败不影响封面提交。"""
+        try:
+            thumb_dest = await asyncio.to_thread(package.put_thumbnail, source_image)
+            if thumb_dest is None:
+                return
+            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
+            old_thumb = await self._resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
+            if old_thumb is not None:
+                await self._resources.update_file_stat(
+                    old_thumb.id,
+                    path=str(thumb_dest),
+                    size=thumb_size,
+                    format_=thumb_dest.suffix.lower().lstrip("."),
+                    commit=True,
+                )
+                return
+            await self._resources.add_file(
+                resource_id,
+                path=str(thumb_dest),
+                sha256=None,
+                size=thumb_size,
+                format_=thumb_dest.suffix.lower().lstrip("."),
+                role=FILE_ROLE_THUMBNAIL,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("换封面后缩略图失败 resource=%s: %s", resource_id, exc)
+            await self._resources.rollback()
 
     async def add_subtitle(self, resource_id: int, body: SubtitleAdd) -> Resource | None:
         """复制字幕进包内并按原始视频名改名。"""

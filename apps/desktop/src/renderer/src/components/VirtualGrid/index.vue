@@ -15,8 +15,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useElementSize } from '@vueuse/core'
+import { useElementSize, useThrottleFn } from '@vueuse/core'
 import { useVirtualizer, type VirtualItem } from '@tanstack/vue-virtual'
+import { GRID_RESIZE_THROTTLE_MS } from '@/domain'
 import Card from '../Card/index.vue'
 
 export interface VirtualGridItem {
@@ -52,18 +53,34 @@ function handleCardClick(itemId: number): void {
 
 const scrollRef = ref<HTMLElement | null>(null)
 const { width } = useElementSize(scrollRef)
+const layoutWidth = ref(0)
+const applyLayoutWidth = useThrottleFn((next: number) => {
+  layoutWidth.value = next
+}, GRID_RESIZE_THROTTLE_MS)
+
+watch(
+  width,
+  (next) => {
+    if (layoutWidth.value <= 0) {
+      layoutWidth.value = next
+      return
+    }
+    applyLayoutWidth(next)
+  },
+  { immediate: true }
+)
 
 const items = computed(() => props.items ?? [])
 
 const columns = computed(() => {
-  const inner = width.value - PADDING * 2
+  const inner = layoutWidth.value - PADDING * 2
   if (inner <= 0) return 1
   const cols = Math.max(1, Math.floor((inner + props.gap) / (props.minItemWidth + props.gap)))
   return props.maxColumns ? Math.min(cols, props.maxColumns) : cols
 })
 
 const columnWidth = computed(() => {
-  const inner = Math.max(0, width.value - PADDING * 2)
+  const inner = Math.max(0, layoutWidth.value - PADDING * 2)
   const cols = columns.value
   return (inner - props.gap * (cols - 1)) / cols
 })
@@ -123,7 +140,7 @@ function maybeEmitNearEnd(): void {
   }
 }
 
-watch([virtualItems, items, width], maybeEmitNearEnd, { flush: 'post' })
+watch([virtualItems, items, layoutWidth], maybeEmitNearEnd, { flush: 'post' })
 </script>
 
 <style scoped lang="less">

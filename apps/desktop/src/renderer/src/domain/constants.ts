@@ -44,6 +44,9 @@ export const API_CODE_OK = 0
 export const API_STATUS_SUCCESS = 'success'
 export const API_STATUS_ERROR = 'error'
 
+/** 网格列宽随窗口变化的节流间隔 */
+export const GRID_RESIZE_THROTTLE_MS = 150
+
 
 /** 协议 → 默认引擎 路由表（aria2 兼 BT 兜底；rqbit 负责现代 BT/流式） */
 export const PROTOCOL_TO_ENGINE: Record<Protocol, DownloadEngine> = {

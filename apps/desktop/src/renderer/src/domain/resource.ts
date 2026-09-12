@@ -19,6 +19,8 @@ export interface Resource {
   rating?: number | null
   /** 封面本地缓存路径 */
   coverPath?: string | null
+  /** 网格缩略图 URL，信息栏仍用 coverPath */
+  thumbnailPath?: string | null
   status: ResourceStatus
   /** 回收站删除时间 */
   deletedAt?: string | null
