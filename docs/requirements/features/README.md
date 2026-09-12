@@ -2,6 +2,16 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## library-trash（**已定稿 / 实现中**）
+
+> 回收站页、多选批量移入/恢复/彻底删除（删库内包）。规划待「可以按此实现」。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-trash/需求.md`](library-trash/需求.md) | 范围、故事、验收、契约草案 |
+| [`library-trash/实现方案.md`](library-trash/实现方案.md) | 沿用 library；文件清单 |
+| OpenSpec | `openspec/changes/library-trash/` |
+
 ## grid-media-performance（**已定稿 / 实现中**）
 
 > 导入时在包内生成网格缩略图；列表 `thumbnailPath`；窗口宽度节流。待 Electron 手工验 T6–T8。

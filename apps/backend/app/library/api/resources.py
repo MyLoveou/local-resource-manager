@@ -9,6 +9,8 @@ from app.library.api.deps import get_repos
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.schemas import (
     CoverReplace,
+    ResourceBatchRequest,
+    ResourceBatchResult,
     ResourcePage,
     ResourcePatch,
     ResourceSortField,
@@ -17,6 +19,7 @@ from app.library.application.schemas import (
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
+from app.shared.errors import InvalidStateError
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 router = APIRouter(prefix="/resources", tags=["library-resources"])
@@ -49,6 +52,16 @@ async def list_resources(
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order
     )
+
+
+@router.post("/batch", response_model=ResourceBatchResult)
+async def batch_resources(
+    body: ResourceBatchRequest,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> ResourceBatchResult:
+    """批量 trash / restore / purge；部分失败仍返回 200。"""
+    resources, tasks = repos
+    return await LibraryQueryService(resources, tasks).batch(body.action, body.ids)
 
 
 @router.get("/{resource_id}/content")
@@ -160,3 +173,35 @@ async def delete_resource(
     if resource is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return resource
+
+
+@router.post("/{resource_id}/restore", response_model=Resource)
+async def restore_resource(
+    resource_id: int,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> Resource:
+    """从回收站恢复。"""
+    resources, tasks = repos
+    try:
+        resource = await LibraryQueryService(resources, tasks).restore(resource_id)
+    except InvalidStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if resource is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return resource
+
+
+@router.post("/{resource_id}/purge")
+async def purge_resource(
+    resource_id: int,
+    repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
+) -> dict[str, bool]:
+    """彻底删除：删库内包并 DROP 行。"""
+    resources, tasks = repos
+    try:
+        ok = await LibraryQueryService(resources, tasks).purge(resource_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail="failed to delete package") from exc
+    if not ok:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return {"ok": True}

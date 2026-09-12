@@ -8,6 +8,9 @@
         <div class="info-panel-meta">格式 {{ formatLabel }}</div>
         <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
         <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
+        <div v-if="resource.status === 'trashed'" class="info-panel-meta">
+          删除 {{ resource.deletedAt || '—' }}
+        </div>
         <template v-if="isImage">
           <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
         </template>
@@ -101,11 +104,38 @@
           <n-button v-if="isVideo" size="small" :loading="subtitleBusy" @click="pickSubtitle">
             添加字幕
           </n-button>
-          <n-popconfirm positive-text="删除" negative-text="取消" @positive-click="handleDelete">
+          <n-popconfirm
+            v-if="resource.status !== 'trashed'"
+            positive-text="移入"
+            negative-text="取消"
+            @positive-click="handleDelete"
+          >
             <template #trigger>
-              <n-button size="small" type="error" :disabled="deleting" ghost>删除</n-button>
+              <n-button size="small" type="error" :disabled="deleting" ghost>移入回收站</n-button>
             </template>
-            确定将此资源移入回收站？
+            确定将此资源移入回收站？可稍后恢复。
+          </n-popconfirm>
+          <n-popconfirm
+            v-else
+            positive-text="恢复"
+            negative-text="取消"
+            @positive-click="handleRestore"
+          >
+            <template #trigger>
+              <n-button size="small" :disabled="deleting">恢复</n-button>
+            </template>
+            确定恢复此资源？
+          </n-popconfirm>
+          <n-popconfirm
+            v-if="resource.status === 'trashed'"
+            positive-text="彻底删除"
+            negative-text="取消"
+            @positive-click="handlePurge"
+          >
+            <template #trigger>
+              <n-button size="small" type="error" :disabled="deleting" ghost>彻底删除</n-button>
+            </template>
+            彻底删除后不可恢复。只删除库内副本，不删除你电脑上的原文件。
           </n-popconfirm>
         </div>
         <p v-if="errorMessage" class="info-panel-error">{{ errorMessage }}</p>
@@ -153,7 +183,7 @@ import {
 const selection = useSelectionStore()
 const library = useLibraryStore()
 const { selectedId } = storeToRefs(selection)
-const { deleteResource, patchResource, replaceCover, addSubtitle, addTodo, patchTodo, removeTodo } =
+const { deleteResource, restoreResource, purgeResource, patchResource, replaceCover, addSubtitle, addTodo, patchTodo, removeTodo } =
   useResourceHandle()
 
 const resource = ref<Resource | null>(null)
@@ -526,10 +556,44 @@ async function handleDelete(): Promise<void> {
   errorMessage.value = ''
   try {
     await deleteResource(id)
-    library.bump(row.type)
+    library.bump(null)
     selection.clear()
   } catch (error) {
     errorMessage.value = '删除失败'
+    console.error(error)
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function handleRestore(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  deleting.value = true
+  errorMessage.value = ''
+  try {
+    await restoreResource(id)
+    library.bump(null)
+    selection.clear()
+  } catch (error) {
+    errorMessage.value = '恢复失败'
+    console.error(error)
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function handlePurge(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  deleting.value = true
+  errorMessage.value = ''
+  try {
+    await purgeResource(id)
+    library.bump(null)
+    selection.clear()
+  } catch (error) {
+    errorMessage.value = '彻底删除失败'
     console.error(error)
   } finally {
     deleting.value = false

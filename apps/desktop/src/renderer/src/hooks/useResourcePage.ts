@@ -9,7 +9,7 @@ import type { Resource, ResourceStatus, ResourceType } from '@/domain'
 const DEFAULT_LIMIT = 80
 
 export function useResourcePage(options: {
-  type: ResourceType
+  type?: ResourceType
   status?: ResourceStatus
   limit?: number
 }) {
@@ -86,7 +86,11 @@ export function useResourcePage(options: {
   watch(
     () => library.revision,
     () => {
-      if (library.importedType === options.type) {
+      if (
+        options.type === undefined ||
+        library.importedType === null ||
+        library.importedType === options.type
+      ) {
         void reset()
       }
     }

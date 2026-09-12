@@ -7,6 +7,8 @@ from app.library.application.packages.resource_package import ResourcePackage, d
 from app.library.application.schemas import (
     CoverReplace,
     Overview,
+    ResourceBatchFailedItem,
+    ResourceBatchResult,
     ResourcePage,
     ResourcePatch,
     ResourceSortField,
@@ -19,6 +21,7 @@ from app.library.application.schemas import (
 from app.library.application.subtitle_naming import original_stem_from_extra, subtitle_dest_name
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
+from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
 from app.shared.media_types import COVER_EXTENSIONS, FILE_ROLE_THUMBNAIL, SUBTITLE_EXTENSIONS
@@ -250,3 +253,74 @@ class LibraryQueryService:
     async def trash(self, resource_id: int) -> Resource | None:
         """软删入回收站（已 trashed 则原样写回）。"""
         return await self._resources.trash(resource_id)
+
+    async def restore(self, resource_id: int) -> Resource | None:
+        """仅 trashed → active。非 trashed 抛 InvalidStateError。"""
+        return await self._resources.restore(resource_id)
+
+    def _package_for(self, resource: Resource) -> ResourcePackage:
+        layout = layout_for(resource.type)
+        return ResourcePackage(
+            self._store,
+            resource.type,
+            resource.id or 0,
+            self._ops,
+            cover_falls_back_to_primary=bool(layout and layout.cover_falls_back_to_primary),
+        )
+
+    async def purge(self, resource_id: int) -> bool:
+        """先删库内包（已不存在则跳过），再 DROP 行。删盘失败不 DROP。"""
+        existing = await self._resources.get(resource_id)
+        if existing is None or existing.id is None:
+            return False
+        package = self._package_for(existing)
+        try:
+            await asyncio.to_thread(self._ops.remove_tree, package.root)
+        except OSError as exc:
+            logger.warning("删包失败 resource=%s: %s", resource_id, exc)
+            raise RuntimeError("failed to delete package") from exc
+        if package.root.exists():
+            logger.warning("删包后目录仍在 resource=%s path=%s", resource_id, package.root)
+            raise RuntimeError("failed to delete package")
+        return await self._resources.delete_row(existing.id)
+
+    async def batch(self, action: str, ids: list[int]) -> ResourceBatchResult:
+        """逐条独立提交；部分失败不影响已成功项。"""
+        unique: list[int] = []
+        seen: set[int] = set()
+        for rid in ids:
+            if rid in seen:
+                continue
+            seen.add(rid)
+            unique.append(rid)
+        ok: list[int] = []
+        failed: list[ResourceBatchFailedItem] = []
+        for rid in unique:
+            try:
+                if action == "trash":
+                    row = await self.trash(rid)
+                    if row is None:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="resource not found"))
+                    else:
+                        ok.append(rid)
+                elif action == "restore":
+                    row = await self.restore(rid)
+                    if row is None:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="resource not found"))
+                    else:
+                        ok.append(rid)
+                elif action == "purge":
+                    dropped = await self.purge(rid)
+                    if dropped:
+                        ok.append(rid)
+                    else:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="resource not found"))
+                else:
+                    failed.append(ResourceBatchFailedItem(id=rid, message="invalid action"))
+            except InvalidStateError:
+                failed.append(ResourceBatchFailedItem(id=rid, message="resource is not trashed"))
+            except Exception:
+                await self._resources.rollback()
+                logger.exception("批量操作失败 id=%s action=%s", rid, action)
+                failed.append(ResourceBatchFailedItem(id=rid, message="operation failed"))
+        return ResourceBatchResult(ok=ok, failed=failed)

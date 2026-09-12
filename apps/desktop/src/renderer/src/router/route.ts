@@ -27,4 +27,13 @@ export const routes: RouteRecordRaw[] = [
       icon: 'video',
     }
   },
+  {
+    path: '/trash',
+    name: 'Trash',
+    component: () => import('@/views/Trash/index.vue'),
+    meta: {
+      title: '回收站',
+      icon: 'delete',
+    }
+  },
 ]

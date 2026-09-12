@@ -1,6 +1,5 @@
 /**
- * 库变更通知：导入成功后自增。
- * 类型页只应在 importedType 与本页 type 一致时重拉。
+ * 库变更通知：导入/删除后自增。importedType 为空时所有列表重拉。
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -10,7 +9,7 @@ export const useLibraryStore = defineStore('library', () => {
   const revision = ref(0)
   const importedType = ref<ResourceType | null>(null)
 
-  function bump(type: ResourceType): void {
+  function bump(type: ResourceType | null = null): void {
     importedType.value = type
     revision.value += 1
   }

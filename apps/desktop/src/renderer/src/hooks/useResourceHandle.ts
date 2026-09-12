@@ -6,9 +6,12 @@ import {
   patchResourceTodo as patchTodoApi,
   deleteResourceTodo as deleteTodoApi,
   deleteResource as deleteResourceApi,
+  restoreResource as restoreResourceApi,
+  purgeResource as purgeResourceApi,
+  batchResources as batchResourcesApi,
 } from '@/infrastructure/http'
 import type { Resource } from '@/domain'
-import type { ResourcePatch, TodoPatch } from '@/infrastructure/http/resources'
+import type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from '@/infrastructure/http/resources'
 
 export function useResourceHandle() {
   const patchResource = (resourceId: number, patch: ResourcePatch): Promise<Resource> => {
@@ -39,6 +42,18 @@ export function useResourceHandle() {
     return deleteResourceApi(resourceId)
   }
 
+  const restoreResource = (resourceId: number): Promise<Resource> => {
+    return restoreResourceApi(resourceId)
+  }
+
+  const purgeResource = (resourceId: number): Promise<{ ok: boolean }> => {
+    return purgeResourceApi(resourceId)
+  }
+
+  const batchResources = (action: ResourceBatchAction, ids: number[]): Promise<ResourceBatchResult> => {
+    return batchResourcesApi(action, ids)
+  }
+
   return {
     patchResource,
     replaceCover,
@@ -47,5 +62,8 @@ export function useResourceHandle() {
     patchTodo,
     removeTodo,
     deleteResource,
+    restoreResource,
+    purgeResource,
+    batchResources,
   }
 }

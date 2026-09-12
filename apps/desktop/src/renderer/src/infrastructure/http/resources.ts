@@ -80,3 +80,33 @@ export async function deleteResource(resourceId: number): Promise<Resource> {
   const { data } = await client.delete<Resource>(`/library/resources/${resourceId}`)
   return data
 }
+
+export async function restoreResource(resourceId: number): Promise<Resource> {
+  const { data } = await client.post<Resource>(`/library/resources/${resourceId}/restore`)
+  return data
+}
+
+export async function purgeResource(resourceId: number): Promise<{ ok: boolean }> {
+  const { data } = await client.post<{ ok: boolean }>(`/library/resources/${resourceId}/purge`)
+  return data
+}
+
+export type ResourceBatchAction = 'trash' | 'restore' | 'purge'
+
+export interface ResourceBatchFailedItem {
+  id: number
+  message: string
+}
+
+export interface ResourceBatchResult {
+  ok: number[]
+  failed: ResourceBatchFailedItem[]
+}
+
+export async function batchResources(
+  action: ResourceBatchAction,
+  ids: number[]
+): Promise<ResourceBatchResult> {
+  const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', { action, ids })
+  return data
+}

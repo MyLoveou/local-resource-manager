@@ -14,9 +14,12 @@ export {
   patchResourceTodo,
   deleteResourceTodo,
   deleteResource,
+  restoreResource,
+  purgeResource,
+  batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
 export { getCategories, getTags } from './vocab'
-export type { ResourcePatch, TodoPatch } from './resources'
+export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
 export type { ImportCreate, ImportJob, ImportJobCreated, ImportSourceKind } from './imports'
 export { resolveLibraryMediaUrl } from './mediaUrl'

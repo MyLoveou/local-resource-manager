@@ -3,8 +3,13 @@
     <div class="virtual-grid__spacer" :style="{ height: `${totalSize}px` }">
       <div v-for="vItem in virtualItems" :key="vItem.index" class="virtual-grid__cell" :data-index="vItem.index"
         :style="cellStyle(vItem)">
-        <Card v-if="items[vItem.index]" :title="items[vItem.index].title" :cover-url="items[vItem.index].coverUrl"
-          @click="handleCardClick(items[vItem.index].id)" />
+        <Card
+          v-if="items[vItem.index]"
+          :title="items[vItem.index].title"
+          :cover-url="items[vItem.index].coverUrl"
+          :selected="isSelected(items[vItem.index].id)"
+          @click="handleCardClick($event, items[vItem.index].id)"
+        />
       </div>
     </div>
     <div v-if="$slots.footer" class="virtual-grid__footer">
@@ -31,6 +36,7 @@ const PADDING = 8
 const props = withDefaults(
   defineProps<{
     items?: VirtualGridItem[]
+    selectedIds?: number[]
     /** 单卡最小宽度，用于推算列数 */
     minItemWidth?: number
     gap?: number
@@ -38,6 +44,7 @@ const props = withDefaults(
   }>(),
   {
     items: () => [],
+    selectedIds: () => [],
     minItemWidth: 160,
     gap: 8,
   }
@@ -45,10 +52,14 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   nearEnd: []
-  cardClick: [number]
+  cardClick: [MouseEvent, number]
 }>()
-function handleCardClick(itemId: number): void {
-  emit('cardClick', itemId)
+function handleCardClick(event: MouseEvent, itemId: number): void {
+  emit('cardClick', event, itemId)
+}
+
+function isSelected(itemId: number): boolean {
+  return props.selectedIds.includes(itemId)
 }
 
 const scrollRef = ref<HTMLElement | null>(null)
@@ -139,6 +150,10 @@ function maybeEmitNearEnd(): void {
     emit('nearEnd')
   }
 }
+
+watch(items, () => {
+  lastEmittedLength = -1
+})
 
 watch([virtualItems, items, layoutWidth], maybeEmitNearEnd, { flush: 'post' })
 </script>

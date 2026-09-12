@@ -1,5 +1,12 @@
 <template>
-  <n-card hoverable size="small" class="resource-card" :content-style="{ padding: '8px 10px' }">
+  <n-card
+    hoverable
+    size="small"
+    class="resource-card"
+    :class="{ 'resource-card--selected': selected }"
+    :content-style="{ padding: '8px 10px' }"
+    @click="(e: MouseEvent) => $emit('click', e)"
+  >
     <template #cover>
       <div class="cover">
         <img
@@ -25,6 +32,11 @@ defineProps<{
   title?: string
   /** 封面 URL */
   coverUrl?: string
+  selected?: boolean
+}>()
+
+defineEmits<{
+  click: [MouseEvent]
 }>()
 </script>
 
@@ -32,6 +44,11 @@ defineProps<{
 .resource-card {
   width: 100%;
   overflow: hidden;
+
+  &--selected {
+    outline: 2px solid #2563eb;
+    outline-offset: -2px;
+  }
 
   .cover {
     aspect-ratio: 3 / 4;

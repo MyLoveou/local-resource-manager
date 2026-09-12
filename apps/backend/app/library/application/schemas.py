@@ -1,5 +1,6 @@
 """资源库应用 DTO（API 契约，继承 ApiModel 以输出 camelCase）。"""
 from enum import Enum
+from typing import Literal
 
 from pydantic import Field
 
@@ -109,6 +110,27 @@ class ImportJobCreated(ApiModel):
     """已接受的导入任务。"""
 
     job_id: str
+
+
+class ResourceBatchRequest(ApiModel):
+    """批量移入/恢复/彻底删除。ids 去重后仍受 200 上限约束。"""
+
+    action: Literal["trash", "restore", "purge"]
+    ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class ResourceBatchFailedItem(ApiModel):
+    """单条失败原因。"""
+
+    id: int
+    message: str
+
+
+class ResourceBatchResult(ApiModel):
+    """批量结果：已成功 id 与失败清单。"""
+
+    ok: list[int] = Field(default_factory=list)
+    failed: list[ResourceBatchFailedItem] = Field(default_factory=list)
 
 
 class ImportJob(ApiModel):

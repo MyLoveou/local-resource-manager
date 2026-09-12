@@ -135,6 +135,23 @@ class ResourceRepository:
         existing.to_trash()
         return await self.update(resource_id, existing)
 
+    async def restore(self, resource_id: int) -> Resource | None:
+        """从回收站恢复；不存在则 None。非 trashed 由领域模型抛 InvalidStateError。"""
+        existing = await self.get(resource_id)
+        if existing is None:
+            return None
+        existing.restore()
+        return await self.update(resource_id, existing)
+
+    async def delete_row(self, resource_id: int) -> bool:
+        """硬删除资源行（CASCADE files/todos/tags）。"""
+        row = await self._session.get(ResourceRow, resource_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
     async def _hydrate(self, row: ResourceRow) -> Resource:
         """详情：带分类、标签、文件摘要。"""
         resource = _orm_to_resource(row)

@@ -16,10 +16,10 @@
 - 已交付（用户可感知）：
   - 启动 Electron 窗口；主进程拉起本机 FastAPI；健康检查通过后才开窗。
   - 首页拉 `/library/overview` 展示按类型计数。
-  - 图片/视频页虚拟网格 + 触底分页；点选后右侧信息栏展示通用元数据，可保存评分/分类/标签、弹窗编辑、换封面、确认后软删。
+  - 图片/视频页虚拟网格 + 触底分页；点选后右侧信息栏展示通用元数据，可保存评分/分类/标签、弹窗编辑、换封面、确认后软删；**回收站页 / 多选批量 / 恢复 / 彻底删除库内包**已写（待 Electron 手工验 T10–T16）。
   - 顶栏「导入」向导：选类型与文件/文件夹，后端复制进库目录并写资源记录（sha256 去重）。
 - **尚未实现**（需求有、代码无或仅 health）：
-  - 视频专项（字幕/封面抽帧）、预览/播放/回收站完整流（M2 大部分）、抓取（M3）、检索打标（M4）、下载引擎（M5）、设置（含库路径，M6）、全局 Notify、token 校验。
+  - 视频专项（封面抽帧）、预览/播放、抓取（M3）、检索打标（M4）、下载引擎（M5）、设置（含库路径，M6）、全局 Notify、token 校验。
   - scrape / download 子路由目前只有 `/health`。
   - 网格封面：新导入写包内 `thumbs/grid.webp` 并由列表 `thumbnailPath` 提供；旧资源仍可能拉原图。窗口缩放已节流，待手工验。
 
@@ -46,7 +46,7 @@
 - 本仓负责：桌面壳、本机后端、SQLite 资源库、后续自建抓取与内置下载编排。
 - 本仓不负责：移动端、多用户账号、在线流媒体服务、资源分享。
 - 已知债（有路径）：
-  - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 删除后网格仍显示该卡。
+  - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 已由 `library-trash` 用 `library.bump(null)` 让列表 reset（待手工验网格）。
   - README 仍写「无业务代码 / mount 双应用」，与现状不符。
   - 路线图 `docs/design/00-路线图与里程碑.md` 日期 2026-09-07，M2 描述已过时。
   - 导入 `phase=probe` 已由 `metadata-panel-fields` 用 Pillow/ffprobe 写入宽高/时长/帧率/码率/编码；旧资源不回填，缺列面板显示「—」。
