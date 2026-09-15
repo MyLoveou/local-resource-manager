@@ -2,6 +2,8 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
+const videoJsElements = new Set(['video-player', 'video-skin', 'mux-video'])
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()]
@@ -19,7 +21,13 @@ export default defineConfig({
         '@infrastructure': resolve(__dirname, 'src/renderer/src/infrastructure')
       }
     },
-    plugins: [vue()],
+    plugins: [vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => videoJsElements.has(tag),
+        }
+      }
+    })],
     css: {
       preprocessorOptions: {
         less: {

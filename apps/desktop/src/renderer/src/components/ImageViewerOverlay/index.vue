@@ -3,33 +3,15 @@
     <div class="image-viewer-overlay__stage">
       <ImageViewerHost v-if="visible && imageSrc" :src="imageSrc" />
     </div>
-    <n-button
-      class="image-viewer-overlay__close"
-      size="small"
-      circle
-      aria-label="关闭"
-      @click="close"
-    >
+    <n-button class="image-viewer-overlay__close" size="small" circle aria-label="关闭" @click="close">
       ×
     </n-button>
-    <n-button
-      class="image-viewer-overlay__prev"
-      size="small"
-      circle
-      :disabled="!hasPrev"
-      aria-label="上一张"
-      @click="prev"
-    >
+    <n-button class="image-viewer-overlay__prev" size="small" circle :disabled="!hasPrev"
+      aria-label="{{ NextAndPre[resource.type].prev }}" @click="prev">
       ‹
     </n-button>
-    <n-button
-      class="image-viewer-overlay__next"
-      size="small"
-      circle
-      :disabled="!hasNext"
-      aria-label="下一张"
-      @click="next"
-    >
+    <n-button class="image-viewer-overlay__next" size="small" circle :disabled="!hasNext"
+      aria-label="{{ NextAndPre[resource.type].next }}" @click="next">
       ›
     </n-button>
   </div>

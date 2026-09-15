@@ -2,15 +2,8 @@
   <aside class="info-panel">
     <div v-if="resource" class="info-panel-content">
       <div class="info-panel-body">
-        <img
-          v-if="coverUrl"
-          class="info-panel-cover"
-          :class="{ 'info-panel-cover--open': isImage }"
-          :src="coverUrl"
-          alt="封面"
-          decoding="async"
-          @click="openViewerFromCover"
-        />
+        <img v-if="coverUrl" class="info-panel-cover" :class="{ 'info-panel-cover--open': isImage }" :src="coverUrl"
+          alt="封面" decoding="async" @click="openViewerFromCover" />
         <div class="info-panel-title" :title="resource.title">{{ resource.title }}</div>
         <div class="info-panel-meta">类型 {{ typeLabel }}</div>
         <div class="info-panel-meta">格式 {{ formatLabel }}</div>
@@ -34,116 +27,64 @@
           </div>
         </template>
         <div class="info-panel-label">描述</div>
-        <n-input
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-          :value="draft.description"
-          placeholder="记录说明"
-          @update:value="draft.description = $event"
-        />
+        <n-input type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :value="draft.description" placeholder="记录说明"
+          @update:value="draft.description = $event" />
         <div class="info-panel-label">作者</div>
         <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
         <div class="info-panel-label">待办</div>
         <div class="info-panel-todos">
           <div v-for="todo in resource.todos ?? []" :key="todo.id ?? todo.content" class="info-panel-todo">
-            <n-checkbox
-              :checked="todo.done"
-              :disabled="todo.id == null || todoBusy"
-              @update:checked="toggleTodo(todo, $event)"
-            />
-            <n-input
-              size="tiny"
-              :value="todo.content"
-              :disabled="todo.id == null || todoBusy"
+            <n-checkbox :checked="todo.done" :disabled="todo.id == null || todoBusy"
+              @update:checked="toggleTodo(todo, $event)" />
+            <n-input size="tiny" :value="todo.content" :disabled="todo.id == null || todoBusy"
               @keydown.enter.prevent="(e: KeyboardEvent) => onTodoRenameEnter(e, todo)"
-              @blur="(e: FocusEvent) => renameTodoFromEvent(todo, e)"
-            />
-            <n-button
-              size="tiny"
-              quaternary
-              :disabled="todo.id == null || todoBusy"
-              @click="removeTodoRow(todo)"
-            >
+              @blur="(e: FocusEvent) => renameTodoFromEvent(todo, e)" />
+            <n-button size="tiny" quaternary :disabled="todo.id == null || todoBusy" @click="removeTodoRow(todo)">
               删
             </n-button>
           </div>
           <div class="info-panel-todo-add">
-            <n-input
-              :value="todoInput"
-              size="small"
-              placeholder="回车添加"
-              @update:value="todoInput = $event"
-              @keydown.enter.prevent="onTodoAddEnter"
-            />
+            <n-input :value="todoInput" size="small" placeholder="回车添加" @update:value="todoInput = $event"
+              @keydown.enter.prevent="onTodoAddEnter" />
           </div>
         </div>
         <!-- 分类是独立词表，不是 type -->
         <div class="info-panel-label">评分</div>
         <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
         <div class="info-panel-label">分类</div>
-        <n-select
-          filterable
-          tag
-          clearable
-          :options="categoryOptions"
-          :value="draft.categoryName"
-          @update:value="draft.categoryName = $event"
-        />
+        <n-select filterable tag clearable :options="categoryOptions" :value="draft.categoryName"
+          @update:value="draft.categoryName = $event" />
         <div class="info-panel-label">标签（Enter 切词）</div>
         <div class="info-panel-tags">
           <n-tag v-for="name in draft.tagNames" :key="name" closable @close="removeTag(name)">
             {{ name }}
           </n-tag>
-          <n-input
-            :value="draft.tagInput"
-            placeholder="回车添加"
-            size="small"
-            style="width: 120px"
-            @update:value="draft.tagInput = $event"
-            @keydown.enter.prevent="commitTagInput"
-          />
+          <n-input :value="draft.tagInput" placeholder="回车添加" size="small" style="width: 120px"
+            @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
         </div>
       </div>
-        <div class="info-panel-footer">
+      <div class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
-          <n-dropdown
-            v-if="moreOptions.length > 0"
-            trigger="click"
-            :options="moreOptions"
-            @select="onMoreSelect"
-          >
+          <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
             <n-button size="small">更多</n-button>
           </n-dropdown>
-          <n-popconfirm
-            v-if="resource.status !== 'trashed'"
-            positive-text="移入"
-            negative-text="取消"
-            @positive-click="handleDelete"
-          >
+          <n-popconfirm v-if="resource.status !== 'trashed'" positive-text="移入" negative-text="取消"
+            @positive-click="handleDelete">
             <template #trigger>
               <n-button size="small" type="error" :disabled="deleting" ghost>移入回收站</n-button>
             </template>
             确定将此资源移入回收站？可稍后恢复。
           </n-popconfirm>
-          <n-popconfirm
-            v-else
-            positive-text="恢复"
-            negative-text="取消"
-            @positive-click="handleRestore"
-          >
+          <n-popconfirm v-else positive-text="恢复" negative-text="取消" @positive-click="handleRestore">
             <template #trigger>
               <n-button size="small" :disabled="deleting">恢复</n-button>
             </template>
             确定恢复此资源？
           </n-popconfirm>
-          <n-popconfirm
-            v-if="resource.status === 'trashed'"
-            positive-text="彻底删除"
-            negative-text="取消"
-            @positive-click="handlePurge"
-          >
+          <n-popconfirm v-if="resource.status === 'trashed'" positive-text="彻底删除" negative-text="取消"
+            @positive-click="handlePurge">
             <template #trigger>
               <n-button size="small" type="error" :disabled="deleting" ghost>彻底删除</n-button>
             </template>
@@ -152,18 +93,9 @@
         </div>
         <p v-if="errorMessage" class="info-panel-error">{{ errorMessage }}</p>
       </div>
-      <EditResourceModal
-        :show="editOpen"
-        :draft="draft"
-        :category-options="categoryOptions"
-        :cover-url="modalCoverUrl"
-        :saving="saving"
-        :allow-cover="canChangeCover"
-        @update:show="onModalShow"
-        @save="saveModal"
-        @cancel="cancelModal"
-        @pick-cover="pickCoverForModal"
-      />
+      <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
+        :saving="saving" :allow-cover="canChangeCover" @update:show="onModalShow" @save="saveModal"
+        @cancel="cancelModal" @pick-cover="pickCoverForModal" />
     </div>
     <div v-else class="info-panel-empty">未选择资源</div>
   </aside>
@@ -178,6 +110,7 @@ import { getResource, getCategories, invalidateCategories, invalidateResourceCac
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
+import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
   openPrimaryDefault,
   openPrimaryWithOther,
@@ -202,6 +135,7 @@ import {
 const selection = useSelectionStore()
 const library = useLibraryStore()
 const imageViewer = useImageViewerStore()
+const videoPlayer = useVideoPlayerStore()
 const shellBusy = ref(false)
 const { selectedId } = storeToRefs(selection)
 const { deleteResource, restoreResource, purgeResource, patchResource, replaceCover, addSubtitle, addTodo, patchTodo, removeTodo } =
@@ -674,6 +608,7 @@ async function handleDelete(): Promise<void> {
     await deleteResource(id)
     library.bump(null)
     imageViewer.close()
+    videoPlayer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '删除失败'
@@ -692,6 +627,7 @@ async function handleRestore(): Promise<void> {
     await restoreResource(id)
     library.bump(null)
     imageViewer.close()
+    videoPlayer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '恢复失败'
@@ -710,6 +646,7 @@ async function handlePurge(): Promise<void> {
     await purgeResource(id)
     library.bump(null)
     imageViewer.close()
+    videoPlayer.close()
     selection.clear()
   } catch (error) {
     errorMessage.value = '彻底删除失败'

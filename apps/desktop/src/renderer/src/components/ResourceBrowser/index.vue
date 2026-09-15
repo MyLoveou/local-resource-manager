@@ -3,12 +3,7 @@
     <div v-if="showToolbar" class="resource-browser__batch">
       <template v-if="!batchMode">
         <span v-if="isTrash">回收站 {{ total }} 项</span>
-        <n-popconfirm
-          v-if="isTrash"
-          positive-text="清空"
-          negative-text="取消"
-          @positive-click="emptyTrash"
-        >
+        <n-popconfirm v-if="isTrash" positive-text="清空" negative-text="取消" @positive-click="emptyTrash">
           <template #trigger>
             <n-button size="tiny" type="error" ghost :disabled="batchBusy">清空回收站</n-button>
           </template>
@@ -22,23 +17,15 @@
       <template v-else>
         <span>已选 {{ selectedCount }}</span>
         <template v-if="isTrash">
-          <n-popconfirm
-            positive-text="恢复"
-            negative-text="取消"
-            :disabled="selectedCount === 0"
-            @positive-click="runBatch('restore')"
-          >
+          <n-popconfirm positive-text="恢复" negative-text="取消" :disabled="selectedCount === 0"
+            @positive-click="runBatch('restore')">
             <template #trigger>
               <n-button size="tiny" :disabled="batchBusy || selectedCount === 0">恢复</n-button>
             </template>
             确定恢复所选资源？
           </n-popconfirm>
-          <n-popconfirm
-            positive-text="彻底删除"
-            negative-text="取消"
-            :disabled="selectedCount === 0"
-            @positive-click="runBatch('purge')"
-          >
+          <n-popconfirm positive-text="彻底删除" negative-text="取消" :disabled="selectedCount === 0"
+            @positive-click="runBatch('purge')">
             <template #trigger>
               <n-button size="tiny" type="error" ghost :disabled="batchBusy || selectedCount === 0">
                 彻底删除
@@ -47,13 +34,8 @@
             彻底删除后不可恢复。只删除库内副本，不删除你电脑上的原文件。
           </n-popconfirm>
         </template>
-        <n-popconfirm
-          v-else
-          positive-text="移入"
-          negative-text="取消"
-          :disabled="selectedCount === 0"
-          @positive-click="runBatch('trash')"
-        >
+        <n-popconfirm v-else positive-text="移入" negative-text="取消" :disabled="selectedCount === 0"
+          @positive-click="runBatch('trash')">
           <template #trigger>
             <n-button size="tiny" type="error" ghost :disabled="batchBusy || selectedCount === 0">
               移入回收站
@@ -71,14 +53,8 @@
       <button type="button" class="resource-browser__retry" @click="reset">重试</button>
     </div>
     <EmptyGuide v-else-if="!loading && total === 0" :hint="emptyHint" />
-    <VirtualGrid
-      v-else
-      class="resource-browser__grid"
-      :items="gridItems"
-      :selected-ids="gridSelectedIds"
-      @near-end="loadMore"
-      @card-click="handleCardClick"
-    >
+    <VirtualGrid v-else class="resource-browser__grid" :items="gridItems" :selected-ids="gridSelectedIds"
+      @near-end="loadMore" @card-click="handleCardClick">
       <template #footer>
         <span v-if="loadingMore">加载中…</span>
         <button v-else-if="error && items.length > 0" type="button" class="resource-browser__retry" @click="loadMore">
@@ -100,11 +76,10 @@ import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
-import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
-
+import { Player } from '@/static'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
@@ -116,7 +91,6 @@ const props = defineProps<{
 const isTrash = computed(() => props.status === 'trashed')
 const selection = useSelectionStore()
 const library = useLibraryStore()
-const imageViewer = useImageViewerStore()
 const { selectedIds } = storeToRefs(selection)
 const selectedCount = computed(() => selectedIds.value.length)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
@@ -144,9 +118,9 @@ function exitBatchMode(): void {
   selection.clear()
 }
 
-function imageIds(): number[] {
+function ids(type: ResourceType): number[] {
   return items.value.flatMap((item) =>
-    item.id !== undefined && item.type === 'image' ? [item.id] : []
+    item.id !== undefined && item.type === type ? [item.id] : []
   )
 }
 
@@ -157,8 +131,8 @@ function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
     return
   }
   const item = items.value.find((row) => row.id === itemId)
-  if (item?.type === 'image' && selection.selectedId === itemId) {
-    imageViewer.open(itemId, imageIds())
+  if (selection.selectedId === itemId) {
+    Player[item!.type as keyof typeof Player].open(itemId, ids(item!.type))
     return
   }
   selection.select(itemId)
@@ -188,7 +162,7 @@ async function collectTrashedIds(): Promise<number[]> {
   const ids: number[] = []
   let afterCreatedAt: string | undefined
   let afterId: number | undefined
-  for (;;) {
+  for (; ;) {
     const page = await getResources({
       status: 'trashed',
       limit: BATCH_LIMIT,
@@ -230,7 +204,9 @@ async function emptyTrash(): Promise<void> {
 
 onUnmounted(() => {
   exitBatchMode()
-  imageViewer.close()
+  if (props.type! in Player) {
+    Player[props.type! as keyof typeof Player].close()
+  }
 })
 
 const gridItems = computed(() =>
@@ -238,12 +214,12 @@ const gridItems = computed(() =>
     item.id === undefined
       ? []
       : [
-          {
-            id: item.id,
-            title: item.title,
-            coverUrl: resolveCardImageUrl(item),
-          },
-        ]
+        {
+          id: item.id,
+          title: item.title,
+          coverUrl: resolveCardImageUrl(item),
+        },
+      ]
   )
 )
 </script>
