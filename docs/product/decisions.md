@@ -7,6 +7,16 @@
 
 ## 有效决策
 
+### D-20260915-01 · 番剧/AV 是作品级系列，不是每集一资源
+
+- 日期：2026-09-15
+- 场景：`anime-av-types` 规划；用户否定无季/集树
+- **决定**：网格一部作品一张封面；信息栏展示专用档案、季/集、特典；选集或特典才播放。作品用 Resource 外壳 + `anime_profiles`/`av_profiles` + seasons/episodes/extras。菜单「番剧」，API 建议 `anime`。已有 video 不迁移。特典不计入正片集数。
+- **为何**：单文件 Resource 无法同时当列表单位和播放单位；特典会污染正片集。
+- **不选**：每集一条 Resource；只扩 extra JSON；本切片刮削；改旧视频类型。
+- **落点**：`docs/requirements/features/anime-av-types/`
+- 状态：有效（规划中）
+
 ### D-20260912-18 · 查看器只盖中间栏；信息栏动收进「更多」
 
 - 日期：2026-09-12

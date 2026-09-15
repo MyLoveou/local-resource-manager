@@ -2,6 +2,16 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## anime-av-types（**草案 / 规划待确认**）
+
+> 动画番剧与 AV **作品级系列**（季/集树、特典、专用档案）。菜单「番剧」。
+
+| 文档 | 内容 |
+|------|------|
+| [`anime-av-types/需求.md`](anime-av-types/需求.md) | 范围、建议默认、开放问题 |
+| [`anime-av-types/实现方案.md`](anime-av-types/实现方案.md) | 枚举/CHECK/映射/消费 |
+| OpenSpec | `openspec/changes/anime-av-types/` |
+
 ## app-performance（**已定稿 / 实现中**）
 
 > 全项目性能：DB / 导入 / HTTP / 万级显示 / 查看器 / 清脏库；API 保持可远程。
