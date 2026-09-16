@@ -2,7 +2,7 @@
 
 ### Requirement: Type strategies control what is collected and stored
 
-The system SHALL select files by the requested `type` extension list. Package paths MUST be produced by the shared package/layout module, not by ad-hoc string concatenation in an importer. Image packages MUST contain a primary file; `resolve_cover` MUST return that primary when no dedicated cover role exists. Video ingest (`type=video`) MUST copy only the primary file (no subtitles, no generated cover). Types `anime` and `av` MUST use series ingest (one directory → one work) rather than one-file-one-resource. Author or category MUST NOT determine the physical folder tree. Unknown or disabled types MUST be rejected with HTTP 400.
+The system SHALL select files by the requested `type` extension list. Package paths MUST be produced by the shared package/layout module, not by ad-hoc string concatenation in an importer. Image packages MUST contain a primary file; `resolve_cover` MUST return that primary when no dedicated cover role exists. Video ingest (`type=video`) MUST copy only the primary file (no subtitles, no generated cover). Types `anime` and `av` MUST use series ingest (preview then one work package) rather than one-file-one-resource. Source folder layout MUST NOT be mirrored as-is; confirmed mapping MUST land in the canonical `SxxExx` tree. Author or category MUST NOT determine the physical folder tree. Unknown or disabled types MUST be rejected with HTTP 400.
 
 #### Scenario: Image folder ignores non-images
 

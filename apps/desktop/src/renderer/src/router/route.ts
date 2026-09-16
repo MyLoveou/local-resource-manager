@@ -28,6 +28,23 @@ export const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/anime',
+    name: 'Anime',
+    component: () => import('@/views/Anime/index.vue'),
+    meta: {
+      title: '番剧',
+      icon: 'anime',
+    }
+  }, {
+    path: '/av',
+    name: 'AV',
+    component: () => import('@/views/AV/index.vue'),
+    meta: {
+      title: 'AV',
+      icon: 'av',
+    }
+  },
+  {
     path: '/trash',
     name: 'Trash',
     component: () => import('@/views/Trash/index.vue'),

@@ -1,9 +1,10 @@
 /**
- * 资源类型映射
+ * 资源类型展示名（首页卡片）。已启用类型走 RESOURCE_TYPE_LABEL。
  */
-export const typeMap = {
-  image: '图片',
-  video: '视频',
+import { RESOURCE_TYPE_LABEL } from '@/domain/mediaTypes'
+
+export const typeMap: Record<string, string> = {
+  ...RESOURCE_TYPE_LABEL,
   audio: '音频',
   document: '文档',
   other: '其他',

@@ -22,13 +22,19 @@
 
 ### Requirement: 季集特典树
 
-系统 SHALL 为每个作品持久化 seasons、episodes、extras，并在作品详情中返回。正片集数 SHALL 等于 episodes 数量，MUST NOT 计入 extras。Episode 与 extra MUST 关联库内 files 行以便 content 播放。
+系统 SHALL 为每个作品持久化 seasons、episodes、extras，并在作品详情中返回。正片集数 SHALL 等于 episodes 数量，MUST NOT 计入 extras。Episode 与 extra MUST 关联库内 files 行以便 content 播放。每一集与特典视频 MUST 写入与 video 同类的探测字段（时长、宽高）。Episode MAY 关联 `cover_file_id`。番剧 SHALL 存储作品默认字幕组与集级覆盖，外挂字幕为 `files.role=subtitle`。AV SHALL 通过 `performers` 多对多关联女优。
 
 #### Scenario: 详情含树
 
 - **WHEN** 一部含两集与一条特典的作品被 GET
-- **THEN** 详情含两 episode、一 extra，正片集数字段为 2
+- **THEN** 详情含两 episode、一 extra，正片集数字段为 2；每集含探测字段
 - **对应测试**：`tests.md` T3
+
+#### Scenario: 集封面与女优
+
+- **WHEN** 两集各带 jpg 且 AV 作品绑定两名女优
+- **THEN** 各 episode 有 cover_file_id；详情 performers 长度为 2
+- **对应测试**：`tests.md` T12 T13
 
 ### Requirement: 目录导入成一部作品
 

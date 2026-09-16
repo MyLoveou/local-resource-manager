@@ -27,7 +27,7 @@
       <p class="hint">选择来源</p>
       <n-radio-group v-model:value="sourceKind">
         <n-space>
-          <n-radio :value="SourceKind.FILE">文件</n-radio>
+          <n-radio v-if="!isSeriesResourceType(resourceType)" :value="SourceKind.FILE">文件</n-radio>
           <n-radio :value="SourceKind.DIRECTORY">文件夹</n-radio>
         </n-space>
       </n-radio-group>
@@ -65,6 +65,7 @@ const {
   job,
   busy,
   errorMessage,
+  isSeriesResourceType,
   open,
   close,
   goSource,

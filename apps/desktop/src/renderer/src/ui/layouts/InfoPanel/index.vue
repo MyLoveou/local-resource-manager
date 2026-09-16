@@ -6,8 +6,38 @@
           alt="封面" decoding="async" @click="openViewerFromCover" />
         <div class="info-panel-title" :title="resource.title">{{ resource.title }}</div>
         <div class="info-panel-meta">类型 {{ typeLabel }}</div>
-        <div class="info-panel-meta">格式 {{ formatLabel }}</div>
-        <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
+        <template v-if="isSeries">
+          <div
+            v-for="season in resource.seasons ?? []"
+            :key="season.id ?? season.seasonNumber"
+            class="info-panel-season"
+          >
+            <div class="info-panel-label">第 {{ season.seasonNumber }} 季</div>
+            <button
+              v-for="ep in season.episodes ?? []"
+              :key="ep.fileId"
+              type="button"
+              class="info-panel-episode"
+              @click="playEpisode(ep.fileId)"
+            >
+              {{ episodeButtonLabel(ep) }}
+            </button>
+          </div>
+          <div v-if="(resource.extras ?? []).length" class="info-panel-label">特典</div>
+          <button
+            v-for="extra in resource.extras ?? []"
+            :key="extra.fileId"
+            type="button"
+            class="info-panel-episode"
+            @click="playEpisode(extra.fileId)"
+          >
+            {{ extra.title || '特典' }}
+          </button>
+        </template>
+        <template v-else>
+          <div class="info-panel-meta">格式 {{ formatLabel }}</div>
+          <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
+        </template>
         <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
         <div v-if="resource.status === 'trashed'" class="info-panel-meta">
           删除 {{ resource.deletedAt || '—' }}
@@ -15,7 +45,7 @@
         <template v-if="isImage">
           <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
         </template>
-        <template v-else>
+        <template v-else-if="!isSeries">
           <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
           <div class="info-panel-meta">清晰度 {{ clarityText }}</div>
           <div class="info-panel-meta">时长 {{ durationLabel }}</div>
@@ -118,7 +148,7 @@ import {
 } from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { storeToRefs } from 'pinia'
-import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo } from '@/domain'
+import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
   FILE_ROLE,
@@ -129,6 +159,7 @@ import {
   formatDuration,
   formatFps,
   formatResolution,
+  isSeriesResourceType,
   qualityLabel,
 } from '@/domain'
 
@@ -198,6 +229,9 @@ const typeLabel = computed(() =>
 )
 const isVideo = computed(() => resource.value?.type === 'video')
 const isImage = computed(() => resource.value?.type === 'image')
+const isSeries = computed(() =>
+  resource.value != null && isSeriesResourceType(resource.value.type)
+)
 
 /** 图片主文件即封面，不提供更换封面；仅视频可换海报。 */
 const canChangeCover = computed(() => isVideo.value)
@@ -548,6 +582,20 @@ function openViewerFromCover(): void {
   imageViewer.open(id, ids)
 }
 
+function playEpisode(fileId: number): void {
+  const id = resource.value?.id
+  if (id == null) return
+  videoPlayer.open(id, [id], fileId)
+}
+
+function episodeButtonLabel(ep: SeriesEpisode): string {
+  const num = String(ep.episodeNumber).padStart(2, '0')
+  const dur = formatDuration(ep.duration)
+  const title = ep.title?.trim()
+  if (title) return `E${num} ${title} · ${dur}`
+  return `E${num} · ${dur}`
+}
+
 async function runShell(
   action: (row: Resource | null) => Promise<string | null>
 ): Promise<void> {
@@ -734,6 +782,29 @@ async function handlePurge(): Promise<void> {
   margin-top: 8px;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.info-panel-season {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.info-panel-episode {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.info-panel-episode:hover {
+  background: #f3f4f6;
 }
 
 .info-panel-tags {

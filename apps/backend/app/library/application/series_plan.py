@@ -1,0 +1,203 @@
+"""番剧/AV 目录自动分组。无法识别则返回 None，整夹不入库。
+
+文件名按 Anitomy 思路切 token：方括号里的独立数字是集号，关键字是特典；
+不针对某一家字幕组写死整条文件名。
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+from app.shared.media_types import (
+    SERIES_EXTRA_DIR_MARKERS,
+    SERIES_EXTRA_TOKEN_PREFIXES,
+    SERIES_EXTRA_TOKENS,
+)
+
+Kind = Literal["episode", "extra"]
+
+_SEASON_DIR = re.compile(
+    r"^(?:season[\s._-]*(\d+)|s(\d{1,2})|第\s*(\d+)\s*季)$",
+    re.IGNORECASE,
+)
+_SXXEXX = re.compile(r"(?i)S(\d{1,2})E(\d{1,3})")
+_EXTRA_INLINE = re.compile(
+    r"(?i)(?:^|[\s._\-\[(])(?:NCED|NCOP|OVA|OAD|SPECIAL|EXTRA|特典|(?:SP|MENU|PV|CM|NC)\d*)(?:$|[\s._\-\[(\])])"
+)
+_E = re.compile(r"(?i)(?:^|[\s._\-\[(])(?:E|EP|Episode)[\s._-]?(\d{1,3})(?=$|[\s._\-\])])")
+_DASH = re.compile(r"\s-\s(\d{1,3})(?:\s|\.|\[|$)")
+_ZH = re.compile(r"第(\d{1,3})[话話集回]")
+_LEAD = re.compile(r"^(\d{1,3})(?:[\s._-]|$)")
+_PURE_EP = re.compile(r"^\d{1,3}$")
+_TOKEN_SPLIT = re.compile(r"[\[\]()]+")
+_DIR_SPLIT = re.compile(r"[&+,]+")
+
+
+@dataclass(frozen=True)
+class PlannedItem:
+    """一条待复制的集或特典。"""
+
+    src: Path
+    kind: Kind
+    season: int
+    episode: int | None
+    dest_rel: str
+    title: str | None
+
+
+def _int_group(match: re.Match[str]) -> int:
+    for value in match.groups():
+        if value is not None:
+            return int(value)
+    raise ValueError("empty season match")
+
+
+def season_from_dir_name(name: str) -> int | None:
+    """Season 01 / S01 / 第1季。"""
+    match = _SEASON_DIR.match(name.strip())
+    if match is None:
+        return None
+    return _int_group(match)
+
+
+def _season_in_path(root: Path, src: Path) -> int | None:
+    try:
+        relative = src.parent.resolve().relative_to(root.resolve())
+    except ValueError:
+        return None
+    for part in relative.parts:
+        number = season_from_dir_name(part)
+        if number is not None:
+            return number
+    return None
+
+
+def filename_tokens(stem: str) -> list[str]:
+    """去掉 []() 后的片段，对应 Anitomy 的 bracket token。"""
+    return [piece.strip() for piece in _TOKEN_SPLIT.split(stem) if piece.strip()]
+
+
+def _token_is_extra(token: str) -> bool:
+    lowered = token.strip().lower()
+    if lowered in SERIES_EXTRA_TOKENS:
+        return True
+    for prefix in SERIES_EXTRA_TOKEN_PREFIXES:
+        rest = lowered[len(prefix) :] if lowered.startswith(prefix) else None
+        if rest is None:
+            continue
+        if rest == "" or rest.isdigit():
+            return True
+    return False
+
+
+def _dir_is_extra(part: str) -> bool:
+    lowered = part.strip().lower()
+    if lowered in SERIES_EXTRA_DIR_MARKERS or "特典" in part:
+        return True
+    for piece in _DIR_SPLIT.split(lowered):
+        piece = piece.strip()
+        if piece in SERIES_EXTRA_DIR_MARKERS:
+            return True
+    return False
+
+
+def _is_extra(root: Path, path: Path) -> bool:
+    """目录关键字或文件名 token 命中特典表。"""
+    if _SXXEXX.search(path.stem):
+        return False
+    if _EXTRA_INLINE.search(path.stem):
+        return True
+    if any(_token_is_extra(token) for token in filename_tokens(path.stem)):
+        return True
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return any(_dir_is_extra(part) for part in relative.parts[:-1])
+
+
+def _episode_from_tokens(stem: str) -> int | None:
+    """独立数字 token，如 [01]；1080P 不是纯数字故不会误伤。"""
+    for token in filename_tokens(stem):
+        if _PURE_EP.fullmatch(token):
+            number = int(token)
+            if 1 <= number <= 999:
+                return number
+    return None
+
+
+def episode_number_from_stem(stem: str) -> int | None:
+    match = _SXXEXX.search(stem)
+    if match:
+        return int(match.group(2))
+    for pattern in (_E, _DASH, _ZH, _LEAD):
+        match = pattern.search(stem)
+        if match:
+            return int(match.group(1))
+    return _episode_from_tokens(stem)
+
+
+def sxx_season_from_stem(stem: str) -> int | None:
+    match = _SXXEXX.search(stem)
+    return int(match.group(1)) if match else None
+
+
+def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | None:
+    """全部可自动识别才返回计划；否则 None。"""
+    if not videos:
+        return None
+    extras: list[Path] = []
+    episodes: list[Path] = []
+    for path in videos:
+        if _is_extra(root, path):
+            extras.append(path)
+        else:
+            episodes.append(path)
+    if not episodes and not extras:
+        return None
+
+    if any(_season_in_path(root, path) is not None for path in episodes):
+        if any(_season_in_path(root, path) is None for path in episodes):
+            return None
+        mode = "dir"
+    elif episodes and all(sxx_season_from_stem(path.stem) is not None for path in episodes):
+        mode = "sxx"
+    elif episodes and all(episode_number_from_stem(path.stem) is not None for path in episodes):
+        mode = "flat"
+    elif not episodes and extras:
+        mode = "extras"
+    else:
+        return None
+
+    items: list[PlannedItem] = []
+    seen: set[tuple[int, int]] = set()
+    for path in sorted(episodes, key=lambda item: item.as_posix().lower()):
+        if mode == "dir":
+            season = _season_in_path(root, path)
+            episode = episode_number_from_stem(path.stem)
+        elif mode == "sxx":
+            season = sxx_season_from_stem(path.stem)
+            episode = episode_number_from_stem(path.stem)
+        else:
+            season = 1
+            episode = episode_number_from_stem(path.stem)
+        if season is None or episode is None:
+            return None
+        key = (season, episode)
+        if key in seen:
+            return None
+        seen.add(key)
+        dest = f"seasons/{season:02d}/S{season:02d}E{episode:02d}{path.suffix.lower()}"
+        items.append(PlannedItem(path, "episode", season, episode, dest, None))
+
+    used_names: set[str] = set()
+    for index, path in enumerate(sorted(extras, key=lambda item: item.name.lower())):
+        name = path.name
+        if name.lower() in used_names:
+            name = f"{path.stem}_{index}{path.suffix.lower()}"
+        used_names.add(name.lower())
+        items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", path.stem))
+    return items

@@ -23,10 +23,13 @@ class PackageLayout:
 
 IMAGE_LAYOUT = PackageLayout(ResourceType.IMAGE, cover_falls_back_to_primary=True)
 VIDEO_LAYOUT = PackageLayout(ResourceType.VIDEO, cover_falls_back_to_primary=False)
+SERIES_LAYOUT = PackageLayout(ResourceType.ANIME, cover_falls_back_to_primary=True)
 
 _LAYOUTS = {
     ResourceType.IMAGE: IMAGE_LAYOUT,
     ResourceType.VIDEO: VIDEO_LAYOUT,
+    ResourceType.ANIME: SERIES_LAYOUT,
+    ResourceType.AV: PackageLayout(ResourceType.AV, cover_falls_back_to_primary=True),
 }
 
 

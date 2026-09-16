@@ -132,7 +132,9 @@ function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   }
   const item = items.value.find((row) => row.id === itemId)
   if (selection.selectedId === itemId) {
-    Player[item!.type as keyof typeof Player].open(itemId, ids(item!.type))
+    if (item && item.type in Player) {
+      Player[item.type as keyof typeof Player].open(itemId, ids(item.type))
+    }
     return
   }
   selection.select(itemId)

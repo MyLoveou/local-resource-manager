@@ -3,26 +3,23 @@
 ## 状态
 
 - change：`anime-av-types`
-- 阶段：`规划待确认`
-- 最后更新：2026-09-15 23:52 · 已按季/集树+特典+专用表改规划；待字段清单收口后 apply
+- 阶段：`规划待确认` · 第一刀 A-min
+- 最后更新：2026-09-17 · 开发流程见实现方案 §8
 
 ## 已完成
 
-- 用户拍板：必须季/集、菜单番剧、旧 video 不迁、专用模型、特典、作品一卡栏内选集
-- L1/L3 与 OpenSpec 已从「视频分栏」改为「系列聚合」
+- 需求两刀 IN/OUT；tasks 按解堵→表→导入→播 排
 
 ## 下一步
 
-1. 确认需求 §9 四问（或采用文中建议）
-2. 授权 apply 后在 `feat/anime-av-types` 实现（勿在 master 直接铺未完成路由）
-3. 本环境未装到「绿色资源管理器」；实现时按 Jellyfin Season/Specials/extras 对齐
+1. 用户确认「可以按此实现」第一刀后 apply
+2. 分支 `feat/anime-av-types`；先改 `anime` 枚举+CHECK+Player close
 
 ## 阻塞
 
-- 待你确认：profile 字段、散文件导入、OVA 归类
-- 技术阻塞：无
+- 待授权 apply（未授权不写业务代码）
+- 工作区已有错误占位：`anime-series` 与 CHECK 不一致，切页会抛错
 
-## 关键路径
+## 规范待决断
 
-- `docs/requirements/features/anime-av-types/需求.md`
-- `openspec/changes/anime-av-types/`
+- 无新拍板

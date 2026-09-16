@@ -23,6 +23,7 @@
 5. 分层：UI → application → domain ← infrastructure；domain 不依赖上层。
 6. 先交付媒体库闭环，再上不完整工作台；远期类型与资产域可插拔。
 7. 新表必须走 `shared/db/migrations/NNNN_*.sql`。
+8. A 阶段先完成所有库类型的导入与最低消费（打开/读/播/启动），高级能力后置（D-20260917-01）。
 
 ## 禁止（已确认）
 

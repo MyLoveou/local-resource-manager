@@ -24,10 +24,12 @@ class ApiModel(BaseModel):
 
 
 class ResourceType(str, Enum):
-    """资源类型（MVP：图片/视频，预留番剧等扩展）。"""
+    """资源类型。anime/av 是作品行，不是单集文件。"""
 
     IMAGE = "image"
     VIDEO = "video"
+    ANIME = "anime"
+    AV = "av"
 
 
 class ResourceStatus(str, Enum):
@@ -38,8 +40,38 @@ class ResourceStatus(str, Enum):
     LOST = "lost"
 
 
+class SeriesEpisode(ApiModel):
+    """一集：挂在季下，指向 files 行，本身不是 Resource。"""
+
+    id: int | None = None
+    file_id: int
+    episode_number: int
+    title: str | None = None
+    duration: float | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+class SeriesSeason(ApiModel):
+    """一季。"""
+
+    id: int | None = None
+    season_number: int
+    title: str | None = None
+    episodes: list[SeriesEpisode] = Field(default_factory=list)
+
+
+class SeriesExtra(ApiModel):
+    """特典：挂在作品下，不计入正片集数。"""
+
+    id: int | None = None
+    file_id: int
+    title: str = ""
+    duration: float | None = None
+
+
 class Resource(ApiModel):
-    """资源（图片/视频）—— 元数据主体，核心字段内嵌本表。"""
+    """库内一条资源。图片/视频是单文件作品；anime/av 是整部作品，集在 seasons/episodes。"""
 
     id: int | None = None
     type: ResourceType
@@ -60,6 +92,8 @@ class Resource(ApiModel):
     tags: list["Tag"] = Field(default_factory=list)
     files: list["ResourceFile"] = Field(default_factory=list)
     todos: list["ResourceTodo"] = Field(default_factory=list)
+    seasons: list[SeriesSeason] = Field(default_factory=list)
+    extras: list[SeriesExtra] = Field(default_factory=list)
 
     @property
     def is_trashed(self) -> bool:

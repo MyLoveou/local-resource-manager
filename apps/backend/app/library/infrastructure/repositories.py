@@ -13,15 +13,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.orm import (
     CategoryRow,
     DownloadTaskRow,
+    EpisodeRow,
+    ExtraRow,
     FileRow,
     ResourceRow,
     ResourceTagRow,
     ResourceTodoRow,
     ScrapeJobRow,
+    SeasonRow,
     TagRow,
 )
-from app.shared.media_types import FILE_ROLE_THUMBNAIL
-from app.shared.models import Category, Resource, ResourceFile, ResourceStatus, ResourceTodo, ResourceType, Tag
+from app.shared.media_types import FILE_ROLE_THUMBNAIL, is_series_type
+from app.shared.models import (
+    Category,
+    Resource,
+    ResourceFile,
+    ResourceStatus,
+    ResourceTodo,
+    ResourceType,
+    SeriesEpisode,
+    SeriesExtra,
+    SeriesSeason,
+    Tag,
+)
 
 
 def _now() -> str:
@@ -210,7 +224,72 @@ class ResourceRepository:
             for t in todos
         ]
         self._apply_thumbnail_path(resource)
+        await self._attach_series_tree(resource)
         return resource
+
+    async def _attach_series_tree(self, resource: Resource) -> None:
+        """详情才装季集；列表不走 hydrate。"""
+        if resource.id is None or not is_series_type(resource.type):
+            return
+        files_by_id = {f.id: f for f in resource.files if f.id is not None}
+        season_rows = (
+            await self._session.execute(
+                select(SeasonRow)
+                .where(SeasonRow.resource_id == resource.id)
+                .order_by(SeasonRow.sort_index, SeasonRow.season_number, SeasonRow.id)
+            )
+        ).scalars().all()
+        seasons: list[SeriesSeason] = []
+        for season in season_rows:
+            ep_rows = (
+                await self._session.execute(
+                    select(EpisodeRow)
+                    .where(EpisodeRow.season_id == season.id, EpisodeRow.status == "active")
+                    .order_by(EpisodeRow.sort_index, EpisodeRow.episode_number, EpisodeRow.id)
+                )
+            ).scalars().all()
+            episodes: list[SeriesEpisode] = []
+            for episode in ep_rows:
+                media = files_by_id.get(episode.file_id)
+                episodes.append(
+                    SeriesEpisode(
+                        id=episode.id,
+                        file_id=episode.file_id,
+                        episode_number=episode.episode_number,
+                        title=episode.title,
+                        duration=media.duration if media else None,
+                        width=media.width if media else None,
+                        height=media.height if media else None,
+                    )
+                )
+            seasons.append(
+                SeriesSeason(
+                    id=season.id,
+                    season_number=season.season_number,
+                    title=season.title,
+                    episodes=episodes,
+                )
+            )
+        extra_rows = (
+            await self._session.execute(
+                select(ExtraRow)
+                .where(ExtraRow.resource_id == resource.id, ExtraRow.status == "active")
+                .order_by(ExtraRow.sort_index, ExtraRow.id)
+            )
+        ).scalars().all()
+        extras: list[SeriesExtra] = []
+        for extra in extra_rows:
+            media = files_by_id.get(extra.file_id)
+            extras.append(
+                SeriesExtra(
+                    id=extra.id,
+                    file_id=extra.file_id,
+                    title=extra.title,
+                    duration=media.duration if media else None,
+                )
+            )
+        resource.seasons = seasons
+        resource.extras = extras
 
     def _apply_thumbnail_path(self, resource: Resource) -> None:
         """从已加载 files 填 thumbnail_path，不改 cover_path。"""
@@ -391,6 +470,82 @@ class ResourceRepository:
             fps=fps,
             bitrate=bitrate,
             created_at=ts,
+        )
+        self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def add_season(
+        self,
+        resource_id: int,
+        season_number: int,
+        *,
+        title: str | None = None,
+        sort_index: int = 0,
+        commit: bool = True,
+    ) -> SeasonRow:
+        """写入一季。"""
+        row = SeasonRow(
+            resource_id=resource_id,
+            season_number=season_number,
+            title=title,
+            sort_index=sort_index,
+        )
+        self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def add_episode(
+        self,
+        season_id: int,
+        file_id: int,
+        episode_number: int,
+        *,
+        title: str | None = None,
+        sort_index: int = 0,
+        commit: bool = True,
+    ) -> EpisodeRow:
+        """写入一集。"""
+        row = EpisodeRow(
+            season_id=season_id,
+            file_id=file_id,
+            episode_number=episode_number,
+            title=title,
+            sort_index=sort_index,
+            status="active",
+        )
+        self._session.add(row)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def add_extra(
+        self,
+        resource_id: int,
+        file_id: int,
+        *,
+        title: str,
+        sort_index: int = 0,
+        commit: bool = True,
+    ) -> ExtraRow:
+        """写入特典。"""
+        row = ExtraRow(
+            resource_id=resource_id,
+            file_id=file_id,
+            title=title,
+            sort_index=sort_index,
+            status="active",
         )
         self._session.add(row)
         if commit:

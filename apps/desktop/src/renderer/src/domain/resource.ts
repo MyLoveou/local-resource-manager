@@ -3,8 +3,8 @@
  * 后端对应：apps/backend/app/shared/models.py
  */
 
-/** 资源类型（MVP：图片/视频，预留扩展） */
-export type ResourceType = 'image' | 'video'
+/** 资源类型。anime/av 是作品，不是单集。 */
+export type ResourceType = 'image' | 'video' | 'anime' | 'av'
 
 /** 资源状态：正常 / 回收站（软删）/ 文件丢失 */
 export type ResourceStatus = 'active' | 'trashed' | 'lost'
@@ -39,6 +39,33 @@ export interface Resource {
   todos?: ResourceTodo[]
   /** 独立分类词条，不是资源 type */
   category?: Category | null
+  /** 仅 anime/av 详情：季集树 */
+  seasons?: SeriesSeason[]
+  extras?: SeriesExtra[]
+}
+
+export interface SeriesEpisode {
+  id?: number
+  fileId: number
+  episodeNumber: number
+  title?: string | null
+  duration?: number | null
+  width?: number | null
+  height?: number | null
+}
+
+export interface SeriesSeason {
+  id?: number
+  seasonNumber: number
+  title?: string | null
+  episodes?: SeriesEpisode[]
+}
+
+export interface SeriesExtra {
+  id?: number
+  fileId: number
+  title: string
+  duration?: number | null
 }
 
 /** 资源关联的物理文件（一个资源可含多文件） */

@@ -56,6 +56,45 @@ class ResourceTagRow(Base):
     )
 
 
+class SeasonRow(Base):
+    """作品的一季。"""
+
+    __tablename__ = "seasons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id", ondelete="CASCADE"))
+    season_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String)
+    sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class EpisodeRow(Base):
+    """一集，指向 files。"""
+
+    __tablename__ = "episodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id", ondelete="CASCADE"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"))
+    episode_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String)
+    sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
+
+
+class ExtraRow(Base):
+    """特典文件。"""
+
+    __tablename__ = "extras"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id", ondelete="CASCADE"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String, nullable=False, default="")
+    sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="active")
+
+
 class FileRow(Base):
     __tablename__ = "files"
 

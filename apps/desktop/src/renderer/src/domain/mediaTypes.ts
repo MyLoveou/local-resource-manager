@@ -4,6 +4,7 @@
  * 按 ResourceType 查表，禁止调用处 if/else 选过滤表。
  */
 import type { ResourceType } from './resource'
+import { SourceKind } from './constants'
 
 export const IMAGE_EXTENSIONS = [
   'jpg',
@@ -23,6 +24,17 @@ export const SUBTITLE_EXTENSIONS = ['srt', 'ass', 'ssa', 'vtt'] as const
 export const RESOURCE_TYPE_LABEL: Record<ResourceType, string> = {
   image: '图片',
   video: '视频',
+  anime: '番剧',
+  av: 'AV',
+}
+
+export const SERIES_RESOURCE_TYPES: readonly ResourceType[] = ['anime', 'av']
+
+export const DEFAULT_IMPORT_SOURCE_KIND: Record<ResourceType, SourceKind> = {
+  image: SourceKind.FILE,
+  video: SourceKind.FILE,
+  anime: SourceKind.DIRECTORY,
+  av: SourceKind.DIRECTORY,
 }
 
 export interface FileDialogFilter {
@@ -37,6 +49,14 @@ export const RESOURCE_FILE_FILTERS: Record<ResourceType, FileDialogFilter> = {
   },
   video: {
     name: RESOURCE_TYPE_LABEL.video,
+    extensions: [...VIDEO_EXTENSIONS],
+  },
+  anime: {
+    name: RESOURCE_TYPE_LABEL.anime,
+    extensions: [...VIDEO_EXTENSIONS],
+  },
+  av: {
+    name: RESOURCE_TYPE_LABEL.av,
     extensions: [...VIDEO_EXTENSIONS],
   },
 }
@@ -71,4 +91,8 @@ export const IMPORT_POLL_INTERVAL_MS = 300
 
 export function fileFilterForResourceType(type: ResourceType): FileDialogFilter | undefined {
   return RESOURCE_FILE_FILTERS[type]
+}
+
+export function isSeriesResourceType(type: ResourceType): boolean {
+  return (SERIES_RESOURCE_TYPES as readonly string[]).includes(type)
 }

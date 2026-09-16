@@ -10,6 +10,8 @@ import {
   IMPORT_POLL_INTERVAL_MS,
   SourceKind,
   fileFilterForResourceType,
+  DEFAULT_IMPORT_SOURCE_KIND,
+  isSeriesResourceType,
 } from '@/domain'
 import type { ResourceType } from '@/domain'
 
@@ -44,6 +46,7 @@ export function useLibraryImport() {
   }
 
   function goSource(): void {
+    sourceKind.value = DEFAULT_IMPORT_SOURCE_KIND[resourceType.value]
     step.value = 'source'
   }
 
@@ -116,6 +119,7 @@ export function useLibraryImport() {
     job,
     busy,
     errorMessage,
+    isSeriesResourceType,
     open,
     close,
     goSource,

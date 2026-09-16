@@ -9,19 +9,21 @@
 ## What Changes
 
 - 作品级 `resources.type`：`anime`、`av`（菜单「番剧」）。旧 `video` 行不迁移。
-- 专属 `anime_profiles` / `av_profiles` + `seasons` / `episodes` / `extras`。
-- 网格一张作品封面；信息栏季/集/特典；选集或特典播放（复用视频 overlay）。
-- 导入以 **一目录一部作品** 解析 Season / SxxExx / extras|特典|Specials。
-- **BREAKING：** 前端占位 `/anime-series` 改为 `/anime`；列表 type 不再用 `anime-series`。
+- 专属 `anime_profiles` / `av_profiles` + `seasons` / `episodes` / `extras` + `performers` M2M；集可有封面、字幕组、外挂字幕 files。
+- 网格一张作品封面；信息栏季/集/特典、两种集列表；选集播放（复用 overlay）。
+- 导入：异构目录 **预览确认** 后写入规范包（`SxxExx`）；系列内增删集；批量规范命名。
+- 每集/特典按视频探测（时长、分辨率）。
+- **BREAKING：** 占位 `/anime-series` 改为 `/anime`。
 
-不交付：刮削、旧视频改类型、合集模块、新播放器、Proactor 10054。
+不交付：刮削、旧视频改类型、合集、新播放器、overlay 内切字幕轨、10054。
 
 ## Capabilities
 
 ### New Capabilities
 
-- `library-series-tree`：作品 Resource + 季/集/特典/profile 持久化与详情
-- `desktop-series-browse`：番剧/AV 页、作品卡、信息栏选集播放与特典分组
+- `library-series-tree`：作品 Resource + 季/集/特典/profile/女优/字幕轨与详情
+- `desktop-series-browse`：番剧/AV 页、作品卡、两种集列表、信息栏选集播放与特典
+- `library-series-maintain`：预览入库、系列内增删、规范命名/批量重命名
 
 ### Modified Capabilities
 
@@ -37,4 +39,4 @@
 
 ## 开放问题
 
-见需求 §9（profile 字段清单、散文件导入、OVA 归季还是 extras）。
+已关，见需求 §9。参考产品对照见需求 §11（模型与能力，非实现细节）。

@@ -57,6 +57,17 @@ class ResourcePackage:
         """复制字幕并使用给定文件名。"""
         return self.put_role("subtitle", src, dest_name)
 
+    def put_relative(self, src: Path, relative: str) -> Path:
+        """复制到包内相对路径（季集目录）。"""
+        self.ensure_dir()
+        dest = (self.root / relative).resolve()
+        try:
+            dest.relative_to(self.root.resolve())
+        except ValueError as exc:
+            raise ValueError("destination outside package") from exc
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        return self._ops.copy(src, dest)
+
     def put_primary(self, src: Path) -> Path:
         return self.put_role("primary", src)
 

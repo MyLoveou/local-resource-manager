@@ -3,24 +3,18 @@
 ## 状态
 
 - change：`anime-av-types`
-- 阶段：`规划待确认`
-- 最后更新：2026-09-15 23:52 · 系列树规划已替换旧「每集一资源」草案
-
-## 已完成
-
-- proposal/specs/design/tasks/tests 与中文需求同范围
+- 阶段：第一刀 A-min 代码已落地；待跑测与重启 Electron
+- 最后更新：2026-09-17
 
 ## 下一步
 
-1. 关需求 §9
-2. `openspec instructions apply --change "anime-av-types"`
-3. 在分支 `feat/anime-av-types` 按文件清单实现
+1. `apps/backend/.venv/Scripts/python -m unittest discover -s apps/backend/tests -p "test_*.py"`
+2. `pnpm --filter desktop typecheck`
+3. 重启 Electron（任务 4.3）
+4. 手工 T5/T6/T8/T9
+
+第二刀 5.x 未做。
 
 ## 阻塞
 
-- 待你确认：§9
-- 技术阻塞：无
-
-## 规范待决断
-
-- 系列模块提前进 A；作品=Resource，集/特典=子表
+- 无

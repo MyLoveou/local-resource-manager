@@ -11,6 +11,7 @@ from app.library.application.packages.layouts import layout_for
 from app.library.application.schemas import ImportCreate, ImportJob, ImportJobCreated, SourceKind
 from app.library.infrastructure.import_job_store import ImportJobState, job_store
 from app.shared.db.db import get_session_factory
+from app.shared.media_types import is_series_type
 
 router = APIRouter(prefix="/imports", tags=["library-imports"])
 _import_tasks: set[asyncio.Task[None]] = set()
@@ -20,6 +21,8 @@ def validate_import(body: ImportCreate) -> str | None:
     """返回错误文案；合法则 None。"""
     if importer_for(body.type) is None or layout_for(body.type) is None:
         return "unsupported type"
+    if is_series_type(body.type) and body.source_kind != SourceKind.DIRECTORY:
+        return "series import requires a directory"
     if body.source_kind == SourceKind.DIRECTORY:
         if len(body.paths) != 1:
             return "directory import requires exactly one path"

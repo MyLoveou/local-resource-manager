@@ -18,11 +18,15 @@ import { resolveLibraryMediaUrl } from '@/infrastructure/http'
 
 const player = useVideoPlayerStore()
 
-const videoSrc = computed(() =>
-  player.currentId == null || !player.visible
-    ? ''
-    : resolveLibraryMediaUrl(`/library/resources/${player.currentId}/content`)
-)
+const videoSrc = computed(() => {
+  if (player.currentId == null || !player.visible) return ''
+  if (player.currentFileId != null) {
+    return resolveLibraryMediaUrl(
+      `/library/resources/${player.currentId}/files/${player.currentFileId}/content`
+    )
+  }
+  return resolveLibraryMediaUrl(`/library/resources/${player.currentId}/content`)
+})
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false

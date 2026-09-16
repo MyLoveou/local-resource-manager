@@ -10,12 +10,14 @@ export const useVideoPlayerStore = defineStore('videoPlayer', () => {
   const visible = ref(false)
   const playlistIds = ref<number[]>([])
   const currentId = ref<number | null>(null)
+  const currentFileId = ref<number | null>(null)
   const selection = useSelectionStore()
 
-  function open(id: number, ids: number[]): void {
+  function open(id: number, ids: number[], fileId?: number | null): void {
     logger.info('视频播放器打开2', id, ids)
     playlistIds.value = ids
     currentId.value = id
+    currentFileId.value = fileId ?? null
     visible.value = true
     selection.select(id)
   }
@@ -23,6 +25,7 @@ export const useVideoPlayerStore = defineStore('videoPlayer', () => {
   function close(): void {
     visible.value = false
     currentId.value = null
+    currentFileId.value = null
     playlistIds.value = []
   }
 
@@ -32,7 +35,7 @@ export const useVideoPlayerStore = defineStore('videoPlayer', () => {
   }
 
 
-  return { visible, playlistIds, currentId, open, close }
+  return { visible, playlistIds, currentId, currentFileId, open, close }
 })
 
 if (import.meta.hot) {
