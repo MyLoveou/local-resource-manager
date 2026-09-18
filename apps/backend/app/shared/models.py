@@ -30,6 +30,18 @@ class ResourceType(str, Enum):
     VIDEO = "video"
     ANIME = "anime"
     AV = "av"
+    AUDIO = "audio"
+    NOVEL = "novel"
+    GAME = "game"
+    MODEL = "model"
+    COMIC = "comic"
+
+
+class StorageKind(str, Enum):
+    """文件落盘：库内副本 / 源路径登记。"""
+
+    OWNED = "owned"
+    INDEXED = "indexed"
 
 
 class ResourceStatus(str, Enum):
@@ -75,6 +87,7 @@ class Resource(ApiModel):
 
     id: int | None = None
     type: ResourceType
+    storage_kind: StorageKind = StorageKind.OWNED
     title: str = ""
     description: str | None = None
     author: str | None = None

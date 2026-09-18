@@ -24,6 +24,7 @@ class ResourceRow(Base):
     last_scraped_at: Mapped[str | None] = mapped_column(String)
     scraped_source: Mapped[str | None] = mapped_column(String)
     extra: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    storage_kind: Mapped[str] = mapped_column(String, nullable=False, default="owned")
     category_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("categories.id", ondelete="SET NULL")
     )

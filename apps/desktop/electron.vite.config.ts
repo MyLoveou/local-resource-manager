@@ -24,7 +24,7 @@ export default defineConfig({
     plugins: [vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => videoJsElements.has(tag),
+          isCustomElement: (tag) => videoJsElements.has(tag) || tag === 'model-viewer',
         }
       }
     })],

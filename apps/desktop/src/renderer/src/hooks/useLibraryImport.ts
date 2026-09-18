@@ -1,7 +1,7 @@
 /**
  * 导入向导：选类型 → 选文件/目录 → 轮询后端 job。
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { createImport, getImportJob } from '@/infrastructure/http'
 import type { ImportJob, ImportSourceKind } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
@@ -11,7 +11,9 @@ import {
   SourceKind,
   fileFilterForResourceType,
   DEFAULT_IMPORT_SOURCE_KIND,
-  isSeriesResourceType,
+  allowsFileSource,
+  profileFor,
+  type StorageKind,
 } from '@/domain'
 import type { ResourceType } from '@/domain'
 
@@ -27,10 +29,14 @@ export function useLibraryImport() {
   const step = ref<'type' | 'source' | 'progress'>('type')
   const resourceType = ref<ResourceType>('image')
   const sourceKind = ref<ImportSourceKind>(SourceKind.FILE)
+  const storageKind = ref<StorageKind>('owned')
   const job = ref<ImportJob | null>(null)
   const busy = ref(false)
   const picking = ref(false)
   const errorMessage = ref('')
+  const allowsMultipleStorage = computed(
+    () => (profileFor(resourceType.value)?.allowedStorage.length ?? 1) > 1
+  )
 
   function open(): void {
     visible.value = true
@@ -46,7 +52,9 @@ export function useLibraryImport() {
   }
 
   function goSource(): void {
+    const profile = profileFor(resourceType.value)
     sourceKind.value = DEFAULT_IMPORT_SOURCE_KIND[resourceType.value]
+    storageKind.value = profile?.defaultStorage ?? 'owned'
     step.value = 'source'
   }
 
@@ -85,6 +93,7 @@ export function useLibraryImport() {
       const created = await createImport({
         type: resourceType.value,
         sourceKind: sourceKind.value,
+        storageKind: storageKind.value,
         paths,
       })
       let current = await getImportJob(created.jobId)
@@ -116,10 +125,12 @@ export function useLibraryImport() {
     step,
     resourceType,
     sourceKind,
+    storageKind,
     job,
     busy,
     errorMessage,
-    isSeriesResourceType,
+    allowsFileSource,
+    allowsMultipleStorage,
     open,
     close,
     goSource,

@@ -1,51 +1,5 @@
 <template>
   <div class="resource-browser">
-    <div v-if="showToolbar" class="resource-browser__batch">
-      <template v-if="!batchMode">
-        <span v-if="isTrash">回收站 {{ total }} 项</span>
-        <n-popconfirm v-if="isTrash" positive-text="清空" negative-text="取消" @positive-click="emptyTrash">
-          <template #trigger>
-            <n-button size="tiny" type="error" ghost :disabled="batchBusy">清空回收站</n-button>
-          </template>
-          彻底删除回收站内全部条目，不可恢复。只删除库内副本，不删除你电脑上的原文件。
-        </n-popconfirm>
-        <n-button v-if="isTrash" size="tiny" :disabled="batchBusy" @click="enterBatchMode">
-          批量选择
-        </n-button>
-        <n-button v-else size="tiny" :disabled="batchBusy" @click="enterBatchMode">批量删除</n-button>
-      </template>
-      <template v-else>
-        <span>已选 {{ selectedCount }}</span>
-        <template v-if="isTrash">
-          <n-popconfirm positive-text="恢复" negative-text="取消" :disabled="selectedCount === 0"
-            @positive-click="runBatch('restore')">
-            <template #trigger>
-              <n-button size="tiny" :disabled="batchBusy || selectedCount === 0">恢复</n-button>
-            </template>
-            确定恢复所选资源？
-          </n-popconfirm>
-          <n-popconfirm positive-text="彻底删除" negative-text="取消" :disabled="selectedCount === 0"
-            @positive-click="runBatch('purge')">
-            <template #trigger>
-              <n-button size="tiny" type="error" ghost :disabled="batchBusy || selectedCount === 0">
-                彻底删除
-              </n-button>
-            </template>
-            彻底删除后不可恢复。只删除库内副本，不删除你电脑上的原文件。
-          </n-popconfirm>
-        </template>
-        <n-popconfirm v-else positive-text="移入" negative-text="取消" :disabled="selectedCount === 0"
-          @positive-click="runBatch('trash')">
-          <template #trigger>
-            <n-button size="tiny" type="error" ghost :disabled="batchBusy || selectedCount === 0">
-              移入回收站
-            </n-button>
-          </template>
-          确定将所选资源移入回收站？可稍后恢复。
-        </n-popconfirm>
-        <n-button size="tiny" :disabled="batchBusy" @click="exitBatchMode">取消</n-button>
-      </template>
-    </div>
     <p v-if="batchMessage" class="resource-browser__hint">{{ batchMessage }}</p>
     <div v-if="loading && items.length === 0" class="resource-browser__state">加载中…</div>
     <div v-else-if="error && items.length === 0" class="resource-browser__state">
@@ -67,19 +21,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
-import { NButton, NPopconfirm } from 'naive-ui'
+import { computed, onUnmounted, watch } from 'vue'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
-import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
+import { useShellBatchStore } from '@/application/stores/shellBatch'
+import { getResources, getResource, resolveCardImageUrl } from '@/infrastructure/http'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
-import { Player } from '@/static'
+import { PlayerByConsume } from '@/static'
+import { consumeKindOf, FILE_ROLE, MODEL_PREVIEW_EXTENSIONS } from '@/domain'
+import { openLaunchOrPrimary } from '@/infrastructure/shell/openLibraryFile'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
@@ -91,38 +47,16 @@ const props = defineProps<{
 const isTrash = computed(() => props.status === 'trashed')
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const shellBatch = useShellBatchStore()
 const { selectedIds } = storeToRefs(selection)
-const selectedCount = computed(() => selectedIds.value.length)
+const { batchMode, message: batchMessage, busy: batchBusy } = storeToRefs(shellBatch)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
-  type: props.type,
-  status: props.status ?? 'active',
+  type: () => props.type,
+  status: () => props.status ?? 'active',
 })
 const { batchResources } = useResourceHandle()
-const batchBusy = ref(false)
-const batchMessage = ref('')
-const batchMode = ref(false)
 
-const showToolbar = computed(() => total.value > 0 || batchMode.value)
-
-/** 浏览模式不高亮多选框，只在批量模式画选中态 */
 const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []))
-
-function enterBatchMode(): void {
-  batchMessage.value = ''
-  selection.clear()
-  batchMode.value = true
-}
-
-function exitBatchMode(): void {
-  batchMode.value = false
-  selection.clear()
-}
-
-function ids(type: ResourceType): number[] {
-  return items.value.flatMap((item) =>
-    item.id !== undefined && item.type === type ? [item.id] : []
-  )
-}
 
 function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
@@ -132,31 +66,56 @@ function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   }
   const item = items.value.find((row) => row.id === itemId)
   if (selection.selectedId === itemId) {
-    if (item && item.type in Player) {
-      Player[item.type as keyof typeof Player].open(itemId, ids(item.type))
+    if (!item) return
+    const kind = consumeKindOf(item.type)
+    if (kind == null || kind === 'overlay-series') return
+    if (kind === 'shell-open') {
+      void getResource(itemId).then((row) => openLaunchOrPrimary(row))
+      return
     }
+    if (kind === 'overlay-model') {
+      void getResource(itemId).then((row) => {
+        const format = (row.files?.find((file) => file.role === FILE_ROLE.PRIMARY)?.format ?? '').toLowerCase()
+        if ((MODEL_PREVIEW_EXTENSIONS as readonly string[]).includes(format)) {
+          PlayerByConsume[kind].open(itemId, ids(item.type))
+          return
+        }
+        void openLaunchOrPrimary(row)
+      })
+      return
+    }
+    PlayerByConsume[kind].open(itemId, ids(item.type))
     return
   }
   selection.select(itemId)
 }
 
+function ids(type: ResourceType): number[] {
+  return items.value.flatMap((item) =>
+    item.id !== undefined && item.type === type ? [item.id] : []
+  )
+}
+
 async function runBatch(action: ResourceBatchAction): Promise<void> {
   const ids = [...selectedIds.value]
   if (ids.length === 0) return
+  const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
   try {
     const result = await batchResources(action, ids)
     library.bump(null)
-    exitBatchMode()
+    if (!shellBatch.isLive(live)) return
+    shellBatch.exit()
     if (result.failed.length > 0) {
       batchMessage.value = `完成 ${result.ok.length} 项，失败 ${result.failed.length} 项`
     }
   } catch (err) {
+    if (!shellBatch.isLive(live)) return
     batchMessage.value = '批量操作失败'
     console.error(err)
   } finally {
-    batchBusy.value = false
+    if (shellBatch.isLive(live)) batchBusy.value = false
   }
 }
 
@@ -181,6 +140,7 @@ async function collectTrashedIds(): Promise<number[]> {
 }
 
 async function emptyTrash(): Promise<void> {
+  const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
   try {
@@ -192,23 +152,48 @@ async function emptyTrash(): Promise<void> {
       failed += result.failed.length
     }
     library.bump(null)
-    exitBatchMode()
+    if (!shellBatch.isLive(live)) return
+    shellBatch.exit()
     if (failed > 0) {
       batchMessage.value = `清空时有 ${failed} 项失败`
     }
   } catch (err) {
+    if (!shellBatch.isLive(live)) return
     batchMessage.value = '清空回收站失败'
     console.error(err)
   } finally {
-    batchBusy.value = false
+    if (shellBatch.isLive(live)) batchBusy.value = false
   }
 }
 
-onUnmounted(() => {
-  exitBatchMode()
-  if (props.type! in Player) {
-    Player[props.type! as keyof typeof Player].close()
+watch(
+  [isTrash, total],
+  () => {
+    shellBatch.bind({
+      context: isTrash.value ? 'trash' : 'browse',
+      emptyTrash,
+      runBatch,
+    })
+    shellBatch.setTotal(total.value)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.type,
+  (next, prev) => {
+    if (prev != null && prev !== next) {
+      const kind = consumeKindOf(prev)
+      if (kind) PlayerByConsume[kind].close()
+      shellBatch.exit()
+    }
   }
+)
+
+onUnmounted(() => {
+  shellBatch.unbind()
+  const kind = props.type ? consumeKindOf(props.type) : undefined
+  if (kind) PlayerByConsume[kind].close()
 })
 
 const gridItems = computed(() =>
@@ -234,20 +219,10 @@ const gridItems = computed(() =>
   flex-direction: column;
 }
 
-.resource-browser__batch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  padding: 8px 8px 0;
-  font-size: 13px;
-  color: #374151;
-}
-
 .resource-browser__hint {
-  margin: 4px 8px 0;
+  margin: var(--sm-space-1) var(--sm-space-2) 0;
   font-size: 12px;
-  color: #b45309;
+  color: var(--sm-color-text-muted);
 }
 
 .resource-browser__grid {
@@ -260,16 +235,17 @@ const gridItems = computed(() =>
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--sm-space-3);
   height: 100%;
-  color: #6b7280;
+  color: var(--sm-color-text-muted);
 }
 
 .resource-browser__retry {
-  border: 1px solid #d1d5db;
-  background: #fff;
-  padding: 6px 12px;
-  border-radius: 4px;
+  border: 1px solid var(--sm-color-border);
+  background: var(--sm-color-bg-surface);
+  color: var(--sm-color-text);
+  padding: 6px var(--sm-space-3);
+  border-radius: var(--sm-radius-control);
   cursor: pointer;
 }
 </style>

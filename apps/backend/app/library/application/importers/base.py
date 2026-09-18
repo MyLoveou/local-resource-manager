@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from app.shared.constants import SourceKind, is_hidden_fs_name
-from app.shared.media_types import IMPORT_EXTENSIONS, import_extensions
+from app.library.domain.type_profile import IMPORT_EXTENSIONS, import_extensions, ingest_kind, profile_for
 from app.shared.models import ResourceType
 
 
@@ -59,7 +59,28 @@ class Importer:
         return collector(paths)
 
 
-_IMPORTERS = {type_: Importer(type_) for type_ in IMPORT_EXTENSIONS}
+class PackageImporter(Importer):
+    """一目录一条作品，不把每个文件当候选。"""
+
+    def _collect_directory(self, paths: list[Path]) -> list[Path]:
+        return [paths[0].resolve()]
+
+    def matches(self, path: Path) -> bool:
+        profile = profile_for(self.type)
+        if profile is None:
+            return False
+        if path.is_dir():
+            return not is_hidden_fs_name(path.name)
+        return super().matches(path)
+
+
+def _make_importer(type_: ResourceType) -> Importer:
+    if ingest_kind(type_) == "package":
+        return PackageImporter(type_)
+    return Importer(type_)
+
+
+_IMPORTERS = {type_: _make_importer(type_) for type_ in IMPORT_EXTENSIONS}
 
 
 def importer_for(type_: ResourceType) -> Importer | None:

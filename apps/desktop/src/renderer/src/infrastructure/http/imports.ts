@@ -2,7 +2,7 @@
  * 导入任务（infrastructure/http · /library/imports）
  */
 import client from './client'
-import type { ResourceType } from '@/domain'
+import type { ResourceType, StorageKind } from '@/domain'
 import { SourceKind } from '@/domain'
 
 export type ImportSourceKind = SourceKind
@@ -10,6 +10,7 @@ export type ImportSourceKind = SourceKind
 export interface ImportCreate {
   type: ResourceType
   sourceKind: ImportSourceKind
+  storageKind?: StorageKind
   paths: string[]
 }
 

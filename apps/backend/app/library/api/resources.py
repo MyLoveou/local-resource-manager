@@ -39,7 +39,12 @@ def _library_file_or_404(raw_path: str) -> Path:
 
 def _file_response(path: Path, *, long_cache: bool) -> FileResponse:
     """缩略图长缓存；原片短缓存。"""
-    response = FileResponse(path)
+    suffix = path.suffix.lower()
+    media_type = {
+        ".glb": "model/gltf-binary",
+        ".gltf": "model/gltf+json",
+    }.get(suffix)
+    response = FileResponse(path, media_type=media_type)
     if long_cache:
         response.headers["Cache-Control"] = "private, max-age=86400"
     else:

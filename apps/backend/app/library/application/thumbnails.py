@@ -7,16 +7,18 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 from app.shared.log import logger
+from app.library.domain.type_profile import profile_for
 from app.shared.media_types import FILE_ROLE_COVER, FILE_ROLE_PRIMARY, THUMB_MAX_EDGE_PX, THUMB_WEBP_QUALITY
 from app.shared.models import ResourceType
 
 
 def source_for_grid_thumbnail(type_: ResourceType, role_paths: dict[str, Path]) -> Path | None:
-    """有封面用封面；否则仅图片用主文件。视频无封面则不生成。"""
+    """有封面用封面；cover_fallback 类型用主文件。"""
     cover = role_paths.get(FILE_ROLE_COVER)
     if cover is not None:
         return cover
-    if type_ == ResourceType.IMAGE:
+    profile = profile_for(type_)
+    if profile is not None and profile.cover_fallback:
         return role_paths.get(FILE_ROLE_PRIMARY)
     return None
 

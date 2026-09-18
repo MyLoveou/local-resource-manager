@@ -32,7 +32,6 @@ const router = useRouter()
 const activeKey = computed(() => route.path)
 
 const menuOptions = computed<MenuOption[]>(() => props.items.map(toMenuOption))
-console.log(menuOptions.value)
 
 function toMenuOption(item: MenuItem): MenuOption {
   return {
@@ -50,15 +49,14 @@ function onSelect(key: string): void {
 </script>
 
 <style scoped lang="less">
-@import '@/ui/styles/variables.less';
-
 .menu-bar {
   flex: 0 0 200px;
   width: 200px;
   max-width: 200px;
   min-width: 0;
   height: 100%;
-  border-right: 1px solid @border;
+  background: var(--sm-color-bg-surface);
+  border-right: 1px solid var(--sm-color-border);
   box-sizing: border-box;
   overflow: hidden;
   transition: width 0.2s ease;

@@ -1,65 +1,38 @@
 /**
  * 媒体类型扩展名与对话框过滤映射。
- * 与后端 `app/shared/media_types.py` 对齐（此处无点；后端带点）。
- * 按 ResourceType 查表，禁止调用处 if/else 选过滤表。
+ * 档案在 libraryTypes.ts；本文件再导出兼容旧 import。
  */
 import type { ResourceType } from './resource'
-import { SourceKind } from './constants'
+import { TYPE_PROFILES, profileFor } from './libraryTypes'
 
-export const IMAGE_EXTENSIONS = [
-  'jpg',
-  'jpeg',
-  'png',
-  'webp',
-  'gif',
-  'bmp',
-  'heic',
-  'avif',
-] as const
-
-export const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'ts', 'm4v'] as const
+export {
+  AUDIO_EXTENSIONS,
+  DEFAULT_IMPORT_SOURCE_KIND,
+  IMAGE_EXTENSIONS,
+  MODEL_PREVIEW_EXTENSIONS,
+  RESOURCE_TYPE_LABEL,
+  VIDEO_EXTENSIONS,
+  consumeKindOf,
+  profileFor,
+} from './libraryTypes'
 
 export const SUBTITLE_EXTENSIONS = ['srt', 'ass', 'ssa', 'vtt'] as const
 
-export const RESOURCE_TYPE_LABEL: Record<ResourceType, string> = {
-  image: '图片',
-  video: '视频',
-  anime: '番剧',
-  av: 'AV',
-}
-
-export const SERIES_RESOURCE_TYPES: readonly ResourceType[] = ['anime', 'av']
-
-export const DEFAULT_IMPORT_SOURCE_KIND: Record<ResourceType, SourceKind> = {
-  image: SourceKind.FILE,
-  video: SourceKind.FILE,
-  anime: SourceKind.DIRECTORY,
-  av: SourceKind.DIRECTORY,
-}
+export const SERIES_RESOURCE_TYPES: readonly ResourceType[] = TYPE_PROFILES.filter(
+  (p) => p.ingestKind === 'series'
+).map((p) => p.type)
 
 export interface FileDialogFilter {
   name: string
   extensions: string[]
 }
 
-export const RESOURCE_FILE_FILTERS: Record<ResourceType, FileDialogFilter> = {
-  image: {
-    name: RESOURCE_TYPE_LABEL.image,
-    extensions: [...IMAGE_EXTENSIONS],
-  },
-  video: {
-    name: RESOURCE_TYPE_LABEL.video,
-    extensions: [...VIDEO_EXTENSIONS],
-  },
-  anime: {
-    name: RESOURCE_TYPE_LABEL.anime,
-    extensions: [...VIDEO_EXTENSIONS],
-  },
-  av: {
-    name: RESOURCE_TYPE_LABEL.av,
-    extensions: [...VIDEO_EXTENSIONS],
-  },
-}
+export const RESOURCE_FILE_FILTERS: Record<ResourceType, FileDialogFilter> = Object.fromEntries(
+  TYPE_PROFILES.map((p) => [
+    p.type,
+    { name: p.label, extensions: [...p.extensions] },
+  ])
+) as Record<ResourceType, FileDialogFilter>
 
 export const SUBTITLE_FILE_FILTER: FileDialogFilter = {
   name: '字幕',
@@ -68,18 +41,20 @@ export const SUBTITLE_FILE_FILTER: FileDialogFilter = {
 
 export const COVER_FILE_FILTER: FileDialogFilter = RESOURCE_FILE_FILTERS.image
 
-export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = (
-  Object.keys(RESOURCE_FILE_FILTERS) as ResourceType[]
-).map((value) => ({
-  value,
-  label: RESOURCE_TYPE_LABEL[value],
-}))
+export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = TYPE_PROFILES.map(
+  (p) => ({
+    value: p.type,
+    label: p.label,
+  })
+)
 
 export const FILE_ROLE = {
   PRIMARY: 'primary',
   COVER: 'cover',
   SUBTITLE: 'subtitle',
   THUMBNAIL: 'thumbnail',
+  LAUNCH: 'launch',
+  PAGE: 'page',
 } as const
 
 export const THUMB_DIR = 'thumbs'
@@ -95,4 +70,8 @@ export function fileFilterForResourceType(type: ResourceType): FileDialogFilter 
 
 export function isSeriesResourceType(type: ResourceType): boolean {
   return (SERIES_RESOURCE_TYPES as readonly string[]).includes(type)
+}
+
+export function allowsFileSource(type: ResourceType): boolean {
+  return profileFor(type)?.allowsFileSource === true
 }

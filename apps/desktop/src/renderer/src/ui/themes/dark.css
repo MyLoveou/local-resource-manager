@@ -1,0 +1,12 @@
+:root[data-theme='dark'] {
+  --sm-color-bg-page: #111827;
+  --sm-color-bg-surface: #1f2937;
+  --sm-color-text: #f9fafb;
+  --sm-color-text-muted: #9ca3af;
+  --sm-color-border: #374151;
+  --sm-color-primary: #818cf8;
+  --sm-radius-control: 6px;
+  --sm-space-1: 4px;
+  --sm-space-2: 8px;
+  --sm-space-3: 12px;
+}

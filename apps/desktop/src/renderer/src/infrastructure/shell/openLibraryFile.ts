@@ -1,12 +1,18 @@
 /**
- * 打开库内副本：所在位置 / 默认应用 / 选择其他应用。
+ * 打开库内副本或登记的源路径：所在位置 / 默认应用 / 选择其他应用。
  */
 import { FILE_ROLE, type Resource } from '@/domain'
 
-export function primaryLocalPath(resource: Resource | null | undefined): string | null {
+export function launchOrPrimaryPath(resource: Resource | null | undefined): string | null {
   const files = resource?.files ?? []
+  const launch = files.find((file) => file.role === FILE_ROLE.LAUNCH)
+  if (launch?.path) return launch.path
   const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY)
   return primary?.path ?? null
+}
+
+export function primaryLocalPath(resource: Resource | null | undefined): string | null {
+  return launchOrPrimaryPath(resource)
 }
 
 export async function revealPrimary(resource: Resource | null | undefined): Promise<string | null> {
@@ -25,6 +31,10 @@ export async function openPrimaryDefault(resource: Resource | null | undefined):
   if (!api?.openPath) return '当前环境不能打开外部应用'
   const result = await api.openPath(path)
   return result.ok ? null : result.message
+}
+
+export async function openLaunchOrPrimary(resource: Resource | null | undefined): Promise<string | null> {
+  return openPrimaryDefault(resource)
 }
 
 export async function openPrimaryWithOther(resource: Resource | null | undefined): Promise<string | null> {

@@ -11,7 +11,7 @@ from app.library.application.packages.layouts import layout_for
 from app.library.application.schemas import ImportCreate, ImportJob, ImportJobCreated, SourceKind
 from app.library.infrastructure.import_job_store import ImportJobState, job_store
 from app.shared.db.db import get_session_factory
-from app.shared.media_types import is_series_type
+from app.library.domain.type_profile import COMIC_ARCHIVE_EXTENSIONS, profile_for
 
 router = APIRouter(prefix="/imports", tags=["library-imports"])
 _import_tasks: set[asyncio.Task[None]] = set()
@@ -19,10 +19,24 @@ _import_tasks: set[asyncio.Task[None]] = set()
 
 def validate_import(body: ImportCreate) -> str | None:
     """返回错误文案；合法则 None。"""
-    if importer_for(body.type) is None or layout_for(body.type) is None:
+    profile = profile_for(body.type)
+    if importer_for(body.type) is None or layout_for(body.type) is None or profile is None:
         return "unsupported type"
-    if is_series_type(body.type) and body.source_kind != SourceKind.DIRECTORY:
+    storage = body.storage_kind or profile.default_storage
+    if storage not in profile.allowed_storage:
+        return "unsupported storageKind"
+    if profile.ingest_kind == "series" and body.source_kind != SourceKind.DIRECTORY:
         return "series import requires a directory"
+    if (
+        profile.ingest_kind == "package"
+        and body.source_kind != SourceKind.DIRECTORY
+        and not (
+            profile.allows_file_source
+            and body.source_kind == SourceKind.FILE
+            and all(Path(p).suffix.lower() in COMIC_ARCHIVE_EXTENSIONS for p in body.paths)
+        )
+    ):
+        return "package import requires a directory"
     if body.source_kind == SourceKind.DIRECTORY:
         if len(body.paths) != 1:
             return "directory import requires exactly one path"
@@ -54,7 +68,10 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
     factory = get_session_factory()
     try:
         service = ImportService(session_factory=factory)
-        await service.run(job, body.type, body.source_kind.value, body.paths)
+        await service.run(
+            job, body.type, body.source_kind.value, body.paths,
+            storage_kind=body.storage_kind.value if body.storage_kind else None,
+        )
         await job_store.finish(job)
     except asyncio.CancelledError:
         await job_store.finish(job, failed="cancelled")

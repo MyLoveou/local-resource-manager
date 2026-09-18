@@ -34,6 +34,7 @@ from app.shared.models import (
     SeriesEpisode,
     SeriesExtra,
     SeriesSeason,
+    StorageKind,
     Tag,
 )
 
@@ -62,6 +63,7 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
     return Resource(
         id=row.id,
         type=ResourceType(row.type),
+        storage_kind=StorageKind(row.storage_kind or StorageKind.OWNED.value),
         title=row.title,
         description=row.description,
         author=row.author,
@@ -88,6 +90,7 @@ class ResourceRepository:
         ts = _now()
         row = ResourceRow(
             type=resource.type.value,
+            storage_kind=resource.storage_kind.value,
             title=resource.title,
             description=resource.description,
             author=resource.author,
@@ -108,6 +111,7 @@ class ResourceRepository:
 
     def _apply_resource(self, row: ResourceRow, resource: Resource) -> None:
         row.type = resource.type.value
+        row.storage_kind = resource.storage_kind.value
         row.title = resource.title
         row.description = resource.description
         row.author = resource.author
@@ -435,6 +439,11 @@ class ResourceRepository:
 
     async def file_exists_by_sha256(self, sha256: str) -> bool:
         stmt = select(FileRow.id).where(FileRow.sha256 == sha256).limit(1)
+        return (await self._session.scalar(stmt)) is not None
+
+    async def file_exists_by_path(self, path: str) -> bool:
+        """路径去重（indexed 启动文件）。"""
+        stmt = select(FileRow.id).where(FileRow.path == path).limit(1)
         return (await self._session.scalar(stmt)) is not None
 
     async def add_file(

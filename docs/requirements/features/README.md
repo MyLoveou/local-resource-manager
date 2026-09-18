@@ -2,7 +2,26 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## anime-av-types（**评审中 / 规划待确认**）
+## ui-theme-shell（**草案 / 需求分析**）
+
+> 壳层模块化、CSS 主题加载、批量条位置、信息栏分区。未授权实现。
+
+| 文档 | 内容 |
+|------|------|
+| [`ui-theme-shell/需求.md`](ui-theme-shell/需求.md) | IN/OUT、故事、开放问题 |
+| OpenSpec | `openspec/changes/ui-theme-shell/` |
+
+## library-type-platform（**实现中 / feat 分支**）
+
+> 所有库类型最低导入与展示；领域 TypeProfile；游戏默认扫描登记；漫画/小说本刀无阅读器；类型页 TypeBrowse。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-type-platform/需求.md`](library-type-platform/需求.md) | 模型分层、IN/OUT、开放问题 |
+| [`library-type-platform/实现方案.md`](library-type-platform/实现方案.md) | TypeProfile、文件清单 |
+| OpenSpec | `openspec/changes/library-type-platform/` |
+
+## anime-av-types（**第一刀已合入 master；第二刀未做**）
 
 > 动画番剧与 AV **作品级系列**（季/集树、特典、字幕组、女优多值、异构导入整理、集封面双展示）。菜单「番剧」。
 

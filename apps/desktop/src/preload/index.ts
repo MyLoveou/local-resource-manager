@@ -34,6 +34,9 @@ const api = {
     ipcRenderer.invoke('shell:openPath', { path }),
   openWith: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:openWith', { path }),
+  selectThemeCss: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectThemeCss'),
+  readThemeCss: (path: string): Promise<{ ok: true; css: string } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('theme:readCss', path),
 }
 
 contextBridge.exposeInMainWorld('electron', api)

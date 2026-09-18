@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import Field
 
 from app.shared.constants import SourceKind
-from app.shared.models import ApiModel, Category, Resource, ResourceType, Tag
+from app.shared.models import ApiModel, Category, Resource, ResourceType, StorageKind, Tag
 from app.shared.value_objects import Rating
 
 
@@ -106,6 +106,7 @@ class ImportCreate(ApiModel):
     type: ResourceType
     source_kind: SourceKind
     paths: list[str] = Field(min_length=1)
+    storage_kind: StorageKind | None = None
 
 
 class ImportJobCreated(ApiModel):

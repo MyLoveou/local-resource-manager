@@ -4,6 +4,8 @@
  */
 export * from './resource'
 export * from './mediaTypes'
+export type { TypeProfile, ConsumeKind, IngestKind, StorageKind } from './libraryTypes'
+export { TYPE_PROFILES } from './libraryTypes'
 export * from './mediaLabels'
 export * from './scrape'
 export * from './download'

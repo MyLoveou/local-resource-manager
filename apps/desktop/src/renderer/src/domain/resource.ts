@@ -3,8 +3,19 @@
  * 后端对应：apps/backend/app/shared/models.py
  */
 
+import type { StorageKind } from './libraryTypes'
+
 /** 资源类型。anime/av 是作品，不是单集。 */
-export type ResourceType = 'image' | 'video' | 'anime' | 'av'
+export type ResourceType =
+  | 'image'
+  | 'video'
+  | 'anime'
+  | 'av'
+  | 'audio'
+  | 'novel'
+  | 'game'
+  | 'model'
+  | 'comic'
 
 /** 资源状态：正常 / 回收站（软删）/ 文件丢失 */
 export type ResourceStatus = 'active' | 'trashed' | 'lost'
@@ -13,6 +24,7 @@ export type ResourceStatus = 'active' | 'trashed' | 'lost'
 export interface Resource {
   id?: number
   type: ResourceType
+  storageKind?: StorageKind
   title: string
   description?: string | null
   /** 评分 0-10 */

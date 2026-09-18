@@ -17,7 +17,6 @@
           </n-radio>
         </n-space>
       </n-radio-group>
-      <p class="muted">其它类型尚未开通</p>
       <div class="actions">
         <n-button type="primary" @click="goSource">下一步</n-button>
       </div>
@@ -27,10 +26,19 @@
       <p class="hint">选择来源</p>
       <n-radio-group v-model:value="sourceKind">
         <n-space>
-          <n-radio v-if="!isSeriesResourceType(resourceType)" :value="SourceKind.FILE">文件</n-radio>
+          <n-radio v-if="allowsFileSource(resourceType)" :value="SourceKind.FILE">文件</n-radio>
           <n-radio :value="SourceKind.DIRECTORY">文件夹</n-radio>
         </n-space>
       </n-radio-group>
+      <template v-if="allowsMultipleStorage">
+        <p class="hint">入库方式</p>
+        <n-radio-group v-model:value="storageKind">
+          <n-space vertical>
+            <n-radio value="indexed">扫描登记（不复制文件，适合已安装游戏）</n-radio>
+            <n-radio value="owned">复制进库（便携小游戏）</n-radio>
+          </n-space>
+        </n-radio-group>
+      </template>
       <div class="actions">
         <n-button :disabled="busy" @click="step = 'type'">上一步</n-button>
         <n-button type="primary" :disabled="busy" @click="pickAndImport">选择并导入</n-button>
@@ -62,10 +70,12 @@ const {
   step,
   resourceType,
   sourceKind,
+  storageKind,
   job,
   busy,
   errorMessage,
-  isSeriesResourceType,
+  allowsFileSource,
+  allowsMultipleStorage,
   open,
   close,
   goSource,

@@ -1,4 +1,19 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { TYPE_PROFILES } from '@/domain/libraryTypes'
+
+const typeBrowse = () => import('@/views/TypeBrowse/index.vue')
+
+const typeRoutes: RouteRecordRaw[] = TYPE_PROFILES.map((profile) => ({
+  path: profile.routePath,
+  name: profile.type,
+  component: typeBrowse,
+  meta: {
+    title: profile.label,
+    icon: profile.routeIcon,
+    resourceType: profile.type,
+  },
+}))
+
 export const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -7,43 +22,9 @@ export const routes: RouteRecordRaw[] = [
     meta: {
       title: '首页',
       icon: 'home',
-    }
+    },
   },
-  {
-    path: '/image',
-    name: 'Image',
-    component: () => import('@/views/Image/index.vue'),
-    meta: {
-      title: '图片',
-      icon: 'image',
-    }
-  },
-  {
-    path: '/video',
-    name: 'Video',
-    component: () => import('@/views/Video/index.vue'),
-    meta: {
-      title: '视频',
-      icon: 'video',
-    }
-  },
-  {
-    path: '/anime',
-    name: 'Anime',
-    component: () => import('@/views/Anime/index.vue'),
-    meta: {
-      title: '番剧',
-      icon: 'anime',
-    }
-  }, {
-    path: '/av',
-    name: 'AV',
-    component: () => import('@/views/AV/index.vue'),
-    meta: {
-      title: 'AV',
-      icon: 'av',
-    }
-  },
+  ...typeRoutes,
   {
     path: '/trash',
     name: 'Trash',
@@ -51,6 +32,6 @@ export const routes: RouteRecordRaw[] = [
     meta: {
       title: '回收站',
       icon: 'delete',
-    }
+    },
   },
 ]

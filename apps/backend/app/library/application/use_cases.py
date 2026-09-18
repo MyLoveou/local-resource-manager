@@ -304,7 +304,7 @@ class LibraryQueryService:
         except OSError as exc:
             logger.warning("删包失败 resource=%s: %s", resource_id, exc)
             raise RuntimeError("failed to delete package") from exc
-        if package.root.exists():
+        if existing.storage_kind.value == "owned" and package.root.exists():
             logger.warning("删包后目录仍在 resource=%s path=%s", resource_id, package.root)
             raise RuntimeError("failed to delete package")
         return await self._resources.delete_row(existing.id)

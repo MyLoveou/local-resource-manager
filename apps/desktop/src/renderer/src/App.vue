@@ -1,32 +1,45 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NMessageProvider } from 'naive-ui'
+import { NConfigProvider, NMessageProvider } from 'naive-ui'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
 import ImageViewerOverlay from '@/components/ImageViewerOverlay/index.vue'
 import VideoPlayerOverlay from '@/components/VideoPlayerOverlay/index.vue'
+import AudioPlayerOverlay from '@/components/AudioPlayerOverlay/index.vue'
+import ModelPreviewOverlay from '@/components/ModelPreviewOverlay/index.vue'
 import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
+import { useThemeStore } from '@/application/stores/theme'
+import { readNaiveOverrides } from '@/ui/theme/applyTheme'
 
 const menuItems = computed(() => menuFromRoutes(routes))
+const theme = useThemeStore()
+const themeOverrides = computed(() => {
+  void theme.revision
+  return readNaiveOverrides()
+})
 </script>
 
 <template>
-  <n-message-provider>
-    <div class="container">
-      <ToolBar />
-      <div class="app-container">
-        <MenuBar :items="menuItems" />
-        <main class="main-content">
-          <router-view />
-          <ImageViewerOverlay />
-          <VideoPlayerOverlay />
-        </main>
-        <InfoPanel />
+  <n-config-provider abstract :theme-overrides="themeOverrides">
+    <n-message-provider>
+      <div class="container">
+        <ToolBar />
+        <div class="app-container">
+          <MenuBar :items="menuItems" />
+          <main class="main-content">
+            <router-view />
+            <ImageViewerOverlay />
+            <VideoPlayerOverlay />
+            <AudioPlayerOverlay />
+            <ModelPreviewOverlay />
+          </main>
+          <InfoPanel />
+        </div>
       </div>
-    </div>
-  </n-message-provider>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <style scoped lang="less">

@@ -8,7 +8,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.shared.media_types import FFPROBE_BIN, FFPROBE_TIMEOUT_SEC, VIDEO_PROBE_TYPES
+from app.shared.media_types import AUDIO_PROBE_TYPES, FFPROBE_BIN, FFPROBE_TIMEOUT_SEC, VIDEO_PROBE_TYPES
 from app.shared.log import logger
 from app.shared.models import ResourceType
 
@@ -128,7 +128,7 @@ def probe_media(type_: ResourceType, path: Path) -> ProbeFields:
     try:
         if type_ == ResourceType.IMAGE:
             return probe_image(path)
-        if type_ in VIDEO_PROBE_TYPES:
+        if type_ in VIDEO_PROBE_TYPES or type_ in AUDIO_PROBE_TYPES:
             return probe_video(path)
     except Exception as exc:
         logger.warning("媒体探测失败 %s: %s", path, exc)

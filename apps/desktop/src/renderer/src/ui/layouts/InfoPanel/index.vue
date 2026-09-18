@@ -2,61 +2,71 @@
   <aside class="info-panel">
     <div v-if="resource" class="info-panel-content">
       <div class="info-panel-body">
-        <img v-if="coverUrl" class="info-panel-cover" :class="{ 'info-panel-cover--open': isImage }" :src="coverUrl"
-          alt="封面" decoding="async" @click="openViewerFromCover" />
-        <div class="info-panel-title" :title="resource.title">{{ resource.title }}</div>
-        <div class="info-panel-meta">类型 {{ typeLabel }}</div>
-        <template v-if="isSeries">
-          <div
-            v-for="season in resource.seasons ?? []"
-            :key="season.id ?? season.seasonNumber"
-            class="info-panel-season"
-          >
-            <div class="info-panel-label">第 {{ season.seasonNumber }} 季</div>
+        <section class="info-panel-section">
+          <img v-if="coverUrl" class="info-panel-cover" :class="{ 'info-panel-cover--open': isImage }" :src="coverUrl"
+            alt="封面" decoding="async" @click="openViewerFromCover" />
+          <div class="info-panel-title" :title="resource.title">{{ resource.title }}</div>
+          <div class="info-panel-meta">类型 {{ typeLabel }}</div>
+          <div v-if="resource.storageKind === 'indexed'" class="info-panel-meta">
+            源路径 {{ launchPathLabel }}
+          </div>
+        </section>
+        <section class="info-panel-section">
+          <div class="info-panel-section-title">技术信息</div>
+          <template v-if="isSeries">
+            <div
+              v-for="season in resource.seasons ?? []"
+              :key="season.id ?? season.seasonNumber"
+              class="info-panel-season"
+            >
+              <div class="info-panel-label">第 {{ season.seasonNumber }} 季</div>
+              <button
+                v-for="ep in season.episodes ?? []"
+                :key="ep.fileId"
+                type="button"
+                class="info-panel-episode"
+                @click="playEpisode(ep.fileId)"
+              >
+                {{ episodeButtonLabel(ep) }}
+              </button>
+            </div>
+            <div v-if="(resource.extras ?? []).length" class="info-panel-label">特典</div>
             <button
-              v-for="ep in season.episodes ?? []"
-              :key="ep.fileId"
+              v-for="extra in resource.extras ?? []"
+              :key="extra.fileId"
               type="button"
               class="info-panel-episode"
-              @click="playEpisode(ep.fileId)"
+              @click="playEpisode(extra.fileId)"
             >
-              {{ episodeButtonLabel(ep) }}
+              {{ extra.title || '特典' }}
             </button>
+          </template>
+          <template v-else>
+            <div class="info-panel-meta">格式 {{ formatLabel }}</div>
+            <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
+          </template>
+          <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
+          <div v-if="resource.status === 'trashed'" class="info-panel-meta">
+            删除 {{ resource.deletedAt || '—' }}
           </div>
-          <div v-if="(resource.extras ?? []).length" class="info-panel-label">特典</div>
-          <button
-            v-for="extra in resource.extras ?? []"
-            :key="extra.fileId"
-            type="button"
-            class="info-panel-episode"
-            @click="playEpisode(extra.fileId)"
-          >
-            {{ extra.title || '特典' }}
-          </button>
-        </template>
-        <template v-else>
-          <div class="info-panel-meta">格式 {{ formatLabel }}</div>
-          <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
-        </template>
-        <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
-        <div v-if="resource.status === 'trashed'" class="info-panel-meta">
-          删除 {{ resource.deletedAt || '—' }}
-        </div>
-        <template v-if="isImage">
-          <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-        </template>
-        <template v-else-if="!isSeries">
-          <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-          <div class="info-panel-meta">清晰度 {{ clarityText }}</div>
-          <div class="info-panel-meta">时长 {{ durationLabel }}</div>
-          <div class="info-panel-meta">帧率 {{ fpsLabel }}</div>
-          <div class="info-panel-meta">码率 {{ bitrateLabel }}</div>
-          <div class="info-panel-meta">画质 {{ qualityText }}</div>
-          <div v-if="subtitleNames.length" class="info-panel-meta">
-            字幕 {{ subtitleNames.join('、') }}
-          </div>
-        </template>
-        <div class="info-panel-label">描述</div>
+          <template v-if="isImage">
+            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+          </template>
+          <template v-else-if="isVideo">
+            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div class="info-panel-meta">清晰度 {{ clarityText }}</div>
+            <div class="info-panel-meta">时长 {{ durationLabel }}</div>
+            <div class="info-panel-meta">帧率 {{ fpsLabel }}</div>
+            <div class="info-panel-meta">码率 {{ bitrateLabel }}</div>
+            <div class="info-panel-meta">画质 {{ qualityText }}</div>
+            <div v-if="subtitleNames.length" class="info-panel-meta">
+              字幕 {{ subtitleNames.join('、') }}
+            </div>
+          </template>
+        </section>
+        <section class="info-panel-section">
+          <div class="info-panel-section-title">编辑</div>
+          <div class="info-panel-label">描述</div>
         <n-input type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :value="draft.description" placeholder="记录说明"
           @update:value="draft.description = $event" />
         <div class="info-panel-label">作者</div>
@@ -92,10 +102,19 @@
           <n-input :value="draft.tagInput" placeholder="回车添加" size="small" style="width: 120px"
             @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
         </div>
+        </section>
       </div>
       <div class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
+          <n-button
+            v-if="isShellOpen"
+            size="small"
+            :disabled="!canShellOpen || shellBusy"
+            @click="onOpenDefault"
+          >
+            {{ shellActionLabel }}
+          </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
             <n-button size="small">更多</n-button>
@@ -142,15 +161,17 @@ import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
-  openPrimaryDefault,
+  openLaunchOrPrimary,
   openPrimaryWithOther,
   revealPrimary,
+  launchOrPrimaryPath,
 } from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { storeToRefs } from 'pinia'
 import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
+  consumeKindOf,
   FILE_ROLE,
   RESOURCE_TYPE_LABEL,
   SUBTITLE_FILE_FILTER,
@@ -227,11 +248,21 @@ const dirty = computed(() => !snapshotEqualsSaved())
 const typeLabel = computed(() =>
   resource.value ? RESOURCE_TYPE_LABEL[resource.value.type] : '—'
 )
-const isVideo = computed(() => resource.value?.type === 'video')
-const isImage = computed(() => resource.value?.type === 'image')
+const consume = computed(() =>
+  resource.value ? consumeKindOf(resource.value.type) : undefined
+)
+const isVideo = computed(() => consume.value === 'overlay-video')
+const isImage = computed(() => consume.value === 'overlay-image')
 const isSeries = computed(() =>
   resource.value != null && isSeriesResourceType(resource.value.type)
 )
+const isShellOpen = computed(() => consume.value === 'shell-open')
+const hasLaunch = computed(() =>
+  (resource.value?.files ?? []).some((f) => f.role === FILE_ROLE.LAUNCH)
+)
+const canShellOpen = computed(() => launchOrPrimaryPath(resource.value) != null)
+const shellActionLabel = computed(() => (hasLaunch.value ? '启动' : '打开'))
+const launchPathLabel = computed(() => launchOrPrimaryPath(resource.value) ?? '—')
 
 /** 图片主文件即封面，不提供更换封面；仅视频可换海报。 */
 const canChangeCover = computed(() => isVideo.value)
@@ -240,7 +271,7 @@ const moreOptions = computed((): DropdownOption[] => {
   const items: DropdownOption[] = []
   if (canChangeCover.value) items.push({ label: '更换封面', key: 'cover' })
   if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
-  if (isImage.value) {
+  if (isImage.value || isShellOpen.value || consume.value === 'overlay-model') {
     items.push(
       { label: '打开所在位置', key: 'reveal', disabled: shellBusy.value },
       { label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value },
@@ -617,7 +648,7 @@ function onReveal(): void {
 }
 
 function onOpenDefault(): void {
-  void runShell(openPrimaryDefault)
+  void runShell(openLaunchOrPrimary)
 }
 
 function onOpenWith(): void {
@@ -716,8 +747,10 @@ async function handlePurge(): Promise<void> {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  border-left: 1px solid #e5e7eb;
-  padding: 12px;
+  background: var(--sm-color-bg-surface);
+  color: var(--sm-color-text);
+  border-left: 1px solid var(--sm-color-border);
+  padding: var(--sm-space-3);
   overflow: hidden;
 }
 
@@ -746,14 +779,21 @@ async function handlePurge(): Promise<void> {
 .info-panel-footer {
   flex-shrink: 0;
   min-width: 0;
-  padding-top: 12px;
-  margin-top: 8px;
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
+  padding-top: var(--sm-space-3);
+  margin-top: var(--sm-space-2);
+  border-top: 1px solid var(--sm-color-border);
+  background: var(--sm-color-bg-surface);
+}
+
+.info-panel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sm-color-text);
+  margin-top: var(--sm-space-2);
 }
 
 .info-panel-empty {
-  color: #6b7280;
+  color: var(--sm-color-text-muted);
 }
 
 .info-panel-cover {
@@ -778,7 +818,7 @@ async function handlePurge(): Promise<void> {
 .info-panel-meta,
 .info-panel-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--sm-color-text-muted);
   margin-top: 8px;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -797,14 +837,15 @@ async function handlePurge(): Promise<void> {
   text-align: left;
   font-size: 12px;
   padding: 6px 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--sm-color-border);
+  border-radius: var(--sm-radius-control);
+  background: var(--sm-color-bg-surface);
+  color: var(--sm-color-text);
   cursor: pointer;
 }
 
 .info-panel-episode:hover {
-  background: #f3f4f6;
+  background: var(--sm-color-bg-page);
 }
 
 .info-panel-tags {

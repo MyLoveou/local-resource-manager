@@ -1,34 +1,35 @@
 """媒体类型扩展名与导入映射（单一事实源）。
 
-类型 → 扩展名用表查找，禁止在调用处 if/else 硬编码。
-桌面对话框扩展名须与本表去点后对齐：`domain/mediaTypes.ts`。
+类型档案见 `app.library.domain.type_profile`。本模块再导出扩展名与角色常量，避免调用方大爆炸。
 """
 
 from __future__ import annotations
 
-from app.shared.models import ResourceType
-
-IMAGE_EXTENSIONS: frozenset[str] = frozenset(
-    {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".heic", ".avif"}
+from app.library.domain.type_profile import (
+    AUDIO_EXTENSIONS,
+    AUDIO_PROBE_TYPES,
+    COMIC_ARCHIVE_EXTENSIONS,
+    COMIC_EXTENSIONS,
+    GAME_LAUNCH_EXTENSIONS,
+    IMAGE_EXTENSIONS,
+    IMPORT_EXTENSIONS,
+    MODEL_EXTENSIONS,
+    MODEL_PREVIEW_EXTENSIONS,
+    NOVEL_EXTENSIONS,
+    SERIES_TYPES,
+    VIDEO_EXTENSIONS,
+    VIDEO_PROBE_TYPES,
+    consume_kind,
+    import_extensions,
+    ingest_kind,
+    is_package_type,
+    is_series_type,
+    profile_for,
+    storage_allowed,
 )
-VIDEO_EXTENSIONS: frozenset[str] = frozenset(
-    {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".ts", ".m4v"}
-)
-SUBTITLE_EXTENSIONS: frozenset[str] = frozenset({".srt", ".ass", ".ssa", ".vtt"})
 
 COVER_EXTENSIONS: frozenset[str] = IMAGE_EXTENSIONS
-
-IMPORT_EXTENSIONS: dict[ResourceType, frozenset[str]] = {
-    ResourceType.IMAGE: IMAGE_EXTENSIONS,
-    ResourceType.VIDEO: VIDEO_EXTENSIONS,
-    ResourceType.ANIME: VIDEO_EXTENSIONS,
-    ResourceType.AV: VIDEO_EXTENSIONS,
-}
-
-SERIES_TYPES: frozenset[ResourceType] = frozenset({ResourceType.ANIME, ResourceType.AV})
-VIDEO_PROBE_TYPES: frozenset[ResourceType] = frozenset(
-    {ResourceType.VIDEO, ResourceType.ANIME, ResourceType.AV}
-)
+SUBTITLE_EXTENSIONS: frozenset[str] = frozenset({".srt", ".ass", ".ssa", ".vtt"})
 
 FILE_ROLE_PRIMARY = "primary"
 FILE_ROLE_COVER = "cover"
@@ -36,6 +37,8 @@ FILE_ROLE_SUBTITLE = "subtitle"
 FILE_ROLE_THUMBNAIL = "thumbnail"
 FILE_ROLE_EPISODE = "episode"
 FILE_ROLE_EXTRA = "extra"
+FILE_ROLE_LAUNCH = "launch"
+FILE_ROLE_PAGE = "page"
 
 # 特典目录名（NCOP&NCED 按 & 切开后查表）。对齐 Anitomy 的 type 关键字，不是盘点每家字幕组。
 SERIES_EXTRA_DIR_MARKERS: frozenset[str] = frozenset(
@@ -84,11 +87,6 @@ SERIES_EXTRA_TOKEN_PREFIXES: tuple[str, ...] = (
     "nc",
 )
 
-
-def is_series_type(type_: ResourceType) -> bool:
-    """番剧/AV 按作品进库。"""
-    return type_ in SERIES_TYPES
-
 THUMB_DIR = "thumbs"
 THUMB_GRID_NAME = "grid.webp"
 THUMB_MAX_EDGE_PX = 480
@@ -133,7 +131,45 @@ SUBTITLE_LANGUAGE_TAGS: frozenset[str] = frozenset(
     }
 )
 
-
-def import_extensions(type_: ResourceType) -> frozenset[str] | None:
-    """导入候选扩展名；未登记的类型返回 None。"""
-    return IMPORT_EXTENSIONS.get(type_)
+__all__ = [
+    "AUDIO_EXTENSIONS",
+    "AUDIO_PROBE_TYPES",
+    "COMIC_ARCHIVE_EXTENSIONS",
+    "COMIC_EXTENSIONS",
+    "COVER_EXTENSIONS",
+    "FFPROBE_BIN",
+    "FFPROBE_TIMEOUT_SEC",
+    "FILE_ROLE_COVER",
+    "FILE_ROLE_EPISODE",
+    "FILE_ROLE_EXTRA",
+    "FILE_ROLE_LAUNCH",
+    "FILE_ROLE_PAGE",
+    "FILE_ROLE_PRIMARY",
+    "FILE_ROLE_SUBTITLE",
+    "FILE_ROLE_THUMBNAIL",
+    "GAME_LAUNCH_EXTENSIONS",
+    "IMAGE_EXTENSIONS",
+    "IMPORT_EXTENSIONS",
+    "MODEL_EXTENSIONS",
+    "MODEL_PREVIEW_EXTENSIONS",
+    "NOVEL_EXTENSIONS",
+    "SERIES_EXTRA_DIR_MARKERS",
+    "SERIES_EXTRA_TOKENS",
+    "SERIES_EXTRA_TOKEN_PREFIXES",
+    "SERIES_TYPES",
+    "SUBTITLE_EXTENSIONS",
+    "SUBTITLE_LANGUAGE_TAGS",
+    "THUMB_DIR",
+    "THUMB_GRID_NAME",
+    "THUMB_MAX_EDGE_PX",
+    "THUMB_WEBP_QUALITY",
+    "VIDEO_EXTENSIONS",
+    "VIDEO_PROBE_TYPES",
+    "consume_kind",
+    "import_extensions",
+    "ingest_kind",
+    "is_package_type",
+    "is_series_type",
+    "profile_for",
+    "storage_allowed",
+]

@@ -1,7 +1,7 @@
 /**
  * 资源分页状态机：首屏替换、触底 keyset 追加、bump 只重拉首页。
  */
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { getResources, invalidateResourceCache } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type { Resource, ResourceStatus, ResourceType } from '@/domain'
@@ -9,8 +9,8 @@ import type { Resource, ResourceStatus, ResourceType } from '@/domain'
 const DEFAULT_LIMIT = 80
 
 export function useResourcePage(options: {
-  type?: ResourceType
-  status?: ResourceStatus
+  type?: MaybeRefOrGetter<ResourceType | undefined>
+  status?: MaybeRefOrGetter<ResourceStatus | undefined>
   limit?: number
 }) {
   const items = ref<Resource[]>([])
@@ -24,7 +24,8 @@ export function useResourcePage(options: {
   let cursorCreatedAt: string | undefined
   let cursorId: number | undefined
   const limit = options.limit ?? DEFAULT_LIMIT
-  const status = options.status ?? 'active'
+  const type = computed(() => toValue(options.type))
+  const status = computed(() => toValue(options.status) ?? 'active')
 
   async function fetchPage(append: boolean): Promise<void> {
     const id = ++requestId
@@ -33,8 +34,8 @@ export function useResourcePage(options: {
     error.value = null
     try {
       const page = await getResources({
-        type: options.type,
-        status,
+        type: type.value,
+        status: status.value,
         limit,
         sort: 'createdAt',
         order: 'desc',
@@ -94,14 +95,18 @@ export function useResourcePage(options: {
     () => {
       invalidateResourceCache()
       if (
-        options.type === undefined ||
+        type.value === undefined ||
         library.importedType === null ||
-        library.importedType === options.type
+        library.importedType === type.value
       ) {
         void reset()
       }
     }
   )
+
+  watch(type, (next, prev) => {
+    if (next !== prev) void reset()
+  })
 
   return {
     items,
