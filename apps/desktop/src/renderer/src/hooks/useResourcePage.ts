@@ -11,6 +11,10 @@ const DEFAULT_LIMIT = 80
 export function useResourcePage(options: {
   type?: MaybeRefOrGetter<ResourceType | undefined>
   status?: MaybeRefOrGetter<ResourceStatus | undefined>
+  q?: MaybeRefOrGetter<string>
+  sort?: MaybeRefOrGetter<string>
+  order?: MaybeRefOrGetter<'asc' | 'desc'>
+  tagIds?: MaybeRefOrGetter<number[]>
   limit?: number
 }) {
   const items = ref<Resource[]>([])
@@ -21,13 +25,33 @@ export function useResourcePage(options: {
   const error = ref<unknown>(null)
 
   let requestId = 0
-  let cursorCreatedAt: string | undefined
+  let inflight: Promise<void> | null = null
+  let inflightAppend = false
+  let cursorKey: string | undefined
   let cursorId: number | undefined
   const limit = options.limit ?? DEFAULT_LIMIT
   const type = computed(() => toValue(options.type))
   const status = computed(() => toValue(options.status) ?? 'active')
+  const q = computed(() => toValue(options.q) ?? '')
+  const sort = computed(() => toValue(options.sort) ?? 'createdAt')
+  const order = computed(() => toValue(options.order) ?? 'desc')
+  const tagIds = computed(() => toValue(options.tagIds) ?? [])
 
   async function fetchPage(append: boolean): Promise<void> {
+    const run = runFetch(append)
+    inflight = run
+    inflightAppend = append
+    try {
+      await run
+    } finally {
+      if (inflight === run) {
+        inflight = null
+        inflightAppend = false
+      }
+    }
+  }
+
+  async function runFetch(append: boolean): Promise<void> {
     const id = ++requestId
     loading.value = true
     loadingMore.value = append
@@ -37,9 +61,11 @@ export function useResourcePage(options: {
         type: type.value,
         status: status.value,
         limit,
-        sort: 'createdAt',
-        order: 'desc',
-        afterCreatedAt: append ? cursorCreatedAt : undefined,
+        sort: sort.value,
+        order: order.value,
+        q: q.value.trim() || undefined,
+        tagIds: tagIds.value.length ? tagIds.value : undefined,
+        afterKey: append ? cursorKey : undefined,
         afterId: append ? cursorId : undefined,
       })
       if (id !== requestId) return
@@ -55,7 +81,7 @@ export function useResourcePage(options: {
         items.value = page.items
       }
       const last = items.value[items.value.length - 1]
-      cursorCreatedAt = page.nextCreatedAt ?? last?.createdAt ?? undefined
+      cursorKey = page.nextKey ?? undefined
       cursorId = page.nextId ?? last?.id
     } catch (err) {
       if (id !== requestId) return
@@ -75,12 +101,15 @@ export function useResourcePage(options: {
 
   async function reset(): Promise<void> {
     hasMore.value = true
-    cursorCreatedAt = undefined
+    cursorKey = undefined
     cursorId = undefined
     await fetchPage(false)
   }
 
   async function loadMore(): Promise<void> {
+    const waitingAppend = inflight != null && inflightAppend
+    if (inflight) await inflight
+    if (waitingAppend) return
     if (!hasMore.value || loading.value) return
     await fetchPage(true)
   }
@@ -104,8 +133,8 @@ export function useResourcePage(options: {
     }
   )
 
-  watch(type, (next, prev) => {
-    if (next !== prev) void reset()
+  watch([type, q, sort, order, tagIds], () => {
+    void reset()
   })
 
   return {

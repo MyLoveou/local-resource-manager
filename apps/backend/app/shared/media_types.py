@@ -94,6 +94,8 @@ THUMB_WEBP_QUALITY = 80
 
 FFPROBE_BIN = "ffprobe"
 FFPROBE_TIMEOUT_SEC = 30
+FFMPEG_BIN = "ffmpeg"
+FFMPEG_TIMEOUT_SEC = 30
 
 SUBTITLE_LANGUAGE_TAGS: frozenset[str] = frozenset(
     {

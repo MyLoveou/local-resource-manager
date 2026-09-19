@@ -24,6 +24,15 @@ export const routes: RouteRecordRaw[] = [
       icon: 'home',
     },
   },
+  {
+    path: '/search',
+    name: 'Search',
+    component: () => import('@/views/Search/index.vue'),
+    meta: {
+      title: '搜索',
+      hideMenu: true,
+    },
+  },
   ...typeRoutes,
   {
     path: '/trash',

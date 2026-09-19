@@ -47,6 +47,9 @@ export interface TypeProfile {
   extensions: readonly string[]
   coverFallback: boolean
   allowsFileSource: boolean
+  allowsUserCover: boolean
+  searchKeys?: readonly string[]
+  sortKeys?: readonly string[]
 }
 
 export const TYPE_PROFILES: readonly TypeProfile[] = [
@@ -64,6 +67,9 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: IMAGE_EXTENSIONS,
     coverFallback: true,
     allowsFileSource: true,
+    allowsUserCover: false,
+    searchKeys: ['format'],
+    sortKeys: ['width', 'height', 'pixelArea', 'takenAt'],
   },
   {
     type: 'video',
@@ -79,6 +85,9 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: VIDEO_EXTENSIONS,
     coverFallback: false,
     allowsFileSource: true,
+    allowsUserCover: true,
+    searchKeys: ['format'],
+    sortKeys: ['duration', 'resolution', 'bitrate'],
   },
   {
     type: 'anime',
@@ -94,6 +103,8 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: VIDEO_EXTENSIONS,
     coverFallback: true,
     allowsFileSource: false,
+    allowsUserCover: true,
+    sortKeys: ['episodeCount'],
   },
   {
     type: 'av',
@@ -109,6 +120,8 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: VIDEO_EXTENSIONS,
     coverFallback: true,
     allowsFileSource: false,
+    allowsUserCover: true,
+    sortKeys: ['episodeCount'],
   },
   {
     type: 'audio',
@@ -124,6 +137,9 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: AUDIO_EXTENSIONS,
     coverFallback: false,
     allowsFileSource: true,
+    allowsUserCover: true,
+    searchKeys: ['format'],
+    sortKeys: ['duration'],
   },
   {
     type: 'novel',
@@ -139,6 +155,7 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: NOVEL_EXTENSIONS,
     coverFallback: false,
     allowsFileSource: true,
+    allowsUserCover: true,
   },
   {
     type: 'game',
@@ -154,6 +171,8 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: GAME_LAUNCH_EXTENSIONS,
     coverFallback: false,
     allowsFileSource: false,
+    allowsUserCover: true,
+    searchKeys: ['path'],
   },
   {
     type: 'model',
@@ -169,6 +188,8 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: MODEL_EXTENSIONS,
     coverFallback: false,
     allowsFileSource: true,
+    allowsUserCover: true,
+    searchKeys: ['format'],
   },
   {
     type: 'comic',
@@ -184,6 +205,8 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     extensions: [...IMAGE_EXTENSIONS, ...COMIC_ARCHIVE_EXTENSIONS],
     coverFallback: true,
     allowsFileSource: true,
+    allowsUserCover: true,
+    sortKeys: ['pageCount'],
   },
 ]
 
@@ -207,3 +230,39 @@ export const RESOURCE_TYPE_LABEL: Record<ResourceType, string> = Object.fromEntr
 export const DEFAULT_IMPORT_SOURCE_KIND: Record<ResourceType, SourceKind> = Object.fromEntries(
   TYPE_PROFILES.map((p) => [p.type, p.defaultSource])
 ) as Record<ResourceType, SourceKind>
+
+export const SHARED_SORT_KEYS = ['createdAt', 'updatedAt', 'title', 'rating', 'size'] as const
+
+export type ResourceSortKey =
+  | (typeof SHARED_SORT_KEYS)[number]
+  | 'width'
+  | 'height'
+  | 'pixelArea'
+  | 'takenAt'
+  | 'duration'
+  | 'resolution'
+  | 'bitrate'
+  | 'pageCount'
+  | 'episodeCount'
+
+export const SORT_LABELS: Record<string, string> = {
+  createdAt: '创建时间',
+  updatedAt: '更新时间',
+  title: '标题',
+  rating: '评分',
+  size: '体积',
+  width: '宽度',
+  height: '高度',
+  pixelArea: '像素面积',
+  takenAt: '拍摄时间',
+  duration: '时长',
+  resolution: '分辨率',
+  bitrate: '码率',
+  pageCount: '页数',
+  episodeCount: '集数',
+}
+
+export function allowedSortKeys(type?: ResourceType | null): string[] {
+  if (!type) return [...SHARED_SORT_KEYS]
+  return [...SHARED_SORT_KEYS, ...(profileFor(type)?.sortKeys ?? [])]
+}

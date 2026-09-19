@@ -60,6 +60,9 @@ def _to_dto(job: ImportJobState) -> ImportJob:
         skipped_duplicate=job.skipped_duplicate,
         skipped_error=job.skipped_error,
         error=job.error,
+        message=job.message,
+        code=job.code,
+        details=list(job.details),
     )
 
 

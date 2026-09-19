@@ -4,4 +4,6 @@ pydantic-settings
 sqlalchemy[asyncio]>=2.0
 aiosqlite
 Pillow
+pefile
+pypdfium2
 httpx

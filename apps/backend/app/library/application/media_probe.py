@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,7 @@ class ProbeFields:
     fps: float | None = None
     bitrate: int | None = None
     codec: str | None = None
+    exif_taken_at: str | None = None
 
 
 def _parse_frame_rate(raw: str | None) -> float | None:
@@ -45,8 +47,62 @@ def _parse_frame_rate(raw: str | None) -> float | None:
     return value if value > 0 else None
 
 
+_EXIF_DT_ORIGINAL = 36867
+_EXIF_DT_DIGITIZED = 36868
+_EXIF_DT = 306
+_EXIF_IFD = 0x8769
+_TAKEN_AT_RE = re.compile(r"^(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?")
+
+
+def normalize_taken_at(raw: str | None) -> str | None:
+    """把 EXIF 或手填时间收成 YYYY-MM-DDTHH:MM:SS。非法则 None。空串清空。"""
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text:
+        return None
+    match = _TAKEN_AT_RE.match(text)
+    if match is None:
+        return None
+    year, month, day, hour, minute, second = match.groups()
+    try:
+        y, mo, d = int(year), int(month), int(day)
+        h, mi, s = int(hour), int(minute), int(second or "0")
+    except ValueError:
+        return None
+    if not (1 <= mo <= 12 and 1 <= d <= 31 and 0 <= h <= 23 and 0 <= mi <= 59 and 0 <= s <= 59):
+        return None
+    if y < 1:
+        return None
+    return f"{y:04d}-{mo:02d}-{d:02d}T{h:02d}:{mi:02d}:{s:02d}"
+
+
+def _exif_taken_at(image) -> str | None:
+    try:
+        exif = image.getexif()
+    except Exception:
+        return None
+    if not exif:
+        return None
+    nested: dict = {}
+    try:
+        nested = dict(exif.get_ifd(_EXIF_IFD) or {})
+    except Exception:
+        nested = {}
+    for tag in (_EXIF_DT_ORIGINAL, _EXIF_DT_DIGITIZED, _EXIF_DT):
+        raw = nested.get(tag) or exif.get(tag)
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="replace")
+        if not isinstance(raw, str):
+            continue
+        parsed = normalize_taken_at(raw)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def probe_image(path: Path) -> ProbeFields:
-    """Pillow 读宽高。"""
+    """Pillow 读宽高与 EXIF 拍摄时间。"""
     try:
         from PIL import Image
     except ImportError:
@@ -55,7 +111,8 @@ def probe_image(path: Path) -> ProbeFields:
     try:
         with Image.open(path) as image:
             width, height = image.size
-        return ProbeFields(width=width, height=height)
+            taken = _exif_taken_at(image)
+        return ProbeFields(width=width, height=height, exif_taken_at=taken)
     except Exception as exc:
         logger.warning("图片探测失败 %s: %s", path, exc)
         return ProbeFields()

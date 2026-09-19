@@ -1,23 +1,18 @@
 /**
  * 打开库内副本或登记的源路径：所在位置 / 默认应用 / 选择其他应用。
  */
-import { FILE_ROLE, type Resource } from '@/domain'
+import type { Resource } from '@/domain'
+import { launchOrPrimaryPath, revealablePath } from './revealPath'
 
-export function launchOrPrimaryPath(resource: Resource | null | undefined): string | null {
-  const files = resource?.files ?? []
-  const launch = files.find((file) => file.role === FILE_ROLE.LAUNCH)
-  if (launch?.path) return launch.path
-  const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY)
-  return primary?.path ?? null
-}
+export { launchOrPrimaryPath, revealablePath }
 
 export function primaryLocalPath(resource: Resource | null | undefined): string | null {
   return launchOrPrimaryPath(resource)
 }
 
-export async function revealPrimary(resource: Resource | null | undefined): Promise<string | null> {
-  const path = primaryLocalPath(resource)
-  if (!path) return '找不到库内文件'
+export async function revealInFolder(resource: Resource | null | undefined): Promise<string | null> {
+  const path = revealablePath(resource)
+  if (!path) return '找不到可定位的文件'
   const api = window.electron
   if (!api?.showItemInFolder) return '当前环境不能打开文件夹'
   const result = await api.showItemInFolder(path)

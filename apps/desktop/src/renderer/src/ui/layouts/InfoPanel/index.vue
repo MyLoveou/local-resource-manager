@@ -51,6 +51,7 @@
           </div>
           <template v-if="isImage">
             <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
           </template>
           <template v-else-if="isVideo">
             <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
@@ -71,6 +72,15 @@
           @update:value="draft.description = $event" />
         <div class="info-panel-label">作者</div>
         <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
+        <template v-if="isImage">
+          <div class="info-panel-label">拍摄</div>
+          <input
+            class="info-panel-taken"
+            type="datetime-local"
+            :value="draft.takenAtLocal"
+            @input="onTakenAtInput"
+          />
+        </template>
         <div class="info-panel-label">待办</div>
         <div class="info-panel-todos">
           <div v-for="todo in resource.todos ?? []" :key="todo.id ?? todo.content" class="info-panel-todo">
@@ -114,6 +124,14 @@
             @click="onOpenDefault"
           >
             {{ shellActionLabel }}
+          </n-button>
+          <n-button
+            size="small"
+            :disabled="!canReveal || shellBusy"
+            :title="revealHint"
+            @click="onReveal"
+          >
+            打开所在位置
           </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
@@ -163,25 +181,29 @@ import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
   openLaunchOrPrimary,
   openPrimaryWithOther,
-  revealPrimary,
+  revealInFolder,
   launchOrPrimaryPath,
+  revealablePath,
 } from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { storeToRefs } from 'pinia'
 import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
-  consumeKindOf,
   FILE_ROLE,
   RESOURCE_TYPE_LABEL,
   SUBTITLE_FILE_FILTER,
   clarityLabel,
+  consumeKindOf,
   formatBitrate,
   formatDuration,
   formatFps,
   formatResolution,
   isSeriesResourceType,
+  localInputToTakenAt,
+  profileFor,
   qualityLabel,
+  takenAtToLocalInput,
 } from '@/domain'
 
 const selection = useSelectionStore()
@@ -215,6 +237,7 @@ const draft = reactive<MetadataDraft>({
   tagNames: [],
   tagInput: '',
   pendingCoverPath: null,
+  takenAtLocal: '',
 })
 
 function applyResourceToDraft(row: Resource): void {
@@ -226,6 +249,8 @@ function applyResourceToDraft(row: Resource): void {
   draft.tagNames = (row.tags ?? []).map((t) => t.name)
   draft.tagInput = ''
   draft.pendingCoverPath = null
+  const primary = row.files?.find((f) => f.role === FILE_ROLE.PRIMARY) ?? row.files?.[0]
+  draft.takenAtLocal = takenAtToLocalInput(primary?.exifTakenAt)
 }
 
 function snapshotEqualsSaved(): boolean {
@@ -239,7 +264,8 @@ function snapshotEqualsSaved(): boolean {
     (draft.author ?? '') === (row.author ?? '') &&
     (draft.categoryName ?? '') === (row.category?.name ?? '') &&
     savedTags === draftTags &&
-    draft.tagInput.trim() === ''
+    draft.tagInput.trim() === '' &&
+    draft.takenAtLocal === takenAtToLocalInput(primaryTakenAt(row))
   )
 }
 
@@ -261,11 +287,19 @@ const hasLaunch = computed(() =>
   (resource.value?.files ?? []).some((f) => f.role === FILE_ROLE.LAUNCH)
 )
 const canShellOpen = computed(() => launchOrPrimaryPath(resource.value) != null)
+const canReveal = computed(() => revealablePath(resource.value) != null)
+const revealHint = computed(() => {
+  if (shellBusy.value) return '正在打开…'
+  if (!canReveal.value) return '找不到可定位的文件'
+  return '在系统资源管理器中显示'
+})
 const shellActionLabel = computed(() => (hasLaunch.value ? '启动' : '打开'))
-const launchPathLabel = computed(() => launchOrPrimaryPath(resource.value) ?? '—')
+const launchPathLabel = computed(() => revealablePath(resource.value) ?? '—')
 
-/** 图片主文件即封面，不提供更换封面；仅视频可换海报。 */
-const canChangeCover = computed(() => isVideo.value)
+/** 图片主文件即作品，不能换封面；其余类型可手选海报。 */
+const canChangeCover = computed(() =>
+  resource.value != null && profileFor(resource.value.type)?.allowsUserCover === true
+)
 
 const moreOptions = computed((): DropdownOption[] => {
   const items: DropdownOption[] = []
@@ -273,13 +307,21 @@ const moreOptions = computed((): DropdownOption[] => {
   if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
   if (isImage.value || isShellOpen.value || consume.value === 'overlay-model') {
     items.push(
-      { label: '打开所在位置', key: 'reveal', disabled: shellBusy.value },
       { label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value },
       { label: '选择其他应用', key: 'openWith', disabled: shellBusy.value }
     )
   }
   return items
 })
+
+function primaryTakenAt(row: Resource): string | null | undefined {
+  const files = row.files ?? []
+  return (files.find((f) => f.role === FILE_ROLE.PRIMARY) ?? files[0])?.exifTakenAt
+}
+
+function onTakenAtInput(event: Event): void {
+  draft.takenAtLocal = (event.target as HTMLInputElement).value
+}
 
 function primaryFile(): ResourceFile | undefined {
   const files = resource.value?.files ?? []
@@ -289,6 +331,10 @@ function primaryFile(): ResourceFile | undefined {
 const sizeLabel = computed(() => formatBytes(primaryFile()?.size))
 const formatLabel = computed(() => primaryFile()?.format || '—')
 const resolutionLabel = computed(() => formatResolution(primaryFile()?.width, primaryFile()?.height))
+const takenAtLabel = computed(() => {
+  const local = takenAtToLocalInput(primaryFile()?.exifTakenAt)
+  return local ? local.replace('T', ' ') : '—'
+})
 const durationLabel = computed(() => formatDuration(primaryFile()?.duration))
 const fpsLabel = computed(() => formatFps(primaryFile()?.fps))
 const bitrateLabel = computed(() => formatBitrate(primaryFile()?.bitrate))
@@ -406,6 +452,7 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
       rating: draft.ratingStars * 2,
       categoryName: draft.categoryName,
       tagNames: [...draft.tagNames],
+      ...(row.type === 'image' ? { exifTakenAt: localInputToTakenAt(draft.takenAtLocal) } : {}),
     })
     resource.value = patched
     invalidateCategories()
@@ -473,7 +520,7 @@ function onModalShow(value: boolean): void {
 
 async function pickCoverImmediate(): Promise<void> {
   const id = selectedId.value
-  if (id === null) return
+  if (id === null || !canChangeCover.value) return
   const paths = (await window.electron.selectFiles([COVER_FILE_FILTER])) ?? []
   const path = paths[0]
   if (!path) return
@@ -490,6 +537,7 @@ async function pickCoverImmediate(): Promise<void> {
 }
 
 async function pickCoverForModal(): Promise<void> {
+  if (!canChangeCover.value) return
   const paths = (await window.electron.selectFiles([COVER_FILE_FILTER])) ?? []
   const path = paths[0]
   if (path) draft.pendingCoverPath = path
@@ -609,7 +657,8 @@ function openViewerFromCover(): void {
   const row = resource.value
   const id = row?.id
   if (id == null || row?.type !== 'image') return
-  const ids = imageViewer.playlistIds.includes(id) ? imageViewer.playlistIds : [id]
+  const bound = imageViewer.boundImageIds()
+  const ids = bound.includes(id) ? bound : [id]
   imageViewer.open(id, ids)
 }
 
@@ -644,7 +693,7 @@ async function runShell(
 }
 
 function onReveal(): void {
-  void runShell(revealPrimary)
+  void runShell(revealInFolder)
 }
 
 function onOpenDefault(): void {
@@ -662,10 +711,6 @@ function onMoreSelect(key: string | number): void {
   }
   if (key === 'subtitle') {
     void pickSubtitle()
-    return
-  }
-  if (key === 'reveal') {
-    onReveal()
     return
   }
   if (key === 'openDefault') {
@@ -846,6 +891,19 @@ async function handlePurge(): Promise<void> {
 
 .info-panel-episode:hover {
   background: var(--sm-color-bg-page);
+}
+
+.info-panel-taken {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--sm-color-text);
+  background: var(--sm-color-bg-surface);
+  border: 1px solid var(--sm-color-border);
+  border-radius: var(--sm-radius-control);
 }
 
 .info-panel-tags {

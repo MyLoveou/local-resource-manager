@@ -135,6 +135,21 @@ export interface MetadataDraft {
   tagNames: string[]
   tagInput: string
   pendingCoverPath: string | null
+  takenAtLocal: string
+}
+
+/** datetime-local 用到分钟；库内存到秒。 */
+export function takenAtToLocalInput(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/.exec(iso)
+  return match?.[1] ?? ''
+}
+
+export function localInputToTakenAt(local: string): string | null {
+  const text = local.trim()
+  if (!text) return null
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) return `${text}:00`
+  return text
 }
 
 /** 资源列表查询 */
@@ -145,7 +160,10 @@ export interface ResourcePageQuery {
   offset?: number
   afterCreatedAt?: string | null
   afterId?: number | null
-  sort?: 'createdAt'
+  afterKey?: string | null
+  q?: string
+  tagIds?: number[]
+  sort?: string
   order?: 'asc' | 'desc'
 }
 
@@ -158,4 +176,5 @@ export interface ResourcePage {
   hasMore: boolean
   nextCreatedAt?: string | null
   nextId?: number | null
+  nextKey?: string | null
 }

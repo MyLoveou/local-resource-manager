@@ -17,6 +17,7 @@ from app.library.application.schemas import (
     SubtitleAdd,
 )
 from app.library.application.use_cases import LibraryQueryService
+from app.library.application.covers import CoverNotAllowedError
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
 from app.shared.errors import InvalidStateError
@@ -60,16 +61,22 @@ async def list_resources(
     offset: int = Query(default=0, ge=0),
     after_created_at: str | None = Query(default=None, alias="afterCreatedAt"),
     after_id: int | None = Query(default=None, alias="afterId"),
+    after_key: str | None = Query(default=None, alias="afterKey"),
+    q: str | None = Query(default=None, max_length=200),
+    tag_ids: list[int] | None = Query(default=None, alias="tagIds"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourcePage:
-    """资源分页列表（可按类型/状态过滤）。"""
+    """资源分页列表（可按类型/状态/关键词/标签过滤）。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order,
         after_created_at=after_created_at,
         after_id=after_id,
+        after_key=after_key,
+        q=q,
+        tag_ids=tag_ids,
     )
 
 
@@ -134,6 +141,8 @@ async def replace_cover(
     resources, tasks = repos
     try:
         resource = await LibraryQueryService(resources, tasks).replace_cover(resource_id, body)
+    except CoverNotAllowedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if resource is None:
@@ -176,7 +185,10 @@ async def patch_resource(
 ) -> Resource:
     """部分更新标题/描述/评分/分类名/标签名。"""
     resources, tasks = repos
-    resource = await LibraryQueryService(resources, tasks).patch(resource_id, body)
+    try:
+        resource = await LibraryQueryService(resources, tasks).patch(resource_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if resource is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return resource

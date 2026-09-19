@@ -33,6 +33,7 @@ export interface ResourcePatch {
   rating?: number | null
   categoryName?: string | null
   tagNames?: string[]
+  exifTakenAt?: string | null
 }
 
 /** 分页获取资源 */
@@ -45,6 +46,9 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       offset: query.offset,
       afterCreatedAt: query.afterCreatedAt,
       afterId: query.afterId,
+      afterKey: query.afterKey,
+      q: query.q,
+      tagIds: query.tagIds,
       sort: query.sort,
       order: query.order,
     },

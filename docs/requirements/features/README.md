@@ -2,16 +2,97 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## ui-theme-shell（**草案 / 需求分析**）
+## image-viewer-cross-page（**已落地** · D-20260919-08）
 
-> 壳层模块化、CSS 主题加载、批量条位置、信息栏分区。未授权实现。
+> 图片查看器上一张/下一张越过当前已加载页。不环绕、不拉全库。待 Electron 手验。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-viewer-cross-page/需求.md`](image-viewer-cross-page/需求.md) | IN/OUT |
+| [`image-viewer-cross-page/设计.md`](image-viewer-cross-page/设计.md) | playlist 与 loadMore 同源 |
+| [`image-viewer-cross-page/实现方案.md`](image-viewer-cross-page/实现方案.md) | bindPager、预拉、文件清单 |
+
+## library-covers-complete（**已落地** · D-20260919-07）
+
+> 九种库类型封面策略收口。PDF/EPUB/cbz/同名贴图本刀；cbr 不抽页；不刮削、不回填。禁止编码。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-covers-complete/需求.md`](library-covers-complete/需求.md) | IN/OUT、已关开放问题 |
+| [`library-covers-complete/设计.md`](library-covers-complete/设计.md) | 选源顺序、origin、模块 |
+| [`library-covers-complete/实现方案.md`](library-covers-complete/实现方案.md) | sidecar/EPUB/PDF/cbz、文件清单 |
+
+## series-import-explain（**已落地** · D-20260919-06）
+
+> 番剧/AV 导入只读说明：为何失败、成功分成几集。不改映射。禁止编码。
+
+| 文档 | 内容 |
+|------|------|
+| [`series-import-explain/需求.md`](series-import-explain/需求.md) | IN/OUT |
+| [`series-import-explain/设计.md`](series-import-explain/设计.md) | explain code、job.message |
+| [`series-import-explain/实现方案.md`](series-import-explain/实现方案.md) | 文件清单 |
+| OpenSpec | 尚未建 |
+
+## audio-embedded-cover（**已落地**）
+
+> 音频新导入抽内嵌专辑图。EPUB 仍 OUT。
+
+| 文档 | 内容 |
+|------|------|
+| [`audio-embedded-cover/需求.md`](audio-embedded-cover/需求.md) | IN/OUT |
+| [`audio-embedded-cover/设计.md`](audio-embedded-cover/设计.md) | ffmpeg 附加图、origin=embedded |
+| [`audio-embedded-cover/实现方案.md`](audio-embedded-cover/实现方案.md) | 文件清单 |
+
+## library-covers（**已落地 / 视频抽帧已手验**）
+
+> 封面治理。D-20260919-03。音频内嵌图见 `audio-embedded-cover`。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-covers/需求.md`](library-covers/需求.md) | IN/OUT |
+| [`library-covers/设计.md`](library-covers/设计.md) | L2 |
+| [`library-covers/实现方案.md`](library-covers/实现方案.md) | 抽帧/pefile/lnk、文件清单 |
+| OpenSpec | `openspec/changes/library-covers/` |
+
+## image-exif-taken（**已落地**）
+
+> 图片深化第一刀（D1）：新导入写入 EXIF 拍摄时间并在信息栏展示。不做旧库回填。禁止编码。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-exif-taken/需求.md`](image-exif-taken/需求.md) | IN/OUT、故事 |
+| [`image-exif-taken/设计.md`](image-exif-taken/设计.md) | 探测优先级、存储格式、模块 |
+| OpenSpec | 尚未建（等 L3） |
+
+## image-library-depth（**草案 / 探索**）
+
+> 图片在最低消费之后还能加深什么、还能加什么。第一刀已拆 `image-exif-taken`。禁止把剩余表整包实现。
+
+| 文档 | 内容 |
+|------|------|
+| [`image-library-depth/需求.md`](image-library-depth/需求.md) | 现状缺口、债（D1–D6）、候选（N1–N22）、开放问题 |
+| [`image-library-depth/handoff.md`](image-library-depth/handoff.md) | D1 已拆出 |
+
+## library-search-sort（**实现中 / 待 Electron 手工验**）
+
+> 库内共用与分类型搜索、排序。未授权实现。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-search-sort/需求.md`](library-search-sort/需求.md) | IN/OUT、故事、开放问题 |
+| [`library-search-sort/实现方案.md`](library-search-sort/实现方案.md) | LIKE、API、keyset、文件清单 |
+| OpenSpec | `openspec/changes/library-search-sort/` |
+
+## ui-theme-shell（**实现中 / 已合入 master**）
+
+> 壳层模块化、CSS 主题加载、批量条位置、信息栏分区。已合入 master。
 
 | 文档 | 内容 |
 |------|------|
 | [`ui-theme-shell/需求.md`](ui-theme-shell/需求.md) | IN/OUT、故事、开放问题 |
 | OpenSpec | `openspec/changes/ui-theme-shell/` |
 
-## library-type-platform（**实现中 / feat 分支**）
+## library-type-platform（**已合入 master**）
 
 > 所有库类型最低导入与展示；领域 TypeProfile；游戏默认扫描登记；漫画/小说本刀无阅读器；类型页 TypeBrowse。
 

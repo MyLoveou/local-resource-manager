@@ -119,9 +119,15 @@ class MetadataPanelTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([c.name for c in cats], ["风景"])
 
     async def test_replace_cover_keeps_primary(self) -> None:
+        src = self.root / "a.mp3"
+        src.write_bytes(b"ID3")
         async with self.factory() as session:
-            rid = await self._import_one(session)
             repo = ResourceRepository(session)
+            job = ImportJobState(id="j1")
+            await ImportService(repo, store_root=self.store, file_ops=self.ops).run(
+                job, ResourceType.AUDIO, "file", [str(src)]
+            )
+            rid = (await repo.list(ResourceType.AUDIO, None, 10, 0, "desc"))[0].id
             before = await repo.get(rid)
             assert before is not None
             primary = next(f for f in before.files if f.role == "primary")
@@ -136,9 +142,15 @@ class MetadataPanelTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("/files/", after.cover_path or "")
 
     async def test_replace_cover_invalid(self) -> None:
+        src = self.root / "a.mp3"
+        src.write_bytes(b"ID3")
         async with self.factory() as session:
-            rid = await self._import_one(session)
             repo = ResourceRepository(session)
+            job = ImportJobState(id="j1")
+            await ImportService(repo, store_root=self.store, file_ops=self.ops).run(
+                job, ResourceType.AUDIO, "file", [str(src)]
+            )
+            rid = (await repo.list(ResourceType.AUDIO, None, 10, 0, "desc"))[0].id
             before = await repo.get(rid)
             assert before is not None
             with self.assertRaises(ValueError):

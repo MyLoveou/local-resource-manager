@@ -3,6 +3,11 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import HTTPException
+
+from app.library.application.covers import CoverNotAllowedError, attach_cover_image
+from app.library.application.list_query import allowed_sorts, normalize_q
+from app.library.application.media_probe import normalize_taken_at
 from app.library.application.packages.layouts import layout_for
 from app.library.application.packages.resource_package import ResourcePackage, default_library_store
 from app.library.application.schemas import (
@@ -20,12 +25,13 @@ from app.library.application.schemas import (
     TodoPatch,
 )
 from app.library.application.subtitle_naming import original_stem_from_extra, subtitle_dest_name
+from app.library.domain.type_profile import allows_user_cover
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
 from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
-from app.shared.media_types import COVER_EXTENSIONS, FILE_ROLE_THUMBNAIL, SUBTITLE_EXTENSIONS
+from app.shared.media_types import COVER_EXTENSIONS, FILE_ROLE_PRIMARY, SUBTITLE_EXTENSIONS
 from app.shared.models import Resource, ResourceStatus, ResourceType
 
 
@@ -64,38 +70,48 @@ class LibraryQueryService:
         *,
         after_created_at: str | None = None,
         after_id: int | None = None,
+        q: str | None = None,
+        tag_ids: list[int] | None = None,
+        after_key: str | None = None,
     ) -> ResourcePage:
-        """分页列表。sort 预留；MVP 仅 createdAt。keyset 优先于 offset。"""
-        _ = sort
+        """分页列表。q/tagIds/sort 服务端过滤；非法 sort 422。"""
+        query = normalize_q(q)
+        tags = tag_ids or []
+        if sort.value not in allowed_sorts(type_):
+            raise HTTPException(status_code=422, detail="sort not allowed")
         fetch = limit + 1
-        use_keyset = after_created_at is not None and after_id is not None
-        items = await self._resources.list(
+        cursor_key = after_key
+        if cursor_key is None and after_created_at is not None and sort.value == "createdAt":
+            cursor_key = after_created_at
+        use_keyset = cursor_key is not None and after_id is not None
+        items, keys = await self._resources.list_with_sort_keys(
             type_,
             status,
             fetch,
             0 if use_keyset else offset,
             order,
-            after_created_at=after_created_at if use_keyset else None,
+            sort=sort.value,
+            q=query,
+            tag_ids=tags,
+            after_key=cursor_key if use_keyset else None,
             after_id=after_id if use_keyset else None,
         )
         has_more = len(items) > limit
         items = items[:limit]
-        total = await self._resources.count(type_, status)
+        keys = keys[:limit]
+        total = await self._resources.count(type_, status, q=query, tag_ids=tags)
         last = items[-1] if items else None
-        cursor_ts = None
-        if last is not None and last.created_at is not None:
-            if isinstance(last.created_at, datetime):
-                cursor_ts = last.created_at.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                cursor_ts = str(last.created_at)
+        next_key = keys[-1] if has_more and keys else None
+        next_created = next_key if has_more and sort.value == "createdAt" else None
         return ResourcePage(
             items=items,
             total=total,
             limit=limit,
             offset=offset,
             has_more=has_more,
-            next_created_at=cursor_ts if has_more else None,
+            next_created_at=next_created,
             next_id=last.id if has_more and last is not None else None,
+            next_key=next_key,
         )
 
     async def patch(self, resource_id: int, body: ResourcePatch) -> Resource | None:
@@ -106,6 +122,7 @@ class LibraryQueryService:
         data = body.model_dump(exclude_unset=True)
         data.pop("tag_names", None)
         data.pop("category_name", None)
+        data.pop("exif_taken_at", None)
         if "author" in data:
             raw_author = data["author"]
             data["author"] = raw_author.strip() if isinstance(raw_author, str) and raw_author.strip() else None
@@ -124,17 +141,33 @@ class LibraryQueryService:
                 await self._resources.set_category_id(resource_id, cat.id, commit=False)
         if "tag_names" in body.model_fields_set:
             await self._resources.replace_tags(resource_id, body.tag_names or [], commit=False)
+        if "exif_taken_at" in body.model_fields_set:
+            if existing.type != ResourceType.IMAGE:
+                raise ValueError("exif taken at only for image")
+            raw_taken = body.exif_taken_at
+            if raw_taken is None or (isinstance(raw_taken, str) and not raw_taken.strip()):
+                normalized = None
+            else:
+                normalized = normalize_taken_at(raw_taken)
+                if normalized is None:
+                    raise ValueError("invalid taken at")
+            primary = await self._resources.get_file_by_role(resource_id, FILE_ROLE_PRIMARY)
+            if primary is None:
+                raise ValueError("primary file missing")
+            await self._resources.update_file_exif_taken_at(primary.id, normalized, commit=False)
         await self._resources.commit()
         return await self._resources.get(resource_id)
 
     async def replace_cover(self, resource_id: int, body: CoverReplace) -> Resource | None:
-        """复制本机图片为 cover 角色，不改 primary。"""
+        """复制本机图片为 cover 角色，不改 primary。图片禁止。"""
         src = Path(body.path)
         if not src.is_file() or src.suffix.lower() not in COVER_EXTENSIONS:
             raise ValueError("invalid cover path")
         existing = await self._resources.get(resource_id)
         if existing is None or existing.id is None:
             return None
+        if not allows_user_cover(existing.type):
+            raise CoverNotAllowedError()
         layout = layout_for(existing.type)
         if layout is None:
             raise ValueError("unsupported type")
@@ -145,59 +178,19 @@ class LibraryQueryService:
             self._ops,
             cover_falls_back_to_primary=layout.cover_falls_back_to_primary,
         )
-        old = await self._resources.get_file_by_role(existing.id, "cover")
-        dest = await asyncio.to_thread(package.put_cover, src)
-        if old is not None:
-            old_path = Path(old.path)
-            if old_path.resolve() != dest.resolve() and old_path.is_file():
-                await asyncio.to_thread(old_path.unlink)
-            await self._resources.delete_file_row(old.id, commit=False)
-        size = dest.stat().st_size
-        cover_row = await self._resources.add_file(
-            existing.id,
-            path=str(dest),
-            sha256=None,
-            size=size,
-            format_=dest.suffix.lower().lstrip("."),
-            role="cover",
-            commit=False,
-        )
-        existing.cover_path = f"/library/resources/{existing.id}/files/{cover_row.id}/content"
-        existing._touch()
-        await self._resources.update(existing.id, existing, commit=False)
-        await self._resources.commit()
-        await self._try_refresh_thumbnail(existing.id, package, dest)
-        return await self._resources.get(existing.id)
+        from app.library.application.covers.origin import COVER_ORIGIN_USER
 
-    async def _try_refresh_thumbnail(self, resource_id: int, package: ResourcePackage, source_image: Path) -> None:
-        """换封面后覆盖网格缩略图；失败不影响封面提交。"""
-        try:
-            thumb_dest = await asyncio.to_thread(package.put_thumbnail, source_image)
-            if thumb_dest is None:
-                return
-            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
-            old_thumb = await self._resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
-            if old_thumb is not None:
-                await self._resources.update_file_stat(
-                    old_thumb.id,
-                    path=str(thumb_dest),
-                    size=thumb_size,
-                    format_=thumb_dest.suffix.lower().lstrip("."),
-                    commit=True,
-                )
-                return
-            await self._resources.add_file(
-                resource_id,
-                path=str(thumb_dest),
-                sha256=None,
-                size=thumb_size,
-                format_=thumb_dest.suffix.lower().lstrip("."),
-                role=FILE_ROLE_THUMBNAIL,
-                commit=True,
-            )
-        except Exception as exc:
-            logger.warning("换封面后缩略图失败 resource=%s: %s", resource_id, exc)
-            await self._resources.rollback()
+        ok = await attach_cover_image(
+            self._resources,
+            existing,
+            package,
+            src,
+            COVER_ORIGIN_USER,
+            honor_user_lock=False,
+        )
+        if not ok:
+            raise ValueError("cover write failed")
+        return await self._resources.get(resource_id)
 
     async def add_subtitle(self, resource_id: int, body: SubtitleAdd) -> Resource | None:
         """复制字幕进包内并按原始视频名改名。"""

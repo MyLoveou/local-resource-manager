@@ -1,12 +1,13 @@
 <template>
   <div class="resource-browser">
+    <BrowseControls :type="type" :status="status" :placeholder="searchPlaceholder" />
     <p v-if="batchMessage" class="resource-browser__hint">{{ batchMessage }}</p>
     <div v-if="loading && items.length === 0" class="resource-browser__state">加载中…</div>
     <div v-else-if="error && items.length === 0" class="resource-browser__state">
       <p>加载失败</p>
       <button type="button" class="resource-browser__retry" @click="reset">重试</button>
     </div>
-    <EmptyGuide v-else-if="!loading && total === 0" :hint="emptyHint" />
+    <EmptyGuide v-else-if="!loading && total === 0" :hint="resolvedEmptyHint" />
     <VirtualGrid v-else class="resource-browser__grid" :items="gridItems" :selected-ids="gridSelectedIds"
       @near-end="loadMore" @card-click="handleCardClick">
       <template #footer>
@@ -24,6 +25,8 @@
 import { computed, onUnmounted, watch } from 'vue'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
+import BrowseControls from '@/components/BrowseControls/index.vue'
+import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
@@ -34,6 +37,7 @@ import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/static'
+import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { consumeKindOf, FILE_ROLE, MODEL_PREVIEW_EXTENSIONS } from '@/domain'
 import { openLaunchOrPrimary } from '@/infrastructure/shell/openLibraryFile'
 const BATCH_LIMIT = 200
@@ -48,13 +52,31 @@ const isTrash = computed(() => props.status === 'trashed')
 const selection = useSelectionStore()
 const library = useLibraryStore()
 const shellBatch = useShellBatchStore()
+const browse = useBrowseQueryStore()
+const session = computed(() => browse.ensure(props.type, props.status))
+const searchPlaceholder = computed(() => (props.type ? '在本类中搜索' : isTrash.value ? '在回收站中搜索' : '在结果中筛选'))
+const resolvedEmptyHint = computed(() =>
+  session.value.q.trim() || session.value.tagIds.length ? '无匹配' : props.emptyHint
+)
 const { selectedIds } = storeToRefs(selection)
 const { batchMode, message: batchMessage, busy: batchBusy } = storeToRefs(shellBatch)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
   type: () => props.type,
   status: () => props.status ?? 'active',
+  q: () => session.value.q,
+  sort: () => session.value.sort,
+  order: () => session.value.order,
+  tagIds: () => session.value.tagIds,
 })
 const { batchResources } = useResourceHandle()
+const imageViewer = useImageViewerStore()
+
+imageViewer.bindPager({
+  hasMore: () => hasMore.value,
+  loadingMore: () => loadingMore.value,
+  loadMore,
+  imageIds: () => ids('image'),
+})
 
 const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []))
 
@@ -190,7 +212,42 @@ watch(
   }
 )
 
+watch(
+  () => [hasMore.value, loadingMore.value] as const,
+  () => {
+    imageViewer.notifyPager()
+  }
+)
+
+watch(
+  () => library.revision,
+  () => {
+    if (imageViewer.visible) imageViewer.close()
+  }
+)
+
+watch(
+  () => [imageViewer.visible, imageViewer.currentId, items.value, hasMore.value] as const,
+  () => {
+    if (!imageViewer.visible) return
+    const imageIds = ids('image')
+    imageViewer.syncPlaylist(imageIds)
+    const current = imageViewer.currentId
+    if (current == null) return
+    if (!imageIds.includes(current)) {
+      imageViewer.close()
+      return
+    }
+    const pos = imageIds.indexOf(current)
+    if (pos >= imageIds.length - 2 && hasMore.value) {
+      void loadMore()
+    }
+  }
+)
+
 onUnmounted(() => {
+  imageViewer.unbindPager()
+  if (imageViewer.visible) imageViewer.close()
   shellBatch.unbind()
   const kind = props.type ? consumeKindOf(props.type) : undefined
   if (kind) PlayerByConsume[kind].close()

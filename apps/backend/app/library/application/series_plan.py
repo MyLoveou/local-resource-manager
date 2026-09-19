@@ -48,6 +48,53 @@ class PlannedItem:
     title: str | None
 
 
+_DETAIL_CAP = 20
+_FAIL_MESSAGES = {
+    "no_videos": "目录里没有可识别的视频文件",
+    "mixed_season_dirs": "部分正片在季目录（Season/Sxx）里，部分不在，无法自动对齐",
+    "unrecognized_names": "无法从文件名识别集号（需要 Season 目录、SxxExx 或可解析序号）",
+    "missing_episode": "已按目录或文件名布局识别，仍有文件抽不出集号",
+    "duplicate_episode": "多个文件落到同一季集号",
+}
+
+
+@dataclass(frozen=True)
+class ExplainedPlan:
+    """系列目录识别结果：成功含计划，失败含 code 与文件说明。"""
+
+    ok: bool
+    items: tuple[PlannedItem, ...] = ()
+    code: str | None = None
+    message: str = ""
+    details: tuple[str, ...] = ()
+
+
+def _cap_details(lines: list[str]) -> tuple[str, ...]:
+    if len(lines) <= _DETAIL_CAP:
+        return tuple(lines)
+    kept = _DETAIL_CAP - 1
+    omitted = len(lines) - kept
+    return tuple(lines[:kept] + [f"另有 {omitted} 个文件未列出"])
+
+
+def _fail(code: str, details: list[str]) -> ExplainedPlan:
+    return ExplainedPlan(False, (), code, _FAIL_MESSAGES[code], _cap_details(details))
+
+
+def _ok(items: list[PlannedItem]) -> ExplainedPlan:
+    episodes = [item for item in items if item.kind == "episode"]
+    extras = [item for item in items if item.kind == "extra"]
+    seasons = {item.season for item in episodes}
+    message = f"已识别 {len(seasons)} 季 · {len(episodes)} 集 · {len(extras)} 特典"
+    details: list[str] = []
+    for item in items:
+        if item.kind == "episode" and item.episode is not None:
+            details.append(f"S{item.season:02d}E{item.episode:02d} ← {item.src.name}")
+        else:
+            details.append(f"特典 ← {item.src.name}")
+    return ExplainedPlan(True, tuple(items), None, message, _cap_details(details))
+
+
 def _int_group(match: re.Match[str]) -> int:
     for value in match.groups():
         if value is not None:
@@ -145,10 +192,10 @@ def sxx_season_from_stem(stem: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | None:
-    """全部可自动识别才返回计划；否则 None。"""
+def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
+    """识别成功或带原因失败。ingest 只走此入口。"""
     if not videos:
-        return None
+        return _fail("no_videos", [])
     extras: list[Path] = []
     episodes: list[Path] = []
     for path in videos:
@@ -157,11 +204,14 @@ def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | No
         else:
             episodes.append(path)
     if not episodes and not extras:
-        return None
+        return _fail("no_videos", [path.name for path in videos])
 
-    if any(_season_in_path(root, path) is not None for path in episodes):
-        if any(_season_in_path(root, path) is None for path in episodes):
-            return None
+    in_season = [path for path in episodes if _season_in_path(root, path) is not None]
+    out_season = [path for path in episodes if _season_in_path(root, path) is None]
+    if in_season and out_season:
+        return _fail("mixed_season_dirs", [path.name for path in out_season])
+
+    if in_season:
         mode = "dir"
     elif episodes and all(sxx_season_from_stem(path.stem) is not None for path in episodes):
         mode = "sxx"
@@ -170,10 +220,17 @@ def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | No
     elif not episodes and extras:
         mode = "extras"
     else:
-        return None
+        unnamed = [
+            path.name
+            for path in episodes
+            if episode_number_from_stem(path.stem) is None and sxx_season_from_stem(path.stem) is None
+        ]
+        return _fail("unrecognized_names", unnamed or [path.name for path in episodes])
 
     items: list[PlannedItem] = []
-    seen: set[tuple[int, int]] = set()
+    seen: dict[tuple[int, int], str] = {}
+    missing: list[str] = []
+    duplicates: list[str] = []
     for path in sorted(episodes, key=lambda item: item.as_posix().lower()):
         if mode == "dir":
             season = _season_in_path(root, path)
@@ -185,13 +242,20 @@ def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | No
             season = 1
             episode = episode_number_from_stem(path.stem)
         if season is None or episode is None:
-            return None
+            missing.append(path.name)
+            continue
         key = (season, episode)
-        if key in seen:
-            return None
-        seen.add(key)
+        previous = seen.get(key)
+        if previous is not None:
+            duplicates.append(f"{path.name} 与 {previous} 均为 S{season:02d}E{episode:02d}")
+            continue
+        seen[key] = path.name
         dest = f"seasons/{season:02d}/S{season:02d}E{episode:02d}{path.suffix.lower()}"
         items.append(PlannedItem(path, "episode", season, episode, dest, None))
+    if duplicates:
+        return _fail("duplicate_episode", duplicates)
+    if missing:
+        return _fail("missing_episode", missing)
 
     used_names: set[str] = set()
     for index, path in enumerate(sorted(extras, key=lambda item: item.name.lower())):
@@ -200,4 +264,10 @@ def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | No
             name = f"{path.stem}_{index}{path.suffix.lower()}"
         used_names.add(name.lower())
         items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", path.stem))
-    return items
+    return _ok(items)
+
+
+def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | None:
+    """全部可自动识别才返回计划；否则 None。"""
+    explained = explain_series_plan(root, videos)
+    return list(explained.items) if explained.ok else None

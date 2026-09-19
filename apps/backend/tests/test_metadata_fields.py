@@ -206,6 +206,66 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subtitle_dest_name("电影", "foo.zh.srt"), "电影.zh.srt")
         self.assertEqual(subtitle_dest_name("电影", "plain.srt"), "电影.srt")
 
+    def _jpeg_with_taken(self, name: str, exif_dt: str) -> Path:
+        from PIL import Image
+
+        path = self.root / name
+        image = Image.new("RGB", (8, 8), (12, 34, 56))
+        exif = image.getexif()
+        exif[306] = exif_dt
+        image.save(path, format="JPEG", exif=exif)
+        return path
+
+    def test_normalize_taken_at(self) -> None:
+        from app.library.application.media_probe import normalize_taken_at
+
+        self.assertEqual(normalize_taken_at("2024:03:15 14:08:01"), "2024-03-15T14:08:01")
+        self.assertEqual(normalize_taken_at("2024-03-15T14:08"), "2024-03-15T14:08:00")
+        self.assertIsNone(normalize_taken_at("not-a-date"))
+        self.assertIsNone(normalize_taken_at("  "))
+
+    async def test_import_jpeg_writes_taken_at(self) -> None:
+        src = self._jpeg_with_taken("cam.jpg", "2024:03:15 14:08:01")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            got = await ResourceRepository(session).get(rid)
+            assert got is not None
+            primary = next(f for f in got.files if f.role == "primary")
+            self.assertEqual(primary.exif_taken_at, "2024-03-15T14:08:01")
+
+    async def test_import_png_taken_at_empty(self) -> None:
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, self._png("a.png"))
+            got = await ResourceRepository(session).get(rid)
+            assert got is not None
+            primary = next(f for f in got.files if f.role == "primary")
+            self.assertIsNone(primary.exif_taken_at)
+
+    async def test_patch_taken_at(self) -> None:
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, self._png("a.png"))
+            updated = await self._svc(session).patch(rid, ResourcePatch(exif_taken_at="2020-01-02T03:04"))
+            assert updated is not None
+            primary = next(f for f in updated.files if f.role == "primary")
+            self.assertEqual(primary.exif_taken_at, "2020-01-02T03:04:00")
+            cleared = await self._svc(session).patch(rid, ResourcePatch(exif_taken_at=""))
+            assert cleared is not None
+            primary = next(f for f in cleared.files if f.role == "primary")
+            self.assertIsNone(primary.exif_taken_at)
+            with self.assertRaises(ValueError):
+                await self._svc(session).patch(rid, ResourcePatch(exif_taken_at="not-a-date"))
+
+    async def test_patch_taken_at_rejects_video(self) -> None:
+        async with self.factory() as session:
+            rid = await self._import(
+                session,
+                ResourceType.VIDEO,
+                self._file("电影.mp4"),
+                probe=lambda _t, _p: ProbeFields(),
+            )
+            with self.assertRaises(ValueError):
+                await self._svc(session).patch(rid, ResourcePatch(exif_taken_at="2020-01-02T03:04:00"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -55,6 +55,8 @@ export const FILE_ROLE = {
   THUMBNAIL: 'thumbnail',
   LAUNCH: 'launch',
   PAGE: 'page',
+  EPISODE: 'episode',
+  EXTRA: 'extra',
 } as const
 
 export const THUMB_DIR = 'thumbs'

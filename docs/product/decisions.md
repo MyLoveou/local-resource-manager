@@ -7,6 +7,76 @@
 
 ## 有效决策
 
+### D-20260919-08 · 查看器切图与当前列表分页同源
+
+- 日期：2026-09-19
+- 场景：`image-viewer-cross-page`
+- **决定**：playlist = `useResourcePage.items` 里的图片 id。末张下一张走同一 `loadMore`（keyset 80）。不环绕、不另拉全库 id。封面入口用已绑定列表。bump 关闭查看器。
+- **为何**：原先只切已加载 80 张，列表背后已能翻页。
+- **不选**：beforeKey、画廊沉浸、查看器自己打 REST。
+- **落点**：`docs/requirements/features/image-viewer-cross-page/`
+- 状态：有效（已落地）
+
+### D-20260919-07 · 全类型封面自动源收口；不回填
+
+- 日期：2026-09-19
+- 场景：`library-covers-complete`
+- **决定**：新导入按 手选 > 旁海报/同名图 > 类型专用。EPUB 走 OPF/cover 文件名；PDF 渲首页（pypdfium2）；cbz 抽第一张图；cbr 不抽。旧库不回填。
+- **为何**：九种类型卡面策略补齐，列表仍只吃 thumbnailPath。
+- **不选**：刮削、3D 截图、unrar、回填。
+- **落点**：`docs/requirements/features/library-covers-complete/`
+- 状态：有效（已落地）
+
+### D-20260919-05 · 音频新导入抽内嵌封面；EPUB 仍后置
+
+- 日期：2026-09-19
+- 场景：`audio-embedded-cover`
+- **决定**：PATH 上 ffmpeg 抽第一条附加图流写入包内 cover，`coverOrigin=embedded`。无图/无 ffmpeg 不挡导入。不回填、不写回文件、不加 mutagen。EPUB 仍 OUT。
+- **为何**：与已验过的视频抽帧同一工具；很多 mp3/flac/m4a 自带专辑图。
+- **不选**：mutagen；目录当一张专辑卡；本刀做 EPUB。
+- **落点**：`docs/requirements/features/audio-embedded-cover/`
+- 状态：有效（已落地）
+
+### D-20260919-04 · 图片拍摄时间：新导入探测并可手改；不回填
+
+- 日期：2026-09-19
+- 场景：`image-exif-taken`（图片深化 D1）
+- **决定**：导入用 Pillow 读 EXIF 写入 `files.exif_taken_at`。信息栏可手改，PATCH 只动图片 primary。开发库不回填。不写回文件。
+- **为何**：排序键 `takenAt` 已有但列空；手改覆盖错误 EXIF。
+- **不选**：旧库扫描；完整 EXIF 档案；视频 creation_time。
+- **落点**：`docs/requirements/features/image-exif-taken/`
+- 状态：有效（已落地）
+
+### D-20260919-03 · 封面治理：非图片可换；游戏海报优于 exe；抽帧本刀；手指定锁定
+
+- 日期：2026-09-19
+- 场景：`library-covers` 开放问题
+- **决定**：除图片外均可手选封面。游戏优先级：手指定 > 目录海报 > exe 图标 > 无。视频/番剧/AV 无海报则导入时抽一帧。`.lnk` 解析到目标 exe 再抽。手指定后自动源不可覆盖。旧库不回填。音频内嵌图与 EPUB 封面不进本刀。
+- **为何**：网格大量无封面；游戏安装版没有 poster 文件；用户海报不能被图标顶掉。
+- **不选**：仅视频能换封面；展示时现抽图标；旧库批量补；本刀做音频/EPUB 内嵌图。
+- **落点**：`docs/requirements/features/library-covers/实现方案.md`
+- 状态：有效（已落地；Electron 手测待重启应用）
+
+### D-20260919-02 · 打开所在位置是所有资源共用能力
+
+- 日期：2026-09-19
+- 场景：信息栏「打开所在位置」原先只挂在图片 / shell-open / 模型
+- **决定**：定位磁盘文件与 consumeKind 无关。所有当前类型（含视频、番剧/AV、音频、回收站）信息栏常驻「打开所在位置」。路径：launch → primary → episode → extra → page，再回退其它非封面/字幕/缩略图文件。系统打开/选应用仍按类型最低消费。
+- **为何**：用户要在资源管理器里找到任意作品的文件，不依赖内置播放器。
+- **不选**：仅部分类型提供；把 reveal 绑死 primary。
+- **落点**：`InfoPanel`；`revealPath.ts`
+- 状态：有效
+
+### D-20260919-01 · 库内搜排：LIKE；顶栏跨类型；标签多选且关键词可命中
+
+- 日期：2026-09-19
+- 场景：`library-search-sort` 开放问题
+- **决定**：共用搜索=标题/作者/描述/分类/标签/文件名。顶栏跨类型搜索与类型页同一套字段。共用排序=创建/更新时间、标题、评分、体积（默认创建降序）。需求表内分类型键全部进本刀，其余后补；女优/字幕组 OUT。本刀 SQLite **LIKE**，不上 FTS5。排序与标签多选等按类型（scope）localStorage 记住。标签：**独立多选（AND）** 且关键词仍可命中标签名。回收站同一套控件只搜已删除；顶栏不搜回收站。
+- **为何**：先能搜到；FTS 要同步表与分词。跨类型与本类都要。标签既要点选也要打字。
+- **不选**：本刀 FTS5；只做类型页不做顶栏；只靠关键词或只靠多选之一；女优/字幕组检索。
+- **落点**：`docs/requirements/features/library-search-sort/实现方案.md`
+- 状态：有效（规划已记；实现待「可以按此实现」）
+
 ### D-20260918-01 · 壳层换肤：本机一份 css；顶栏主题与批量；信息栏分区
 
 - 日期：2026-09-18

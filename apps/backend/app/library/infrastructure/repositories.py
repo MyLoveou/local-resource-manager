@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, asc, desc, func, or_, select
+from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.db.orm import (
@@ -23,7 +23,7 @@ from app.shared.db.orm import (
     SeasonRow,
     TagRow,
 )
-from app.shared.media_types import FILE_ROLE_THUMBNAIL, is_series_type
+from app.shared.media_types import FILE_ROLE_PAGE, FILE_ROLE_THUMBNAIL, is_series_type
 from app.shared.models import (
     Category,
     Resource,
@@ -327,25 +327,138 @@ class ResourceRepository:
             return None
         return await self._hydrate(row)
 
+    def _file_agg(self, expr):
+        return select(expr).where(FileRow.resource_id == ResourceRow.id).correlate(ResourceRow).scalar_subquery()
+
+    def _sort_expr(self, sort: str):
+        area = func.max(FileRow.width * FileRow.height)
+        mapping = {
+            "createdAt": ResourceRow.created_at,
+            "updatedAt": ResourceRow.updated_at,
+            "title": ResourceRow.title,
+            "rating": ResourceRow.rating,
+            "size": self._file_agg(func.sum(FileRow.size)),
+            "width": self._file_agg(func.max(FileRow.width)),
+            "height": self._file_agg(func.max(FileRow.height)),
+            "duration": self._file_agg(func.max(FileRow.duration)),
+            "bitrate": self._file_agg(func.max(FileRow.bitrate)),
+            "takenAt": self._file_agg(func.max(FileRow.exif_taken_at)),
+            "pixelArea": select(area)
+            .where(
+                FileRow.resource_id == ResourceRow.id,
+                FileRow.width.is_not(None),
+                FileRow.height.is_not(None),
+            )
+            .correlate(ResourceRow)
+            .scalar_subquery(),
+            "resolution": select(area)
+            .where(
+                FileRow.resource_id == ResourceRow.id,
+                FileRow.width.is_not(None),
+                FileRow.height.is_not(None),
+            )
+            .correlate(ResourceRow)
+            .scalar_subquery(),
+            "pageCount": select(func.count())
+            .where(FileRow.resource_id == ResourceRow.id, FileRow.role == FILE_ROLE_PAGE)
+            .correlate(ResourceRow)
+            .scalar_subquery(),
+            "episodeCount": (
+                select(func.count())
+                .select_from(EpisodeRow)
+                .join(SeasonRow, EpisodeRow.season_id == SeasonRow.id)
+                .where(SeasonRow.resource_id == ResourceRow.id)
+                .correlate(ResourceRow)
+                .scalar_subquery()
+            ),
+        }
+        return mapping.get(sort, ResourceRow.created_at)
+
+    def _search_filter(self, stmt, q: str | None, tag_ids: list[int] | None):
+        from app.library.application.list_query import CLARITY_PX, like_pattern
+
+        if q:
+            pattern = like_pattern(q)
+            file_conds = [
+                func.lower(FileRow.path).like(pattern, escape="\\"),
+                func.lower(func.coalesce(FileRow.format, "")).like(pattern, escape="\\"),
+            ]
+            if q.isdigit() and int(q) in CLARITY_PX:
+                file_conds.append(or_(FileRow.width == int(q), FileRow.height == int(q)))
+            file_hit = exists(
+                select(FileRow.id).where(FileRow.resource_id == ResourceRow.id, or_(*file_conds))
+            )
+            tag_hit = exists(
+                select(ResourceTagRow.resource_id)
+                .join(TagRow, TagRow.id == ResourceTagRow.tag_id)
+                .where(
+                    ResourceTagRow.resource_id == ResourceRow.id,
+                    func.lower(TagRow.name).like(pattern, escape="\\"),
+                )
+            )
+            cat_hit = exists(
+                select(CategoryRow.id).where(
+                    CategoryRow.id == ResourceRow.category_id,
+                    func.lower(CategoryRow.name).like(pattern, escape="\\"),
+                )
+            )
+            stmt = stmt.where(
+                or_(
+                    func.lower(ResourceRow.title).like(pattern, escape="\\"),
+                    func.lower(func.coalesce(ResourceRow.author, "")).like(pattern, escape="\\"),
+                    func.lower(func.coalesce(ResourceRow.description, "")).like(pattern, escape="\\"),
+                    cat_hit,
+                    tag_hit,
+                    file_hit,
+                )
+            )
+        for tag_id in tag_ids or []:
+            stmt = stmt.where(
+                exists(
+                    select(ResourceTagRow.resource_id).where(
+                        ResourceTagRow.resource_id == ResourceRow.id,
+                        ResourceTagRow.tag_id == tag_id,
+                    )
+                )
+            )
+        return stmt
+
+    def _keyset_clause(self, sort_expr, order: str, after_key: str, after_id: int):
+        from app.library.application.list_query import NULL_CURSOR
+
+        is_desc = order == "desc"
+        id_cmp = ResourceRow.id < after_id if is_desc else ResourceRow.id > after_id
+        if after_key == NULL_CURSOR:
+            return and_(sort_expr.is_(None), id_cmp)
+        value_cmp = sort_expr < after_key if is_desc else sort_expr > after_key
+        same = and_(sort_expr == after_key, id_cmp)
+        if is_desc:
+            return or_(and_(sort_expr.is_not(None), or_(value_cmp, same)), sort_expr.is_(None))
+        return or_(and_(sort_expr.is_not(None), or_(value_cmp, same)), sort_expr.is_(None))
+
     def _filter(
         self,
         stmt,
         type_: ResourceType | None,
         status: ResourceStatus | None,
+        q: str | None = None,
+        tag_ids: list[int] | None = None,
     ):
         if type_ is not None:
             stmt = stmt.where(ResourceRow.type == type_.value)
         if status is not None:
             stmt = stmt.where(ResourceRow.status == status.value)
-        return stmt
+        return self._search_filter(stmt, q, tag_ids)
 
     async def count(
         self,
         type_: ResourceType | None = None,
         status: ResourceStatus | None = None,
+        q: str | None = None,
+        tag_ids: list[int] | None = None,
     ) -> int:
         """与 list 相同过滤条件下的总数。"""
-        stmt = self._filter(select(func.count()).select_from(ResourceRow), type_, status)
+        stmt = self._filter(select(func.count()).select_from(ResourceRow), type_, status, q, tag_ids)
         total = await self._session.scalar(stmt)
         return int(total or 0)
 
@@ -357,39 +470,59 @@ class ResourceRepository:
         offset: int = 0,
         order: str = "desc",
         *,
+        sort: str = "createdAt",
+        q: str | None = None,
+        tag_ids: list[int] | None = None,
+        after_key: str | None = None,
         after_created_at: str | None = None,
         after_id: int | None = None,
     ) -> list[Resource]:
-        """条件列表。优先 keyset（created_at+id）；否则 offset。多取 1 条由调用方判断 has_more。"""
-        stmt = self._filter(select(ResourceRow), type_, status)
-        direction = desc if order == "desc" else asc
-        stmt = stmt.order_by(direction(ResourceRow.created_at), direction(ResourceRow.id))
-        if after_created_at is not None and after_id is not None:
-            if order == "desc":
-                stmt = stmt.where(
-                    or_(
-                        ResourceRow.created_at < after_created_at,
-                        and_(
-                            ResourceRow.created_at == after_created_at,
-                            ResourceRow.id < after_id,
-                        ),
-                    )
-                )
-            else:
-                stmt = stmt.where(
-                    or_(
-                        ResourceRow.created_at > after_created_at,
-                        and_(
-                            ResourceRow.created_at == after_created_at,
-                            ResourceRow.id > after_id,
-                        ),
-                    )
-                )
-            stmt = stmt.limit(limit)
+        resources, _keys = await self.list_with_sort_keys(
+            type_,
+            status,
+            limit,
+            offset,
+            order,
+            sort=sort,
+            q=q,
+            tag_ids=tag_ids,
+            after_key=after_key,
+            after_created_at=after_created_at,
+            after_id=after_id,
+        )
+        return resources
+
+    async def list_with_sort_keys(
+        self,
+        type_: ResourceType | None = None,
+        status: ResourceStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        order: str = "desc",
+        *,
+        sort: str = "createdAt",
+        q: str | None = None,
+        tag_ids: list[int] | None = None,
+        after_key: str | None = None,
+        after_created_at: str | None = None,
+        after_id: int | None = None,
+    ) -> tuple[list[Resource], list[str]]:
+        from app.library.application.list_query import serialize_sort_value
+
+        sort_expr = self._sort_expr(sort)
+        stmt = self._filter(select(ResourceRow, sort_expr.label("sort_value")), type_, status, q, tag_ids)
+        cursor_key = after_key
+        if cursor_key is None and after_created_at is not None and sort == "createdAt":
+            cursor_key = after_created_at
+        stmt = stmt.order_by(sort_expr.is_(None), desc(sort_expr) if order == "desc" else asc(sort_expr), desc(ResourceRow.id) if order == "desc" else asc(ResourceRow.id))
+        if cursor_key is not None and after_id is not None:
+            stmt = stmt.where(self._keyset_clause(sort_expr, order, cursor_key, after_id)).limit(limit)
         else:
             stmt = stmt.limit(limit).offset(offset)
-        rows = (await self._session.execute(stmt)).scalars().all()
-        return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
+        rows = (await self._session.execute(stmt)).all()
+        resources = await self._attach_thumbnail_paths([_orm_to_resource(row[0]) for row in rows])
+        keys = [serialize_sort_value(row[1]) for row in rows]
+        return resources, keys
 
     async def ids_missing_thumbnail(self) -> list[int]:
         """有资源行但没有 thumbnail 文件行的 id（卫生脚本）。"""
@@ -461,6 +594,7 @@ class ResourceRepository:
         codec: str | None = None,
         fps: float | None = None,
         bitrate: int | None = None,
+        exif_taken_at: str | None = None,
         commit: bool = True,
     ) -> FileRow:
         """写入库内文件行。"""
@@ -478,6 +612,7 @@ class ResourceRepository:
             codec=codec,
             fps=fps,
             bitrate=bitrate,
+            exif_taken_at=exif_taken_at,
             created_at=ts,
         )
         self._session.add(row)
@@ -580,6 +715,24 @@ class ResourceRepository:
         row.path = path
         row.size = size
         row.format = format_
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+        await self._session.refresh(row)
+        return row
+
+    async def update_file_exif_taken_at(
+        self,
+        file_id: int,
+        value: str | None,
+        *,
+        commit: bool = True,
+    ) -> FileRow | None:
+        row = await self._session.get(FileRow, file_id)
+        if row is None:
+            return None
+        row.exif_taken_at = value
         if commit:
             await self._session.commit()
         else:

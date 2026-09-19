@@ -5,7 +5,7 @@
 export * from './resource'
 export * from './mediaTypes'
 export type { TypeProfile, ConsumeKind, IngestKind, StorageKind } from './libraryTypes'
-export { TYPE_PROFILES } from './libraryTypes'
+export { TYPE_PROFILES, SHARED_SORT_KEYS, SORT_LABELS, allowedSortKeys } from './libraryTypes'
 export * from './mediaLabels'
 export * from './scrape'
 export * from './download'

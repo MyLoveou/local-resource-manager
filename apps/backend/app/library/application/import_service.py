@@ -11,11 +11,11 @@ from pathlib import Path
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.library.application.covers import apply_ingest_cover
 from app.library.application.importers import importer_for
 from app.library.application.ingest.placement import (
     comic_pages,
     copy_tree_filtered,
-    find_folder_cover,
     find_launch,
     normalize_path,
 )
@@ -25,14 +25,13 @@ from app.library.application.packages import ResourcePackage, layout_for
 from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
-from app.library.application.series_plan import PlannedItem, plan_series_videos
+from app.library.application.series_plan import PlannedItem, explain_series_plan
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
 from app.shared.media_types import (
-    FILE_ROLE_COVER,
     FILE_ROLE_EPISODE,
     FILE_ROLE_EXTRA,
     FILE_ROLE_LAUNCH,
@@ -201,6 +200,9 @@ class ImportService:
         thumb_src = source_for_grid_thumbnail(type_, role_paths)
         if thumb_src is None:
             return
+        existing_thumb = await resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
+        if existing_thumb is not None:
+            return
         try:
             thumb_dest = await asyncio.to_thread(package.put_thumbnail, thumb_src)
             if thumb_dest is None:
@@ -260,10 +262,12 @@ class ImportService:
             job.phase = "copy"
             role_paths = await asyncio.to_thread(layout.place_primary, package, source)
             job.phase = "probe"
+            video_duration: float | None = None
             for role, dest in role_paths.items():
                 probed = ProbeFields()
                 if role == FILE_ROLE_PRIMARY:
                     probed = await asyncio.to_thread(self._probe, type_, dest)
+                    video_duration = probed.duration
                 file_size = size
                 if role != FILE_ROLE_PRIMARY:
                     file_size = (await asyncio.to_thread(dest.stat)).st_size
@@ -280,15 +284,28 @@ class ImportService:
                     codec=probed.codec,
                     fps=probed.fps,
                     bitrate=probed.bitrate,
+                    exif_taken_at=probed.exif_taken_at,
                     commit=False,
                 )
             cover = package.resolve_cover(role_paths)
-            if cover is not None:
+            if type_ == ResourceType.IMAGE and cover is not None:
                 resource.cover_path = f"/library/resources/{resource.id}/content"
                 await resources.update(resource.id, resource, commit=False)
             await resources.commit()
             job.imported += 1
             job.phase = "thumb"
+            primary = role_paths.get(FILE_ROLE_PRIMARY)
+            await apply_ingest_cover(
+                resources,
+                resource,
+                package,
+                type_,
+                role_paths=role_paths,
+                source_file=source,
+                video_path=primary if type_ == ResourceType.VIDEO else None,
+                video_duration=video_duration if type_ == ResourceType.VIDEO else None,
+                audio_path=primary if type_ == ResourceType.AUDIO else None,
+            )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
@@ -312,11 +329,15 @@ class ImportService:
         videos: list[Path],
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
-        plan = plan_series_videos(root, videos)
-        if plan is None:
-            logger.warning("系列目录无法自动识别 %s", root)
+        explained = explain_series_plan(root, videos)
+        job.message = explained.message
+        job.code = explained.code
+        job.details = list(explained.details)
+        if not explained.ok:
+            logger.warning("系列目录无法自动识别 %s: %s", root, explained.code)
             job.skipped_error += 1
             return
+        plan = list(explained.items)
         hashes: list[tuple[PlannedItem, str, int]] = []
         for item in plan:
             try:
@@ -353,14 +374,13 @@ class ImportService:
             job.phase = "copy"
             season_ids: dict[int, int] = {}
             role_paths: dict[str, Path] = {}
-            first_dest: Path | None = None
+            episode_files: list[tuple[int, int, Path, float | None]] = []
             for index, (item, digest, size) in enumerate(hashes):
                 dest = await asyncio.to_thread(package.put_relative, item.src, item.dest_rel)
                 job.phase = "probe"
                 probed = await asyncio.to_thread(self._probe, type_, dest)
                 if index == 0:
                     role = FILE_ROLE_PRIMARY
-                    first_dest = dest
                     role_paths[FILE_ROLE_PRIMARY] = dest
                 elif item.kind == "extra":
                     role = FILE_ROLE_EXTRA
@@ -400,6 +420,7 @@ class ImportService:
                         sort_index=item.episode,
                         commit=False,
                     )
+                    episode_files.append((item.season, item.episode, dest, probed.duration))
                 else:
                     await resources.add_extra(
                         resource.id,
@@ -408,12 +429,20 @@ class ImportService:
                         sort_index=index,
                         commit=False,
                     )
-            if first_dest is not None:
-                resource.cover_path = f"/library/resources/{resource.id}/content"
-                await resources.update(resource.id, resource, commit=False)
             await resources.commit()
             job.imported += 1
             job.phase = "thumb"
+            first_ep = min(episode_files, default=None)
+            await apply_ingest_cover(
+                resources,
+                resource,
+                package,
+                type_,
+                role_paths=role_paths,
+                source_root=root,
+                episode_path=None if first_ep is None else first_ep[2],
+                episode_duration=None if first_ep is None else first_ep[3],
+            )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
@@ -540,11 +569,12 @@ class ImportService:
                     role=role,
                     commit=False,
                 )
-            resource.cover_path = f"/library/resources/{resource.id}/content"
-            await resources.update(resource.id, resource, commit=False)
             await resources.commit()
             job.imported += 1
             job.phase = "thumb"
+            await apply_ingest_cover(
+                resources, resource, package, type_, role_paths=role_paths, source_root=root
+            )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
@@ -607,20 +637,6 @@ class ImportService:
                 if launch_src is not None:
                     launch_store = package.root / launch_src.relative_to(root)
             else:
-                cover_src = find_folder_cover(root)
-                if cover_src is not None:
-                    dest = await asyncio.to_thread(package.put_cover, cover_src)
-                    role_paths[FILE_ROLE_COVER] = dest
-                    cover_size = (await asyncio.to_thread(dest.stat)).st_size
-                    await resources.add_file(
-                        resource.id,
-                        path=str(dest),
-                        sha256=None,
-                        size=cover_size,
-                        format_=dest.suffix.lower().lstrip("."),
-                        role=FILE_ROLE_COVER,
-                        commit=False,
-                    )
                 if launch_src is not None:
                     launch_store = launch_src
             if launch_store is not None:
@@ -642,6 +658,15 @@ class ImportService:
             await resources.commit()
             job.imported += 1
             job.phase = "thumb"
+            await apply_ingest_cover(
+                resources,
+                resource,
+                package,
+                type_,
+                role_paths=role_paths,
+                source_root=root,
+                launch_path=launch_store,
+            )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()

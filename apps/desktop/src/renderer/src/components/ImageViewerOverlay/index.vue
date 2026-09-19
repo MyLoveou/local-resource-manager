@@ -11,7 +11,7 @@
       ‹
     </n-button>
     <n-button class="image-viewer-overlay__next" size="small" circle :disabled="!hasNext"
-      aria-label="{{ NextAndPre[resource.type].next }}" @click="next">
+      aria-label="{{ NextAndPre[resource.type].next }}" @click="() => void next()">
       ›
     </n-button>
   </div>
@@ -46,7 +46,7 @@ function prefetchNeighbors(id: number): void {
 }
 
 watch(
-  () => [visible.value, currentId.value] as const,
+  () => [visible.value, currentId.value, playlistIds.value] as const,
   ([open, id]) => {
     if (!open || id == null) return
     prefetchNeighbors(id)
@@ -81,7 +81,7 @@ function onKey(event: KeyboardEvent): void {
   }
   if (event.key === 'ArrowRight') {
     event.preventDefault()
-    next()
+    void next()
   }
 }
 

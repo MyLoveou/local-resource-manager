@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -20,6 +20,9 @@ class ImportJobState:
     skipped_duplicate: int = 0
     skipped_error: int = 0
     error: str | None = None
+    message: str | None = None
+    code: str | None = None
+    details: list[str] = field(default_factory=list)
 
 
 class ImportJobStore:

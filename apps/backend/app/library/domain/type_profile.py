@@ -59,6 +59,9 @@ class TypeProfile:
     allows_file_source: bool
     package_contents: PackageContents | None = None
     enabled: bool = True
+    search_keys: frozenset[str] = frozenset()
+    sort_keys: frozenset[str] = frozenset()
+    allows_user_cover: bool = True
 
 
 _OWNED = frozenset({StorageKind.OWNED})
@@ -79,6 +82,9 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         IMAGE_EXTENSIONS,
         True,
         True,
+        search_keys=frozenset({"format"}),
+        sort_keys=frozenset({"width", "height", "pixelArea", "takenAt"}),
+        allows_user_cover=False,
     ),
     TypeProfile(
         ResourceType.VIDEO,
@@ -94,6 +100,8 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         VIDEO_EXTENSIONS,
         False,
         True,
+        search_keys=frozenset({"format"}),
+        sort_keys=frozenset({"duration", "resolution", "bitrate"}),
     ),
     TypeProfile(
         ResourceType.ANIME,
@@ -109,6 +117,7 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         VIDEO_EXTENSIONS,
         True,
         False,
+        sort_keys=frozenset({"episodeCount"}),
     ),
     TypeProfile(
         ResourceType.AV,
@@ -124,6 +133,7 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         VIDEO_EXTENSIONS,
         True,
         False,
+        sort_keys=frozenset({"episodeCount"}),
     ),
     TypeProfile(
         ResourceType.AUDIO,
@@ -139,6 +149,8 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         AUDIO_EXTENSIONS,
         False,
         True,
+        search_keys=frozenset({"format"}),
+        sort_keys=frozenset({"duration"}),
     ),
     TypeProfile(
         ResourceType.NOVEL,
@@ -170,6 +182,7 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         False,
         False,
         "launch_tree",
+        search_keys=frozenset({"path"}),
     ),
     TypeProfile(
         ResourceType.MODEL,
@@ -185,6 +198,7 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         MODEL_EXTENSIONS,
         False,
         True,
+        search_keys=frozenset({"format"}),
     ),
     TypeProfile(
         ResourceType.COMIC,
@@ -201,6 +215,7 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         True,
         True,
         "image_pages",
+        sort_keys=frozenset({"pageCount"}),
     ),
 )
 
@@ -250,3 +265,9 @@ def is_package_type(type_: ResourceType) -> bool:
 def import_extensions(type_: ResourceType) -> frozenset[str] | None:
     """导入候选扩展名；未登记的类型返回 None。"""
     return IMPORT_EXTENSIONS.get(type_)
+
+
+def allows_user_cover(type_: ResourceType) -> bool:
+    """除图片外可手选封面。"""
+    profile = profile_for(type_)
+    return profile is not None and profile.allows_user_cover

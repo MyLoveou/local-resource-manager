@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.library.api.imports import validate_import
 from app.library.application.import_service import ImportService
 from app.library.application.schemas import ImportCreate
-from app.library.application.series_plan import plan_series_videos
+from app.library.application.series_plan import explain_series_plan, plan_series_videos
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.migrations import migrate
@@ -44,6 +44,70 @@ class SeriesPlanTests(unittest.TestCase):
     def test_unparseable_fails(self) -> None:
         root = Path("Show")
         self.assertIsNone(plan_series_videos(root, [root / "random.mkv"]))
+        explained = explain_series_plan(root, [root / "random.mkv"])
+        self.assertFalse(explained.ok)
+        self.assertEqual(explained.code, "unrecognized_names")
+        self.assertIn("无法从文件名识别集号", explained.message)
+        self.assertIn("random.mkv", explained.details)
+
+    def test_missing_episode_in_season_dir(self) -> None:
+        root = Path("Show")
+        explained = explain_series_plan(
+            root,
+            [root / "Season 01" / "01.mkv", root / "Season 01" / "untitled.mkv"],
+        )
+        self.assertFalse(explained.ok)
+        self.assertEqual(explained.code, "missing_episode")
+        self.assertEqual(explained.items, ())
+        self.assertIn("untitled.mkv", explained.details)
+
+    def test_mixed_season_dirs(self) -> None:
+        root = Path("Show")
+        explained = explain_series_plan(
+            root,
+            [root / "Season 01" / "01.mkv", root / "02.mkv"],
+        )
+        self.assertFalse(explained.ok)
+        self.assertEqual(explained.code, "mixed_season_dirs")
+        self.assertEqual(explained.items, ())
+        self.assertIn("02.mkv", explained.details)
+
+    def test_duplicate_episode(self) -> None:
+        root = Path("Show")
+        explained = explain_series_plan(
+            root,
+            [root / "S01E01.mkv", root / "Title - S01E01.mkv"],
+        )
+        self.assertFalse(explained.ok)
+        self.assertEqual(explained.code, "duplicate_episode")
+        self.assertEqual(explained.items, ())
+        self.assertTrue(any("S01E01" in line for line in explained.details))
+
+    def test_no_videos(self) -> None:
+        explained = explain_series_plan(Path("Show"), [])
+        self.assertFalse(explained.ok)
+        self.assertEqual(explained.code, "no_videos")
+        self.assertEqual(explained.items, ())
+        self.assertEqual(explained.details, ())
+
+    def test_success_summary(self) -> None:
+        root = Path("Show")
+        explained = explain_series_plan(
+            root,
+            [root / "Season 01" / "01.mkv", root / "Season 01" / "02.mkv"],
+        )
+        self.assertTrue(explained.ok)
+        self.assertIsNone(explained.code)
+        self.assertEqual(explained.message, "已识别 1 季 · 2 集 · 0 特典")
+        self.assertTrue(any("S01E01" in line for line in explained.details))
+
+    def test_details_capped_at_20(self) -> None:
+        root = Path("Show")
+        videos = [root / f"random-{i}.mkv" for i in range(21)]
+        explained = explain_series_plan(root, videos)
+        self.assertEqual(explained.code, "unrecognized_names")
+        self.assertEqual(len(explained.details), 20)
+        self.assertEqual(explained.details[-1], "另有 2 个文件未列出")
 
     def test_snow_raws_wa_and_tokuten(self) -> None:
         """BD 常见：第01話 + 映像特典/CM01(BD…)。"""
@@ -189,6 +253,9 @@ class SeriesIngestTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(job.imported, 0)
             self.assertGreaterEqual(job.skipped_error, 1)
+            self.assertEqual(job.message, "无法从文件名识别集号（需要 Season 目录、SxxExx 或可解析序号）")
+            self.assertEqual(job.code, "unrecognized_names")
+            self.assertTrue(any("random.mkv" in line for line in job.details))
 
 
 if __name__ == "__main__":

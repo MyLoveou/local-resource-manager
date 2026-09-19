@@ -1,6 +1,15 @@
 <template>
   <header class="tool-bar">
     <n-button size="small" type="primary" @click="wizardRef?.open()">导入</n-button>
+    <n-input
+      class="tool-bar__search"
+      size="small"
+      clearable
+      placeholder="全库搜索"
+      :value="globalQ"
+      @update:value="onGlobalQ"
+      @keydown.enter.prevent="flushGlobalQ"
+    />
     <div class="tool-bar__spacer" />
     <div v-if="showCluster" class="tool-bar__batch">
       <template v-if="!batchMode">
@@ -56,21 +65,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { NButton, NDropdown, NPopconfirm, useMessage, type DropdownOption } from 'naive-ui'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { NButton, NDropdown, NInput, NPopconfirm, useMessage, type DropdownOption } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import ImportWizard from '@/components/ImportWizard/index.vue'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { useThemeStore } from '@/application/stores/theme'
+import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 
 const wizardRef = ref<{ open: () => void } | null>(null)
 const message = useMessage()
 const theme = useThemeStore()
 const shellBatch = useShellBatchStore()
+const browse = useBrowseQueryStore()
+const route = useRoute()
+const router = useRouter()
+const globalQ = ref(String(route.query.q ?? ''))
+let globalTimer: ReturnType<typeof setTimeout> | undefined
 const { showCluster, batchMode, total, busy, selectedCount, context } = storeToRefs(shellBatch)
 const { enter, exit, emptyTrash, runBatch } = shellBatch
 
 const isTrash = computed(() => context.value === 'trash')
+
+watch(
+  () => route.query.q,
+  (value) => {
+    if (route.path === '/search') globalQ.value = String(value ?? '')
+  }
+)
+
+function goGlobalSearch(raw: string): void {
+  const q = raw.trim()
+  if (!q) {
+    if (route.path === '/search') void router.push('/')
+    return
+  }
+  browse.patch(undefined, undefined, { q })
+  void router.push({ path: '/search', query: { q } })
+}
+
+function onGlobalQ(value: string): void {
+  globalQ.value = value
+  if (globalTimer) clearTimeout(globalTimer)
+  globalTimer = setTimeout(() => goGlobalSearch(globalQ.value), 300)
+}
+
+function flushGlobalQ(): void {
+  if (globalTimer) clearTimeout(globalTimer)
+  goGlobalSearch(globalQ.value)
+}
 
 const themeOptions: DropdownOption[] = [
   { label: '默认', key: 'default' },
@@ -110,6 +154,11 @@ async function onThemeSelect(key: string): Promise<void> {
   align-items: center;
   padding: 0 var(--sm-space-3);
   gap: var(--sm-space-2);
+}
+
+.tool-bar__search {
+  width: 220px;
+  flex-shrink: 0;
 }
 
 .tool-bar__spacer {

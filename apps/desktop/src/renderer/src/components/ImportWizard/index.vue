@@ -3,7 +3,7 @@
     :show="visible"
     preset="card"
     title="导入"
-    style="width: 420px"
+    style="width: 520px"
     :mask-closable="!busy"
     :closable="!busy"
     @update:show="onShow"
@@ -51,6 +51,18 @@
       <p v-if="job" class="muted">
         新增 {{ job.imported }} · 跳过重复 {{ job.skippedDuplicate }} · 错误 {{ job.skippedError }}
       </p>
+      <p
+        v-if="job?.message"
+        :class="job.code ? 'error' : 'muted'"
+      >{{ job.message }}</p>
+      <ul
+        v-if="job?.details?.length"
+        class="details"
+        tabindex="0"
+        aria-label="导入说明明细"
+      >
+        <li v-for="(line, index) in job.details" :key="index">{{ line }}</li>
+      </ul>
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       <div class="actions">
         <n-button :disabled="busy" @click="close">完成</n-button>
@@ -90,6 +102,7 @@ const percent = computed(() => {
 const phaseLabel = computed(() => {
   if (errorMessage.value) return '导入结束'
   if (!job.value) return busy.value ? '正在准备…' : '等待选择'
+  if (job.value.status === 'done' && job.value.skippedError) return '导入结束'
   if (job.value.status === 'done') return '导入完成'
   if (job.value.phase === 'copy') return '正在复制…'
   if (job.value.phase === 'probe') return '正在计算元数据…'
@@ -123,6 +136,17 @@ defineExpose({ open })
 .error {
   color: #d03050;
   font-size: 13px;
+}
+
+.details {
+  margin: 0;
+  padding-left: 1.2em;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .actions {

@@ -4,7 +4,7 @@
 > 约束/禁止项见 [浓缩基线](baseline.md) / [openspec/baseline.md](../../openspec/baseline.md)。  
 > 历次拍板见 [decisions.md](decisions.md)。
 
-**最后核对**：2026-09-18 · 壳层换肤规划 `ui-theme-shell`（D-20260918-01，L3 待授权）。类型平台 `library-type-platform` 仍为并行 feat。番剧/AV A-min 已合入 master。
+**最后核对**：2026-09-19 · `image-viewer-cross-page` 已落地（切图跟当前网格分页；待手验）。
 
 ---
 
@@ -20,10 +20,11 @@
   - 顶栏「导入」向导：选类型与文件/文件夹，后端复制进库目录并写资源记录（sha256 去重）。
   - 番剧/AV：作品级 Resource + 季集树；目录导入；信息栏选集播放（A-min；整理/字幕组/女优仍 OUT）。
 - **尚未实现**（需求有、代码无或仅 health）：
-  - 壳层运行时主题 / 外置 css / 顶栏批量条（规划：`ui-theme-shell`，D-20260918-01）。
-  - 音频 / 小说 / 游戏 / 模型 / 漫画的类型与最低打开（规划：`library-type-platform`，D-20260917-02 已拍板打开方式）。
-  - 视频专项（封面抽帧）、抓取（M3）、检索打标（M4）、下载引擎（M5）、设置（含库路径，M6）、全局 Notify、token 校验。
-          - 图片查看器：`image-consume` + `image-viewer-ux`（只盖中间网格；信息栏「更多」；待手工验拖拽/缩放）。
+  - 壳层运行时主题 / 外置 css / 顶栏批量条（`ui-theme-shell` 已合入 master，待 Electron 手工验）。
+  - 库内搜索与排序（规划：`library-search-sort`，开放问题未关）。
+  - 音频 / 小说 / 游戏 / 模型 / 漫画的类型与最低打开（`library-type-platform` 已合入 master，待 Electron 手工验）。
+  - 视频专项（封面抽帧已并入规划 `library-covers` 本刀：新导入抽一帧；旧库不回填）、抓取（M3）、检索打标（M4）、下载引擎（M5）、设置（含库路径，M6）、全局 Notify、token 校验。
+          - 图片查看器：`image-consume` + `image-viewer-ux` + `image-viewer-cross-page`（切图跟当前网格 keyset；待手工验跨页/拖拽缩放）。
   - scrape / download 子路由目前只有 `/health`。
   - 网格封面：新导入写包内 `thumbs/grid.webp` 并由列表 `thumbnailPath` 提供；旧资源仍可能拉原图。窗口缩放已节流，待手工验。
 
@@ -52,8 +53,8 @@
 - 已知债（有路径）：
   - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 已由 `library-trash` 用 `library.bump(null)` 让列表 reset（待手工验网格）。
   - README 仍写「无业务代码 / mount 双应用」，与现状不符。
-  - 路线图 `docs/design/00-路线图与里程碑.md` 日期 2026-09-07，M2 描述已过时。
-  - 导入 `phase=probe` 已由 `metadata-panel-fields` 用 Pillow/ffprobe 写入宽高/时长/帧率/码率/编码；旧资源不回填，缺列面板显示「—」。
+  - 路线图 `docs/design/00-路线图与里程碑.md` 进度表已按 2026-09-19 核对（入库改道为导入；MS2 主路径完成）。
+  - 导入 `phase=probe`：Pillow 宽高与 **EXIF 拍摄时间**；ffprobe 视频字段。图片拍摄可 PATCH 手改。缺列面板「—」。开发阶段以清库重导代替回填。
 
 ---
 

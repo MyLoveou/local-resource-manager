@@ -28,6 +28,9 @@ export interface ImportJob {
   skippedDuplicate: number
   skippedError: number
   error?: string | null
+  message?: string | null
+  code?: string | null
+  details?: string[]
 }
 
 export async function createImport(body: ImportCreate): Promise<ImportJobCreated> {

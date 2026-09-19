@@ -5,6 +5,8 @@ from app.library.application.ingest.placement import (
     copy_tree_filtered,
     find_folder_cover,
     find_launch,
+    find_sidecar_cover,
+    natural_key,
     normalize_path,
 )
 
@@ -13,5 +15,7 @@ __all__ = [
     "copy_tree_filtered",
     "find_folder_cover",
     "find_launch",
+    "find_sidecar_cover",
+    "natural_key",
     "normalize_path",
 ]

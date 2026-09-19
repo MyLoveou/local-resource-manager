@@ -38,6 +38,19 @@ class ResourceSortField(str, Enum):
     """列表排序字段（JSON camelCase）。"""
 
     CREATED_AT = "createdAt"
+    UPDATED_AT = "updatedAt"
+    TITLE = "title"
+    RATING = "rating"
+    SIZE = "size"
+    WIDTH = "width"
+    HEIGHT = "height"
+    PIXEL_AREA = "pixelArea"
+    TAKEN_AT = "takenAt"
+    DURATION = "duration"
+    RESOLUTION = "resolution"
+    BITRATE = "bitrate"
+    PAGE_COUNT = "pageCount"
+    EPISODE_COUNT = "episodeCount"
 
 
 class ResourcePage(ApiModel):
@@ -50,6 +63,7 @@ class ResourcePage(ApiModel):
     has_more: bool
     next_created_at: str | None = None
     next_id: int | None = None
+    next_key: str | None = None
 
 
 class ResourcePatch(ApiModel):
@@ -61,6 +75,7 @@ class ResourcePatch(ApiModel):
     rating: Rating | None = None
     category_name: str | None = None
     tag_names: list[str] | None = None
+    exif_taken_at: str | None = None
 
 
 class CoverReplace(ApiModel):
@@ -148,3 +163,6 @@ class ImportJob(ApiModel):
     skipped_duplicate: int
     skipped_error: int
     error: str | None = None
+    message: str | None = None
+    code: str | None = None
+    details: list[str] = Field(default_factory=list)

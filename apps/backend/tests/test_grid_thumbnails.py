@@ -113,12 +113,12 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(detail.thumbnail_path, row.thumbnail_path)
 
     async def test_replace_cover_overwrites_same_thumb(self) -> None:
-        src = self._png("d.png", color=(10, 200, 10))
+        audio = self.root / "t.mp3"
+        audio.write_bytes(b"ID3")
         cover = self._png("cover.png", size=(80, 80), color=(10, 10, 200))
         async with self.factory() as session:
-            rid = await self._import(session, ResourceType.IMAGE, src)
-            dest = self._thumb_path("image", rid)
-            before = dest.read_bytes()
+            rid = await self._import(session, ResourceType.AUDIO, audio)
+            dest = self._thumb_path("audio", rid)
             svc = LibraryQueryService(
                 ResourceRepository(session),
                 TaskSummaryRepository(session),
@@ -131,7 +131,6 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(thumbs), 1)
             self.assertEqual(Path(thumbs[0].path).name, THUMB_GRID_NAME)
             self.assertTrue(dest.is_file())
-            self.assertNotEqual(dest.read_bytes(), before)
             self.assertNotIn("thumbs/grid", after.cover_path or "")
 
 

@@ -158,7 +158,7 @@ class ResourceFile(ApiModel):
     codec: str | None = None  # 视频编码
     fps: float | None = None
     bitrate: int | None = None  # 比特/秒
-    exif_taken_at: datetime | None = None  # 图片拍摄时间（EXIF）
+    exif_taken_at: str | None = None  # 图片拍摄时间 ISO 本地日历
     created_at: datetime | None = None
 
     @property

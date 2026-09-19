@@ -11,7 +11,9 @@ export interface MenuItem {
 
 /** 从路由表生成菜单项，支持多级 children */
 export function menuFromRoutes(routes: RouteRecordRaw[]): MenuItem[] {
-  return routes.map((r) => ({
+  return routes
+    .filter((r) => !(r.meta as { hideMenu?: boolean } | undefined)?.hideMenu)
+    .map((r) => ({
     key: r.path,
     label: (r.meta?.title as string) ?? String(r.name ?? r.path),
     icon: r.meta?.icon as string | undefined,
