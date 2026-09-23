@@ -17,6 +17,7 @@ export const DownloadEngine = {
   ARIA2: 'aria2',
   RQBIT: 'rqbit',
   YTDLP: 'yt-dlp',
+  HTTPX: 'httpx',
 } as const
 export type DownloadEngine = (typeof DownloadEngine)[keyof typeof DownloadEngine]
 

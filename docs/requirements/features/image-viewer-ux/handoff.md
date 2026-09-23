@@ -1,3 +1,6 @@
 # 跨会话续作 · image-viewer-ux
 
-与 `openspec/changes/image-viewer-ux/handoff.md` 同步。阶段：待手工验 U1–U4。
+阶段：已归档（2026-09-23）。用户确认 U1–U4 收口。
+
+OpenSpec：`openspec/changes/archive/2026-09-23-image-viewer-ux/`  
+主 spec：`openspec/specs/desktop-image-viewer`

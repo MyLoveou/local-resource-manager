@@ -15,6 +15,7 @@ export interface BackendInstance {
   port: number
   token: string
   stop(): Promise<void>
+  watchExit(listener: (code: number | null) => void): void
 }
 
 /**
@@ -120,5 +121,23 @@ export async function startBackend(cfg: BackendConfig): Promise<BackendInstance>
     throw err
   }
 
-  return { baseURL: baseUrl, port, token, stop: () => killProcess(child) }
+  let stopping = false
+  const exitListeners: Array<(code: number | null) => void> = []
+  child.on('exit', (code) => {
+    if (stopping) return
+    for (const listener of exitListeners) listener(code)
+  })
+
+  return {
+    baseURL: baseUrl,
+    port,
+    token,
+    watchExit(listener) {
+      exitListeners.push(listener)
+    },
+    stop: () => {
+      stopping = true
+      return killProcess(child)
+    },
+  }
 }

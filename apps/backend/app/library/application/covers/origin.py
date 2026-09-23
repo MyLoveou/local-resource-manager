@@ -12,6 +12,7 @@ COVER_ORIGIN_FRAME = "frame"
 COVER_ORIGIN_EXE = "exe"
 COVER_ORIGIN_PAGE = "page"
 COVER_ORIGIN_EMBEDDED = "embedded"
+COVER_ORIGIN_SCRAPED = "scraped"
 
 
 class CoverNotAllowedError(ValueError):

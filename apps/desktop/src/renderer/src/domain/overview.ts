@@ -19,9 +19,21 @@ export interface TaskSummary {
   activeDownloads: number
 }
 
-/** 首页概览：统计 + 最近添加 + 任务 */
+/** 一次打开记录 */
+export interface ConsumptionItem {
+  id: number
+  resourceId: number
+  title: string
+  type: ResourceType
+  action: string
+  createdAt?: string | null
+}
+
+/** 首页概览：统计 + 最近添加 + 任务 + 工作与消费 */
 export interface Overview {
   stats: ResourceStats
   recent: Resource[]
   tasks: TaskSummary
+  activeWork?: Resource[]
+  recentConsumption?: ConsumptionItem[]
 }

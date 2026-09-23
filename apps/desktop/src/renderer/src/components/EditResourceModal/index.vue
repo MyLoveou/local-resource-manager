@@ -13,7 +13,14 @@
       <p v-if="allowCover && draft.pendingCoverPath" class="edit-resource__hint">已选择新封面，保存后生效</p>
       <label class="edit-resource__label">标题</label>
       <n-input :value="draft.title" @update:value="draft.title = $event" />
-      <label class="edit-resource__label">简介</label>
+      <label class="edit-resource__label">作品简介</label>
+      <n-input
+        type="textarea"
+        :autosize="{ minRows: 2, maxRows: 6 }"
+        :value="draft.synopsis"
+        @update:value="draft.synopsis = $event"
+      />
+      <label class="edit-resource__label">我的评价</label>
       <n-input
         type="textarea"
         :autosize="{ minRows: 2, maxRows: 6 }"

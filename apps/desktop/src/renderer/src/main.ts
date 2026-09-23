@@ -12,9 +12,19 @@ import './ui/styles/global.css'
 import 'video.js/dist/video-js.css'
 import VueVideoPlayer from 'vue-video-player'
 import { useThemeStore } from './application/stores/theme'
+import { initNotify, notify } from './application/notify'
 
 // 本地注册 mdi，避免运行时请求 api.iconify.design（被 CSP 拦截）
 addCollection(mdi)
+initNotify()
+window.electron?.onAppNotify?.((payload) => {
+  notify.push({
+    level: payload.level,
+    title: payload.title,
+    description: payload.description,
+    duration: payload.duration ?? 0,
+  })
+})
 
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)

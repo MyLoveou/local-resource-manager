@@ -7,6 +7,116 @@
 
 ## 有效决策
 
+### D-20260923-06 · 磁力走本机 aria2，HTTP 仍用 httpx
+
+- 日期：2026-09-23
+- 场景：MS7 原文要贴 HTTP 和磁力都能进库；第一刀只做了直链
+- **决定**：磁力用本机 `aria2c`（PATH 或 `ARIA2C_PATH`），RPC 只听 127.0.0.1。拒绝带直链参数和内网 tracker 的磁力。下完仍复制进视频库。HTTP 直链继续 httpx。
+- **为何**：补上原文缺口，又不把已通的直链换成另一套引擎。
+- **不选**：内嵌 rqbit；应用自己下载 aria2；HTTP 改走 aria2；磁力搜索。
+- **落点**：`docs/requirements/features/download-magnet-aria2/`
+- 状态：有效（已编码，待手验）
+
+### D-20260923-05 · 抓取里程碑：图片走页面 Open Graph
+
+- 日期：2026-09-23
+- 场景：视频与番剧已能确认回填；完成定义还要求一张图
+- **决定**：图片在信息栏填写公网 http(s) 页面链接，读 Open Graph 标题与封面，走同一确认队列。封面下载须过公网校验。导入图片不自动搜索。
+- **为何**：没有页面地址就无法猜作品；不靠 SearXNG 也能让一张图跑通获取 → 选候选 → 标题和封面进库。
+- **不选**：SearXNG、以图搜图、Pixiv 登录、AV 刮削、远程索引、适配器配置表。
+- **落点**：`app/scrape/application/providers/og.py`；信息栏图片输入
+- 状态：有效（已编码，待手验）
+
+### D-20260923-04 · 设置第一刀：刮削凭证与备份
+
+- 日期：2026-09-23
+- 场景：TMDB Key 只能靠环境变量；库路径与备份无处看
+- **决定**：顶栏设置两页签（刮削/系统）。凭证写入 `settings` KV，env 优先且锁定。GET 只给掩码。备份用 SQLite backup API 到 `data/backups/`。不改库根、不上扫描根。
+- **为何**：先让刮削能在应用内配 Key，并有可打开的路径与可恢复副本。
+- **不选**：四空页签；改 `db_path`；adapters 管理页；主题进设置。
+- **落点**：`docs/requirements/features/app-settings-first/`
+- 状态：有效（已编码，待手验）
+
+### D-20260923-03 · 再归档四项已确认收口的 change
+
+- 日期：2026-09-23
+- 场景：用户确认手验门禁可收口
+- **决定**：归档 `app-performance`、`image-viewer-ux`、`fix-image-consume-ui`、`metadata-panel`。查看器占位以「只盖主网格」写入主 spec。`image-consume` 去掉已被取代的左右分栏布局描述。
+- **为何**：任务与代码已落地；继续留在进行中列表会挡住下一刀。
+- **不选**：把仍差 Electron 手验、用户未点名的 change 一起归档。
+- **落点**：`openspec/changes/archive/2026-09-23-*`；主 spec `platform-performance`、`desktop-image-viewer`、`library-resource-metadata`、`desktop-metadata-panel`
+- 状态：有效
+
+### D-20260923-02 · 下载第一刀仅 HTTP(S) 直链并复制入库
+
+- 日期：2026-09-23
+- 场景：M5 原文要双引擎+磁力，一刀做不完；入库禁止再扫根
+- **决定**：`/download` 用 httpx 流式拉 HTTP(S) 视频直链，暂存后走 `ImportService` 进视频库。顶栏抽屉。拒绝磁力/私网。完成后自动入库；sha256 重复挂已有资源。
+- **为何**：先闭环「贴链接 → 能播」，引擎与蜜柑后置。
+- **不选**：aria2/rqbit/yt-dlp；扫描下载目录；独立下载页；完成后二次确认。
+- **落点**：`docs/requirements/features/download-http-ingest/`
+- 状态：有效（已编码，待手验）
+
+### D-20260923-01 · 三个早期 change 归档进主 spec
+
+- 日期：2026-09-23
+- 场景：用户要求分析需求并对已完成项归档
+- **决定**：归档 `align-resource-api`、`assemble-api-routers`、`shell-layout-selection`。任务已全部勾完，不变量已在基线。其余 change 仍有未勾手验或下一刀，不归档。
+- **为何**：门禁写明这三个等用户要求后再 archive；继续留在进行中列表会和未完成需求混在一起。
+- **不选**：把「代码已写、手验未做」的 change 一并归档。
+- **落点**：`openspec/changes/archive/2026-09-23-*`；主 spec `library-resource-api`、`desktop-shell-selection`
+- 状态：有效
+
+### D-20260922-03 · 视频增加 B 站渠道；可手填 BV 获取元数据
+
+- 日期：2026-09-22
+- 场景：B 站下载件对不上 TMDB；标题里也常常没有 BV
+- **决定**：`video` 刮削 = TMDB + B 站公开稿件（不登录）。能解析 BV/av 则直取并排在候选前。信息栏/确认队列可填 BV、av 或视频链接，非空必须能解析否则 400 且 force 新 job。无手填时仍吃标题+文件名。`anime` 不挂 B 站。无 TMDB Key 但 B 站有候选则任务成功。空 `author` 才写 UP。
+- **为何**：片源经常是投稿而不是电影；用户知道 BV 时应能直接取，而不是只靠文件名碰运气。
+- **不选**：应用内登录；下载原片；批量逐条填 BV；用 B 站替换 TMDB；番剧本刀出 B 站候选。
+- **落点**：`docs/requirements/features/bilibili-scrape/`
+- 状态：有效（已编码，待手验）
+
+### D-20260922-02 · 简介与评价分列；确认页选封面；站点档案进 catalog
+
+- 日期：2026-09-22
+- 场景：Bangumi 确认页不能选封面；`description` 被当作品简介覆盖；已有导入封面刮削后看不见换封面
+- **决定**：全类型 Resource 增加 `synopsis`（作品简介）。`description` 只表示用户评价，刮削不改。站点字段写入 `extra.catalog`（`WorkCatalog`：原名/中文名/放送日/平台/集数/站点评分/infobox）。确认弹层预览封面并勾选写入；导入/抽帧封面默认可覆盖；仅 `coverOrigin=user` 需再勾「覆盖我手动指定的封面」。封面 URL 走 `/scrape/proxy-image`，http 升 https。
+- **为何**：评价与站点文案混在一起会丢笔记；lain.bgm.tv 直链在 img 里常裂且旧逻辑拒 http。
+- **不选**：把 Bangumi 全部 infobox 摊成独立 SQL 列；刮削改用户评价。
+- **落点**：`0011_resource_synopsis.sql`；`ScrapeConfirmQueue`；`apply_scrape_detail`
+- 状态：有效（已编码）
+
+### D-20260922-01 · 刮削渠道不唯一；番剧 Bangumi 为主、蜜柑为附加
+
+- 日期：2026-09-22
+- 场景：用户要求渠道不能唯一；蜜柑计划可作为番剧来源
+- **决定**：SearchProvider 按类型返回**列表**。番剧先 Bangumi 再蜜柑（`MIKAN_BASE_URL`，默认 `https://mikanani.kas.pub`）。候选带 `source`；select 按键前缀走对应 provider。蜜柑详情优先解析 bgm.tv 再拉 Bangumi。蜜柑不写种子、不做登录、不进下载模块。
+- **为何**：文件名/字幕组标题 TMDB/Bangumi 可能空，蜜柑能补发现；作品简介仍以 Bangumi 为准。
+- **不选**：用蜜柑替换 Bangumi；HTML 日历当主库；应用内下磁力。
+- **落点**：`providers_for` / `MikanProvider`
+- 状态：有效（已编码发现层）
+
+### D-20260919-10 · 元数据第一刀：视频+番剧直连；确认覆盖文案；导入只搜不写
+
+- 日期：2026-09-19
+- 场景：`metadata-scrape` 开放问题
+- **决定**：本刀只刮 **视频（TMDB）与番剧（Bangumi）**，直连官方 API，不上 SearXNG。人选候选后**覆盖标题和简介**；标签只加不删；`coverOrigin=user` 不换封面。支持批量逐条确认/跳过。导入成功后自动 search，**不回填**，有候选再让人确认。
+- **为何**：先打通确认闭环；自动写库会盖掉文件名且打爆 API。
+- **不选**：本刀 AV/图片；应用内登录；导入完成即改标题。
+- **落点**：`docs/requirements/features/metadata-scrape/`
+- 状态：有效（已落地）
+
+### D-20260919-09 · 抓取可演进为远程索引 + 本地落盘；爬虫不进桌面、不自动写库
+
+- 日期：2026-09-19
+- 场景：MS3 抓取定位；对照绿管「刮削库」是本地可交换包，网上刮站仍是他们的规划
+- **决定**：第一刀仍是本机 FastAPI `/scrape`、用户触发、候选确认后写 Resource。适配器接口必须能换成「远程索引」（自建爬取服务或他人数据包）。远程侧只产出**可落本地的快照**（候选/封面字节），客户端再确认或只填空。爬取进程**单独部署、可定时**，不进 Electron、不与 library 同进程。禁止默认定时把结果写入用户库。
+- **为何**：AV 等公开检索差，需要以后能养索引；桌面单机不能当爬虫农场；和封面 `user` 锁定、未选不写库一致。
+- **不选**：第一刀就上云爬虫；客户端定时全库刮；绿管式群友 db 交换当第一刀（可作更后的数据包形态）。
+- **落点**：`docs/design/00-路线图与里程碑.md` MS3；实现时 SearchProvider 本地/远程可切换
+- 状态：有效（方向；未编码）
+
 ### D-20260919-08 · 查看器切图与当前列表分页同源
 
 - 日期：2026-09-19
@@ -306,7 +416,7 @@
 - **决定**：集合 `/library/resources`；写操作为 PATCH（title/description/rating）与 DELETE=trashed；去掉公开 `/dev/seed`。
 - **为何**：原先单复数路径分裂，删除绕过状态机。
 - **不选**：URL `/v1`；PUT 整份 Resource；HTTP 灌演示数据。
-- **落点**：`openspec/changes/align-resource-api/`、`facts.md` §一
+- **落点**：`openspec/changes/archive/2026-09-23-align-resource-api/`、`facts.md` §一
 - 状态：有效
 
 ### D-20260912-02 · 根应用 APIRouter 装配

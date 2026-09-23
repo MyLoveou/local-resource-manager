@@ -11,6 +11,7 @@ from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.db.orm import (
+    CandidateRow,
     CategoryRow,
     DownloadTaskRow,
     EpisodeRow,
@@ -27,6 +28,7 @@ from app.shared.media_types import FILE_ROLE_PAGE, FILE_ROLE_THUMBNAIL, is_serie
 from app.shared.models import (
     Category,
     Resource,
+    WorkCatalog,
     ResourceFile,
     ResourceStatus,
     ResourceTodo,
@@ -58,14 +60,46 @@ def _file_content_url(resource_id: int, file_id: int) -> str:
     return f"/library/resources/{resource_id}/files/{file_id}/content"
 
 
+def _parse_extra(raw: str | None) -> dict[str, Any]:
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _catalog_from_extra(extra: dict[str, Any]) -> WorkCatalog | None:
+    raw = extra.get("catalog")
+    if not isinstance(raw, dict) or not raw:
+        return None
+    try:
+        return WorkCatalog.model_validate(raw)
+    except Exception:
+        return None
+
+
+def _dump_extra(resource: Resource) -> str:
+    extra = dict(resource.extra or {})
+    if resource.catalog is None:
+        extra.pop("catalog", None)
+    else:
+        extra["catalog"] = resource.catalog.model_dump(mode="json", by_alias=True)
+    return json.dumps(extra, ensure_ascii=False)
+
+
 def _orm_to_resource(row: ResourceRow) -> Resource:
     """ORM 行 → 领域模型。"""
+    extra = _parse_extra(row.extra)
+    catalog = _catalog_from_extra(extra)
+    rest = {k: v for k, v in extra.items() if k != "catalog"}
     return Resource(
         id=row.id,
         type=ResourceType(row.type),
         storage_kind=StorageKind(row.storage_kind or StorageKind.OWNED.value),
         title=row.title,
         description=row.description,
+        synopsis=row.synopsis,
+        catalog=catalog,
         author=row.author,
         rating=row.rating,
         cover_path=row.cover_path,
@@ -73,10 +107,14 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
         deleted_at=row.deleted_at,
         last_scraped_at=row.last_scraped_at,
         scraped_source=row.scraped_source,
-        extra=json.loads(row.extra or "{}"),
+        extra=rest,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def orm_to_resource(row: ResourceRow) -> Resource:
+    return _orm_to_resource(row)
 
 
 class ResourceRepository:
@@ -84,6 +122,13 @@ class ResourceRepository:
 
     def __init__(self, session: AsyncSession):
         self._session = session
+
+    @property
+    def session(self) -> AsyncSession:
+        return self._session
+
+    async def attach_listed(self, resources: list[Resource]) -> list[Resource]:
+        return await self._attach_thumbnail_paths(resources)
 
     async def create(self, resource: Resource, *, commit: bool = True) -> Resource:
         """插入并返回带 id 的完整实体。"""
@@ -93,11 +138,12 @@ class ResourceRepository:
             storage_kind=resource.storage_kind.value,
             title=resource.title,
             description=resource.description,
+            synopsis=resource.synopsis,
             author=resource.author,
             rating=resource.rating,
             cover_path=resource.cover_path,
             status=resource.status.value,
-            extra=json.dumps(resource.extra, ensure_ascii=False),
+            extra=_dump_extra(resource),
             created_at=ts,
             updated_at=ts,
         )
@@ -114,6 +160,7 @@ class ResourceRepository:
         row.storage_kind = resource.storage_kind.value
         row.title = resource.title
         row.description = resource.description
+        row.synopsis = resource.synopsis
         row.author = resource.author
         row.rating = resource.rating
         row.cover_path = resource.cover_path
@@ -121,7 +168,7 @@ class ResourceRepository:
         row.deleted_at = _ts(resource.deleted_at)
         row.last_scraped_at = _ts(resource.last_scraped_at)
         row.scraped_source = resource.scraped_source
-        row.extra = json.dumps(resource.extra, ensure_ascii=False)
+        row.extra = _dump_extra(resource)
         row.updated_at = _now()
 
     async def update(self, resource_id: int, resource: Resource, *, commit: bool = True) -> Resource | None:
@@ -229,6 +276,7 @@ class ResourceRepository:
         ]
         self._apply_thumbnail_path(resource)
         await self._attach_series_tree(resource)
+        await self.attach_scrape_pending([resource])
         return resource
 
     async def _attach_series_tree(self, resource: Resource) -> None:
@@ -407,6 +455,7 @@ class ResourceRepository:
                     func.lower(ResourceRow.title).like(pattern, escape="\\"),
                     func.lower(func.coalesce(ResourceRow.author, "")).like(pattern, escape="\\"),
                     func.lower(func.coalesce(ResourceRow.description, "")).like(pattern, escape="\\"),
+                    func.lower(func.coalesce(ResourceRow.synopsis, "")).like(pattern, escape="\\"),
                     cat_hit,
                     tag_hit,
                     file_hit,
@@ -521,6 +570,7 @@ class ResourceRepository:
             stmt = stmt.limit(limit).offset(offset)
         rows = (await self._session.execute(stmt)).all()
         resources = await self._attach_thumbnail_paths([_orm_to_resource(row[0]) for row in rows])
+        await self.attach_scrape_pending(resources)
         keys = [serialize_sort_value(row[1]) for row in rows]
         return resources, keys
 
@@ -543,6 +593,7 @@ class ResourceRepository:
                 type=r.type.value,
                 title=r.title,
                 description=r.description,
+                synopsis=r.synopsis,
                 rating=r.rating,
                 cover_path=r.cover_path,
                 status=r.status.value,
@@ -573,6 +624,11 @@ class ResourceRepository:
     async def file_exists_by_sha256(self, sha256: str) -> bool:
         stmt = select(FileRow.id).where(FileRow.sha256 == sha256).limit(1)
         return (await self._session.scalar(stmt)) is not None
+
+    async def resource_id_by_sha256(self, sha256: str) -> int | None:
+        stmt = select(FileRow.resource_id).where(FileRow.sha256 == sha256).limit(1)
+        value = await self._session.scalar(stmt)
+        return int(value) if value is not None else None
 
     async def file_exists_by_path(self, path: str) -> bool:
         """路径去重（indexed 启动文件）。"""
@@ -816,6 +872,67 @@ class ResourceRepository:
         else:
             await self._session.flush()
 
+    async def add_tags_union(
+        self, resource_id: int, names: list[str], *, commit: bool = True
+    ) -> None:
+        existing_ids = set(
+            (
+                await self._session.execute(
+                    select(ResourceTagRow.tag_id).where(ResourceTagRow.resource_id == resource_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        seen: set[str] = set()
+        for raw in names:
+            name = raw.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            tag = await self.ensure_tag(name, commit=False)
+            assert tag.id is not None
+            if tag.id in existing_ids:
+                continue
+            self._session.add(ResourceTagRow(resource_id=resource_id, tag_id=tag.id))
+            existing_ids.add(tag.id)
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def scrape_pending_ids(self, resource_ids: list[int]) -> set[int]:
+        if not resource_ids:
+            return set()
+        latest = (
+            select(ScrapeJobRow.resource_id, func.max(ScrapeJobRow.id).label("jid"))
+            .where(ScrapeJobRow.resource_id.in_(resource_ids))
+            .group_by(ScrapeJobRow.resource_id)
+            .subquery()
+        )
+        selected = exists(
+            select(CandidateRow.id).where(
+                CandidateRow.job_id == ScrapeJobRow.id, CandidateRow.selected == 1
+            )
+        )
+        stmt = (
+            select(ScrapeJobRow.resource_id)
+            .join(latest, ScrapeJobRow.id == latest.c.jid)
+            .where(
+                ScrapeJobRow.status == "done",
+                ScrapeJobRow.match_count > 0,
+                ~selected,
+            )
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return set(int(i) for i in rows)
+
+    async def attach_scrape_pending(self, resources: list[Resource]) -> None:
+        ids = [item.id for item in resources if item.id is not None]
+        pending = await self.scrape_pending_ids(ids)
+        for item in resources:
+            item.scrape_pending = item.id in pending
+
     async def list_categories(self) -> list[Category]:
         rows = (
             await self._session.execute(select(CategoryRow).order_by(CategoryRow.name))
@@ -920,7 +1037,9 @@ class ResourceRepository:
             .limit(limit)
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
+        resources = await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
+        await self.attach_scrape_pending(resources)
+        return resources
 
     async def stats(self) -> dict[str, Any]:
         """资源统计：一次 GROUP BY status+type，再 SUM 体积。"""

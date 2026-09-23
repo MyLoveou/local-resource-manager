@@ -41,12 +41,12 @@ export const SUBTITLE_FILE_FILTER: FileDialogFilter = {
 
 export const COVER_FILE_FILTER: FileDialogFilter = RESOURCE_FILE_FILTERS.image
 
-export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = TYPE_PROFILES.map(
-  (p) => ({
-    value: p.type,
-    label: p.label,
-  })
-)
+export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = TYPE_PROFILES.filter(
+  (p) => p.type !== 'work_directory'
+).map((p) => ({
+  value: p.type,
+  label: p.label,
+}))
 
 export const FILE_ROLE = {
   PRIMARY: 'primary',

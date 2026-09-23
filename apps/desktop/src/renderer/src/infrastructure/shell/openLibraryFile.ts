@@ -19,6 +19,15 @@ export async function revealInFolder(resource: Resource | null | undefined): Pro
   return result.ok ? null : result.message
 }
 
+export async function openAny(resource: Resource | null | undefined): Promise<string | null> {
+  const path = primaryLocalPath(resource)
+  if (!path) return '找不到库内文件'
+  const api = window.electron
+  if (!api?.openAny) return '当前环境不能打开外部应用'
+  const result = await api.openAny(path)
+  return result.ok ? null : result.message
+}
+
 export async function openPrimaryDefault(resource: Resource | null | undefined): Promise<string | null> {
   const path = primaryLocalPath(resource)
   if (!path) return '找不到库内文件'

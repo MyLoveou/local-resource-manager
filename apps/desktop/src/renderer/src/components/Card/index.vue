@@ -18,6 +18,7 @@
           decoding="async"
         >
         <div v-else class="cover-placeholder">无封面</div>
+        <span v-if="badge" class="cover-badge">{{ badge }}</span>
       </div>
     </template>
     <div class="title" :title="title">{{ title }}</div>
@@ -33,6 +34,7 @@ defineProps<{
   /** 封面 URL */
   coverUrl?: string
   selected?: boolean
+  badge?: string
 }>()
 
 defineEmits<{
@@ -51,8 +53,21 @@ defineEmits<{
   }
 
   .cover {
+    position: relative;
     aspect-ratio: 3 / 4;
     background: var(--n-color-embedded, #f5f5f5);
+  }
+
+  .cover-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgba(37, 99, 235, 0.92);
+    color: #fff;
   }
 
   .cover-img {

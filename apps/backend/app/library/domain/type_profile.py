@@ -10,7 +10,7 @@ from typing import Literal
 
 from app.shared.models import ResourceType, StorageKind
 
-IngestKind = Literal["file", "series", "package"]
+IngestKind = Literal["file", "series", "package", "directory"]
 ConsumeKind = Literal[
     "overlay-image",
     "overlay-video",
@@ -216,6 +216,22 @@ TYPE_PROFILES: tuple[TypeProfile, ...] = (
         True,
         "image_pages",
         sort_keys=frozenset({"pageCount"}),
+    ),
+    TypeProfile(
+        ResourceType.WORK_DIRECTORY,
+        "工作目录",
+        "暂无工作目录，点上方添加本地文件夹",
+        "/work",
+        "folder-outline",
+        "directory",
+        "shell-open",
+        "directory",
+        StorageKind.INDEXED,
+        frozenset({StorageKind.INDEXED}),
+        frozenset(),
+        False,
+        False,
+        allows_user_cover=False,
     ),
 )
 

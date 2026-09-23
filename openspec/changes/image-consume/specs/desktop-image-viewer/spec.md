@@ -20,13 +20,13 @@ When not in batch-delete mode, a click on an already-selected image card SHALL o
 - **THEN** the overlay does not open
 - **对应测试**：`tests.md` T2
 
-### Requirement: Overlay is metadata left and viewer right
+### Requirement: Description can be saved while viewing
 
-The overlay SHALL show the existing metadata panel capabilities on the left (description save, todos immediate) and the original image viewer on the right. Escape SHALL close the overlay without changing the shell route.
+While the viewer is open, the shell info panel SHALL still save description. Escape SHALL close the viewer without changing the shell route. Layout is defined by `desktop-image-viewer` in the archived `image-viewer-ux` change.
 
 #### Scenario: Edit description while viewing
 
-- **WHEN** the overlay is open and the user saves a new description
+- **WHEN** the viewer is open and the user saves a new description
 - **THEN** GET of that resource returns the new description
 - **对应测试**：`tests.md` T3
 

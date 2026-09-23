@@ -6,10 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.download.api.router import router as download_router
+from app.download.application.queue import recover_downloads, start_download_worker, stop_download_worker
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
 from app.scrape.api.router import router as scrape_router
+from app.settings.api.router import router as settings_router
+from app.scrape.application.queue import recover_unfinished, start_scrape_worker, stop_scrape_worker
 from app.shared.api_envelope import (
     http_exception_handler,
     unhandled_exception_handler,
@@ -35,15 +38,22 @@ async def lifespan(_: FastAPI):
         factory = get_session_factory()
         async with factory() as session:
             repo = ResourceRepository(session)
+            rewritten = 0
             if not is_new:
                 rewritten = await replace_remote_demo_covers(repo)
-                if rewritten:
-                    logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
+            if rewritten:
+                logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
+        start_scrape_worker()
+        await recover_unfinished()
+        start_download_worker()
+        await recover_downloads()
     except Exception as e:
         logger.error(f"数据库启动失败: {e}")
         raise
     yield
     logger.info("数据库关闭连接")
+    await stop_scrape_worker()
+    await stop_download_worker()
     await dispose_engine()
 
 
@@ -71,6 +81,7 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
 app.include_router(scrape_router, prefix="/scrape")
 app.include_router(download_router, prefix="/download")
+app.include_router(settings_router, prefix="/settings")
 
 
 @app.get("/health")

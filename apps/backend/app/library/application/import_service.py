@@ -307,6 +307,9 @@ class ImportService:
                 audio_path=primary if type_ == ResourceType.AUDIO else None,
             )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            from app.scrape.application.enqueue import enqueue_search_after_import
+
+            await enqueue_search_after_import(resources._session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
@@ -444,6 +447,9 @@ class ImportService:
                 episode_duration=None if first_ep is None else first_ep[3],
             )
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            from app.scrape.application.enqueue import enqueue_search_after_import
+
+            await enqueue_search_after_import(resources._session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:

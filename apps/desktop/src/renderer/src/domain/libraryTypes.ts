@@ -4,7 +4,7 @@
 import type { ResourceType } from './resource'
 import { SourceKind } from './constants'
 
-export type IngestKind = 'file' | 'series' | 'package'
+export type IngestKind = 'file' | 'series' | 'package' | 'directory'
 export type ConsumeKind =
   | 'overlay-image'
   | 'overlay-video'
@@ -207,6 +207,22 @@ export const TYPE_PROFILES: readonly TypeProfile[] = [
     allowsFileSource: true,
     allowsUserCover: true,
     sortKeys: ['pageCount'],
+  },
+  {
+    type: 'work_directory',
+    label: '工作目录',
+    emptyHint: '暂无工作目录，点上方添加本地文件夹',
+    routePath: '/work',
+    routeIcon: 'folder-outline',
+    ingestKind: 'directory',
+    consumeKind: 'shell-open',
+    defaultSource: SourceKind.DIRECTORY,
+    defaultStorage: 'indexed',
+    allowedStorage: ['indexed'],
+    extensions: [],
+    coverFallback: false,
+    allowsFileSource: false,
+    allowsUserCover: false,
   },
 ]
 

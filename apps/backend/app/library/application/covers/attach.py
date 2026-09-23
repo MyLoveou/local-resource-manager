@@ -84,14 +84,8 @@ async def _refresh_thumbnail(
         thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
         old_thumb = await resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
         if old_thumb is not None:
-            await resources.update_file_stat(
-                old_thumb.id,
-                path=str(thumb_dest),
-                size=thumb_size,
-                format_=thumb_dest.suffix.lower().lstrip("."),
-                commit=commit,
-            )
-            return
+            # 新 file_id 才能换 thumbnailPath；同 URL 会被浏览器按 max-age=86400 缓存旧图。
+            await resources.delete_file_row(old_thumb.id, commit=False)
         await resources.add_file(
             resource_id,
             path=str(thumb_dest),

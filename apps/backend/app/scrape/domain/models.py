@@ -33,6 +33,7 @@ class ScrapeJob(ApiModel):
     finished_at: datetime | None = None
     error: str | None = None  # 失败原因
     match_count: int = 0  # 命中候选数
+    query: str | None = None  # 手填 BV/链接，search 时优先解析
 
     @property
     def is_terminal(self) -> bool:

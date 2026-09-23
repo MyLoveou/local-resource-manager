@@ -20,6 +20,7 @@ class DownloadEngine(str, Enum):
     ARIA2 = "aria2"
     RQBIT = "rqbit"
     YTDLP = "yt-dlp"
+    HTTPX = "httpx"
 
 
 class AdapterKey(str, Enum):
@@ -28,6 +29,7 @@ class AdapterKey(str, Enum):
     OG = "og"
     TMDB = "tmdb"
     BANGUMI = "bangumi"
+    MIKAN = "mikan"
     PIXIV = "pixiv"
     DOUBAN = "douban"
 

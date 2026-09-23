@@ -7,6 +7,7 @@
           v-if="items[vItem.index]"
           :title="items[vItem.index].title"
           :cover-url="items[vItem.index].coverUrl"
+          :badge="items[vItem.index].badge"
           :selected="isSelected(items[vItem.index].id)"
           @click="handleCardClick($event, items[vItem.index].id)"
         />
@@ -29,6 +30,7 @@ export interface VirtualGridItem {
   id: number
   title: string
   coverUrl: string
+  badge?: string
 }
 
 const PADDING = 8

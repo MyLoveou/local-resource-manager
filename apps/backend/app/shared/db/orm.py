@@ -24,6 +24,7 @@ class ResourceRow(Base):
     last_scraped_at: Mapped[str | None] = mapped_column(String)
     scraped_source: Mapped[str | None] = mapped_column(String)
     extra: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    synopsis: Mapped[str | None] = mapped_column(Text)
     storage_kind: Mapped[str] = mapped_column(String, nullable=False, default="owned")
     category_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("categories.id", ondelete="SET NULL")
@@ -127,6 +128,15 @@ class ResourceTodoRow(Base):
     created_at: Mapped[str | None] = mapped_column(String)
 
 
+class ConsumptionEventRow(Base):
+    __tablename__ = "consumption_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str | None] = mapped_column(String)
+
+
 class ScrapeJobRow(Base):
     __tablename__ = "scrape_jobs"
 
@@ -137,6 +147,21 @@ class ScrapeJobRow(Base):
     finished_at: Mapped[str | None] = mapped_column(String)
     error: Mapped[str | None] = mapped_column(Text)
     match_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    query: Mapped[str | None] = mapped_column(Text)
+
+
+class CandidateRow(Base):
+    __tablename__ = "candidates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("scrape_jobs.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    thumbnail_url: Mapped[str | None] = mapped_column(String)
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    relevance: Mapped[float | None] = mapped_column(Float)
+    selected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str | None] = mapped_column(String)
 
 
 class DownloadTaskRow(Base):
@@ -155,5 +180,13 @@ class DownloadTaskRow(Base):
     target_resource_id: Mapped[int | None] = mapped_column(
         ForeignKey("resources.id", ondelete="SET NULL")
     )
+    filename: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str | None] = mapped_column(String)
     updated_at: Mapped[str | None] = mapped_column(String)
+
+
+class SettingsRow(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

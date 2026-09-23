@@ -8,6 +8,30 @@ import { initMainLog, log } from './log'
 /** 尽早初始化，否则启动失败写不进日志，渲染进程也无法用 electron-log */
 initMainLog()
 
+const BACKEND_FAILED = {
+  level: 'error' as const,
+  title: '后端服务启动失败',
+  description: '请查看日志',
+  duration: 0,
+}
+
+const BACKEND_STOPPED = {
+  level: 'error' as const,
+  title: '后端服务已停止',
+  description: '请查看日志后重新打开应用',
+  duration: 0,
+}
+
+function broadcastNotify(payload: typeof BACKEND_FAILED): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    const send = (): void => {
+      win.webContents.send('app:notify', payload)
+    }
+    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
+    else send()
+  }
+}
+
 function registerDialogIpc(): void {
   ipcMain.handle(
     'dialog:selectFiles',
@@ -83,10 +107,15 @@ app.whenReady().then(async () => {
     backendUrl = backend.baseURL
     backendToken = backend.token
     log.info('[main] backend ready', backend.baseURL)
+    backend.watchExit(() => {
+      log.error('[main] backend exited unexpectedly')
+      broadcastNotify(BACKEND_STOPPED)
+    })
     createWindow()
   } catch (err) {
     log.error('[main] failed to start', err)
-    throw err
+    createWindow()
+    broadcastNotify(BACKEND_FAILED)
   }
 
   app.on('activate', () => {

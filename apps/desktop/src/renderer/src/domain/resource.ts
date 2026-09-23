@@ -16,6 +16,7 @@ export type ResourceType =
   | 'game'
   | 'model'
   | 'comic'
+  | 'work_directory'
 
 /** 资源状态：正常 / 回收站（软删）/ 文件丢失 */
 export type ResourceStatus = 'active' | 'trashed' | 'lost'
@@ -27,6 +28,9 @@ export interface Resource {
   storageKind?: StorageKind
   title: string
   description?: string | null
+  /** 作品简介（站点/刮削） */
+  synopsis?: string | null
+  catalog?: WorkCatalog | null
   /** 评分 0-10 */
   rating?: number | null
   /** 封面本地缓存路径 */
@@ -42,6 +46,8 @@ export interface Resource {
   scrapedSource?: string | null
   /** 站点特有元数据兜底 */
   extra?: Record<string, unknown>
+  /** 有未确认的刮削候选 */
+  scrapePending?: boolean
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -71,6 +77,21 @@ export interface SeriesSeason {
   seasonNumber: number
   title?: string | null
   episodes?: SeriesEpisode[]
+}
+
+export interface WorkCatalog {
+  originalTitle?: string | null
+  nameCn?: string | null
+  date?: string | null
+  platform?: string | null
+  eps?: number | null
+  totalEpisodes?: number | null
+  siteScore?: number | null
+  infobox?: Record<string, unknown>[]
+  aliases?: string[]
+  imageUrls?: string[]
+  source?: string | null
+  sourceId?: string | null
 }
 
 export interface SeriesExtra {
@@ -129,6 +150,7 @@ export interface Tag {
 export interface MetadataDraft {
   title: string
   description: string
+  synopsis: string
   author: string
   ratingStars: number
   categoryName: string | null

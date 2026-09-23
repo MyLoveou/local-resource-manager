@@ -2,7 +2,6 @@
 
 任务状态权威存于本表（编排层原则），aria2/rqbit 仅作为执行引擎。
 """
-from datetime import datetime
 from enum import Enum
 
 from app.shared.constants import PROTOCOL_TO_ENGINE, DownloadEngine, Protocol
@@ -39,8 +38,9 @@ class DownloadTask(ApiModel):
     speed: int = 0  # 字节/秒
     error: str | None = None  # 失败原因
     target_resource_id: int | None = None  # 完成入库后关联的资源
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    filename: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
     @property
     def is_terminal(self) -> bool:
@@ -70,7 +70,6 @@ class DownloadTask(ApiModel):
         if self.status not in allowed:
             raise InvalidStateError(f"cannot go {self.status} → {target}")
         self.status = target
-        self.updated_at = datetime.now()
 
     def start(self) -> None:
         """开始/恢复执行。queued / paused 均可进入 running。"""
@@ -83,6 +82,10 @@ class DownloadTask(ApiModel):
     def resume(self) -> None:
         """恢复。仅 paused 合法。"""
         self._transition(DownloadStatus.RUNNING, DownloadStatus.PAUSED)
+
+    def requeue(self) -> None:
+        """暂停后重新排队，由 worker 再 start。"""
+        self._transition(DownloadStatus.QUEUED, DownloadStatus.PAUSED)
 
     def mark_done(self) -> None:
         """完成。running / queued 可进入。"""

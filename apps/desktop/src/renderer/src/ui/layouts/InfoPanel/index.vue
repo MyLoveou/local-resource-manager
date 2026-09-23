@@ -65,12 +65,42 @@
             </div>
           </template>
         </section>
+        <section v-if="resource.synopsis || resource.catalog" class="info-panel-section">
+          <div class="info-panel-section-title">作品资料</div>
+          <div v-if="resource.synopsis" class="info-panel-synopsis">{{ resource.synopsis }}</div>
+          <div v-if="resource.catalog?.nameCn" class="info-panel-meta">中文名 {{ resource.catalog.nameCn }}</div>
+          <div v-if="resource.catalog?.originalTitle" class="info-panel-meta">
+            原名 {{ resource.catalog.originalTitle }}
+          </div>
+          <div v-if="resource.catalog?.date" class="info-panel-meta">放送 {{ resource.catalog.date }}</div>
+          <div v-if="resource.catalog?.platform" class="info-panel-meta">平台 {{ resource.catalog.platform }}</div>
+          <div v-if="resource.catalog?.eps != null" class="info-panel-meta">集数 {{ resource.catalog.eps }}</div>
+          <div v-if="resource.catalog?.siteScore != null" class="info-panel-meta">
+            站点评分 {{ resource.catalog.siteScore }}
+          </div>
+          <div v-for="row in catalogInfobox" :key="row.key" class="info-panel-meta">
+            {{ row.key }} {{ row.text }}
+          </div>
+        </section>
         <section class="info-panel-section">
           <div class="info-panel-section-title">编辑</div>
-          <div class="info-panel-label">描述</div>
-        <n-input type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :value="draft.description" placeholder="记录说明"
-          @update:value="draft.description = $event" />
-        <div class="info-panel-label">作者</div>
+          <div class="info-panel-label">作品简介</div>
+          <n-input
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            :value="draft.synopsis"
+            placeholder="站点或自行填写的作品简介"
+            @update:value="draft.synopsis = $event"
+          />
+          <div class="info-panel-label">我的评价</div>
+          <n-input
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            :value="draft.description"
+            placeholder="你对这部作品的评价，刮削不会覆盖"
+            @update:value="draft.description = $event"
+          />
+          <div class="info-panel-label">作者</div>
         <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
         <template v-if="isImage">
           <div class="info-panel-label">拍摄</div>
@@ -98,6 +128,33 @@
               @keydown.enter.prevent="onTodoAddEnter" />
           </div>
         </div>
+        <template v-if="isWork">
+          <div class="info-panel-label">备注</div>
+          <div class="info-panel-todos">
+            <div v-for="note in workNotes" :key="note.id" class="info-panel-note">
+              <div class="info-panel-note-title">{{ note.title || '备注' }}</div>
+              <div class="info-panel-note-body">{{ note.content }}</div>
+              <n-button size="tiny" quaternary :disabled="noteBusy" @click="removeNote(note.id)">删</n-button>
+            </div>
+            <n-input
+              size="small"
+              :value="noteTitle"
+              placeholder="标题"
+              :disabled="noteBusy"
+              @update:value="noteTitle = $event"
+            />
+            <n-input
+              type="textarea"
+              size="small"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :value="noteContent"
+              placeholder="内容，回车添加"
+              :disabled="noteBusy"
+              @update:value="noteContent = $event"
+              @keydown.enter.exact.prevent="addNote"
+            />
+          </div>
+        </template>
         <!-- 分类是独立词表，不是 type -->
         <div class="info-panel-label">评分</div>
         <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
@@ -117,6 +174,22 @@
       <div class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
+          <n-input
+            v-if="needsScrapeQuery"
+            size="small"
+            :placeholder="scrapeQueryPlaceholder"
+            :value="scrapeQuery"
+            style="width: 220px"
+            @update:value="scrapeQuery = $event"
+          />
+          <n-button
+            v-if="canScrape"
+            size="small"
+            :disabled="scrapeBusy"
+            @click="openScrape(false)"
+          >
+            {{ resource?.scrapePending ? '查看候选' : '获取元数据' }}
+          </n-button>
           <n-button
             v-if="isShellOpen"
             size="small"
@@ -131,7 +204,7 @@
             :title="revealHint"
             @click="onReveal"
           >
-            打开所在位置
+            {{ revealLabel }}
           </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
@@ -163,6 +236,17 @@
       <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
         :saving="saving" :allow-cover="canChangeCover" @update:show="onModalShow" @save="saveModal"
         @cancel="cancelModal" @pick-cover="pickCoverForModal" />
+      <ScrapeConfirmQueue
+        v-model:show="scrapeOpen"
+        :resource-ids="scrapeIds"
+        :force="scrapeForce"
+        :prefer-latest="scrapePreferLatest"
+        :allow-bili-query="needsScrapeQuery"
+        :query-placeholder="scrapeQueryPlaceholder"
+        :query-empty-hint="scrapeQueryEmptyHint"
+        :initial-query="scrapeQueryHint"
+        @applied="onScrapeApplied"
+      />
     </div>
     <div v-else class="info-panel-empty">未选择资源</div>
   </aside>
@@ -173,13 +257,16 @@ import { computed, reactive, ref, watch } from 'vue'
 import { NButton, NCheckbox, NDropdown, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
+import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { getResource, getCategories, invalidateCategories, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
   openLaunchOrPrimary,
+  openAny,
   openPrimaryWithOther,
   revealInFolder,
   launchOrPrimaryPath,
@@ -221,7 +308,7 @@ const deleting = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
 const editOpen = ref(false)
-const modalTextSnapshot = ref<{ title: string; description: string } | null>(null)
+const modalTextSnapshot = ref<{ title: string; description: string; synopsis: string } | null>(null)
 let loadGen = 0
 
 const todoInput = ref('')
@@ -231,6 +318,7 @@ const subtitleBusy = ref(false)
 const draft = reactive<MetadataDraft>({
   title: '',
   description: '',
+  synopsis: '',
   author: '',
   ratingStars: 0,
   categoryName: null,
@@ -243,6 +331,7 @@ const draft = reactive<MetadataDraft>({
 function applyResourceToDraft(row: Resource): void {
   draft.title = row.title
   draft.description = row.description ?? ''
+  draft.synopsis = row.synopsis ?? ''
   draft.author = row.author ?? ''
   draft.ratingStars = (row.rating ?? 0) / 2
   draft.categoryName = row.category?.name ?? null
@@ -261,6 +350,7 @@ function snapshotEqualsSaved(): boolean {
   return (
     draft.ratingStars === (row.rating ?? 0) / 2 &&
     (draft.description ?? '') === (row.description ?? '') &&
+    (draft.synopsis ?? '') === (row.synopsis ?? '') &&
     (draft.author ?? '') === (row.author ?? '') &&
     (draft.categoryName ?? '') === (row.category?.name ?? '') &&
     savedTags === draftTags &&
@@ -283,6 +373,20 @@ const isSeries = computed(() =>
   resource.value != null && isSeriesResourceType(resource.value.type)
 )
 const isShellOpen = computed(() => consume.value === 'shell-open')
+const isWork = computed(() => resource.value?.type === 'work_directory')
+const noteTitle = ref('')
+const noteContent = ref('')
+const noteBusy = ref(false)
+const workNotes = computed(() => {
+  const raw = resource.value?.extra?.workNotes
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const row = item as { id?: unknown; title?: unknown; content?: unknown }
+    if (typeof row.id !== 'string') return []
+    return [{ id: row.id, title: String(row.title ?? ''), content: String(row.content ?? '') }]
+  })
+})
 const hasLaunch = computed(() =>
   (resource.value?.files ?? []).some((f) => f.role === FILE_ROLE.LAUNCH)
 )
@@ -293,23 +397,72 @@ const revealHint = computed(() => {
   if (!canReveal.value) return '找不到可定位的文件'
   return '在系统资源管理器中显示'
 })
-const shellActionLabel = computed(() => (hasLaunch.value ? '启动' : '打开'))
+const shellActionLabel = computed(() => {
+  if (isWork.value) return '外部打开'
+  return hasLaunch.value ? '启动' : '打开'
+})
+const revealLabel = computed(() => (isWork.value ? '资源管理器' : '打开所在位置'))
 const launchPathLabel = computed(() => revealablePath(resource.value) ?? '—')
 
 /** 图片主文件即作品，不能换封面；其余类型可手选海报。 */
 const canChangeCover = computed(() =>
   resource.value != null && profileFor(resource.value.type)?.allowsUserCover === true
 )
+const canScrape = computed(() => {
+  const type = resource.value?.type
+  return type === 'video' || type === 'anime' || type === 'image'
+})
+const needsScrapeQuery = computed(
+  () => resource.value?.type === 'video' || resource.value?.type === 'image'
+)
+const scrapeQueryPlaceholder = computed(() =>
+  resource.value?.type === 'image' ? '作品页面链接' : 'BV号、av、视频链接或名称'
+)
+const scrapeQueryEmptyHint = computed(() =>
+  resource.value?.type === 'image' ? '请填写页面链接' : '请填写 BV 号、链接或视频名称'
+)
+const scrapeBusy = ref(false)
+const scrapeOpen = ref(false)
+const scrapeIds = ref<number[]>([])
+const scrapeForce = ref(false)
+const scrapePreferLatest = ref(false)
+const scrapeQuery = ref('')
+const scrapeQueryHint = ref('')
+
+function openScrape(force: boolean): void {
+  const id = resource.value?.id
+  if (id == null) return
+  const typed = needsScrapeQuery.value ? scrapeQuery.value.trim() : ''
+  if (resource.value?.type === 'image' && !typed && !resource.value.scrapePending) {
+    errorMessage.value = '请填写作品页面链接'
+    return
+  }
+  errorMessage.value = ''
+  scrapeQueryHint.value = typed
+  scrapeForce.value = force || typed.length > 0
+  scrapePreferLatest.value = !scrapeForce.value && resource.value?.scrapePending === true
+  scrapeIds.value = [id]
+  scrapeOpen.value = true
+}
+
+async function onScrapeApplied(): Promise<void> {
+  const id = resource.value?.id
+  if (id == null) return
+  invalidateResourceCache(id)
+  resource.value = await getResource(id)
+  applyResourceToDraft(resource.value)
+}
 
 const moreOptions = computed((): DropdownOption[] => {
   const items: DropdownOption[] = []
   if (canChangeCover.value) items.push({ label: '更换封面', key: 'cover' })
+  if (canScrape.value) items.push({ label: '重新搜索元数据', key: 'scrapeForce', disabled: scrapeBusy.value })
   if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
   if (isImage.value || isShellOpen.value || consume.value === 'overlay-model') {
-    items.push(
-      { label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value },
-      { label: '选择其他应用', key: 'openWith', disabled: shellBusy.value }
-    )
+    items.push({ label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value })
+    if (!isWork.value) {
+      items.push({ label: '选择其他应用', key: 'openWith', disabled: shellBusy.value })
+    }
   }
   return items
 })
@@ -356,6 +509,33 @@ const subtitleNames = computed(() =>
 
 const coverUrl = computed(() => resolveCardImageUrl(resource.value ?? {}))
 
+function infoboxText(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (item && typeof item === 'object' && 'v' in item ? String((item as { v?: unknown }).v ?? '') : infoboxText(item)))
+      .filter(Boolean)
+      .join('、')
+  }
+  return ''
+}
+
+const catalogInfobox = computed(() => {
+  const rows = resource.value?.catalog?.infobox ?? []
+  const out: { key: string; text: string }[] = []
+  for (const row of rows) {
+    const key = String(row.key ?? '')
+    if (!key || key === '中文名' || key === '话数') continue
+    const text = infoboxText(row.value)
+    if (!text) continue
+    out.push({ key, text })
+    if (out.length >= 8) break
+  }
+  return out
+})
+
 const modalCoverUrl = computed(() => coverUrl.value)
 
 const categoryOptions = computed(() => {
@@ -370,7 +550,12 @@ watch(
     const gen = ++loadGen
     errorMessage.value = ''
     editOpen.value = false
+    scrapeOpen.value = false
     todoInput.value = ''
+    noteTitle.value = ''
+    noteContent.value = ''
+    scrapeQuery.value = ''
+    scrapeQueryHint.value = ''
     if (id === null) {
       resource.value = null
       return
@@ -448,6 +633,7 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
     const patched = await patchResource(id, {
       ...(includeTextFields ? { title: draft.title } : {}),
       description: draft.description || null,
+      synopsis: draft.synopsis || null,
       author: draft.author || null,
       rating: draft.ratingStars * 2,
       categoryName: draft.categoryName,
@@ -477,7 +663,11 @@ async function savePanel(): Promise<void> {
 }
 
 function openModal(): void {
-  modalTextSnapshot.value = { title: draft.title, description: draft.description }
+  modalTextSnapshot.value = {
+    title: draft.title,
+    description: draft.description,
+    synopsis: draft.synopsis,
+  }
   draft.pendingCoverPath = null
   editOpen.value = true
 }
@@ -508,6 +698,7 @@ function cancelModal(): void {
   if (modalTextSnapshot.value) {
     draft.title = modalTextSnapshot.value.title
     draft.description = modalTextSnapshot.value.description
+    draft.synopsis = modalTextSnapshot.value.synopsis
   }
   draft.pendingCoverPath = null
   editOpen.value = false
@@ -697,16 +888,53 @@ function onReveal(): void {
 }
 
 function onOpenDefault(): void {
-  void runShell(openLaunchOrPrimary)
+  void runShell(isWork.value ? openAny : openLaunchOrPrimary)
 }
 
 function onOpenWith(): void {
   void runShell(openPrimaryWithOther)
 }
 
+async function addNote(): Promise<void> {
+  const id = resource.value?.id
+  if (id == null || noteBusy.value) return
+  if (!noteTitle.value.trim() && !noteContent.value.trim()) return
+  noteBusy.value = true
+  errorMessage.value = ''
+  try {
+    resource.value = await createWorkNote(id, noteTitle.value, noteContent.value)
+    noteTitle.value = ''
+    noteContent.value = ''
+    library.bump('work_directory')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '备注保存失败'
+  } finally {
+    noteBusy.value = false
+  }
+}
+
+async function removeNote(noteId: string): Promise<void> {
+  const id = resource.value?.id
+  if (id == null || noteBusy.value) return
+  noteBusy.value = true
+  errorMessage.value = ''
+  try {
+    resource.value = await deleteWorkNote(id, noteId)
+    library.bump('work_directory')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '备注删除失败'
+  } finally {
+    noteBusy.value = false
+  }
+}
+
 function onMoreSelect(key: string | number): void {
   if (key === 'cover') {
     void pickCoverImmediate()
+    return
+  }
+  if (key === 'scrapeForce') {
+    openScrape(true)
     return
   }
   if (key === 'subtitle') {
@@ -860,6 +1088,14 @@ async function handlePurge(): Promise<void> {
   word-break: break-word;
 }
 
+.info-panel-synopsis {
+  font-size: 12px;
+  white-space: pre-wrap;
+  margin-top: 8px;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .info-panel-meta,
 .info-panel-label {
   font-size: 12px;
@@ -959,5 +1195,24 @@ async function handlePurge(): Promise<void> {
 .info-panel-todo-add {
   margin-top: 4px;
   min-width: 0;
+}
+
+.info-panel-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.info-panel-note-title,
+.info-panel-note-body {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.info-panel-note-body {
+  grid-column: 1;
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
 }
 </style>

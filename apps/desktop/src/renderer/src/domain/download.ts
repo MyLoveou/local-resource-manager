@@ -23,6 +23,7 @@ export interface DownloadTask {
   error?: string | null
   /** 完成入库后关联的资源 */
   targetResourceId?: number | null
+  filename?: string | null
   createdAt?: string | null
   updatedAt?: string | null
 }

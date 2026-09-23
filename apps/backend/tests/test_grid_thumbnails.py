@@ -119,6 +119,9 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
         async with self.factory() as session:
             rid = await self._import(session, ResourceType.AUDIO, audio)
             dest = self._thumb_path("audio", rid)
+            before = await ResourceRepository(session).get(rid)
+            assert before is not None
+            before_thumb = before.thumbnail_path
             svc = LibraryQueryService(
                 ResourceRepository(session),
                 TaskSummaryRepository(session),
@@ -132,6 +135,7 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(Path(thumbs[0].path).name, THUMB_GRID_NAME)
             self.assertTrue(dest.is_file())
             self.assertNotIn("thumbs/grid", after.cover_path or "")
+            self.assertNotEqual(after.thumbnail_path, before_thumb)
 
 
 if __name__ == "__main__":

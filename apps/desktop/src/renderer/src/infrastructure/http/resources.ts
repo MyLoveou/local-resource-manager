@@ -15,7 +15,7 @@ export function invalidateResourceCache(resourceId?: number): void {
   detailCache.delete(resourceId)
 }
 
-function rememberDetail(row: Resource): Resource {
+export function rememberDetail(row: Resource): Resource {
   if (row.id === undefined) return row
   detailCache.set(row.id, row)
   if (detailCache.size > DETAIL_CACHE_LIMIT) {
@@ -29,6 +29,7 @@ function rememberDetail(row: Resource): Resource {
 export interface ResourcePatch {
   title?: string | null
   description?: string | null
+  synopsis?: string | null
   author?: string | null
   rating?: number | null
   categoryName?: string | null

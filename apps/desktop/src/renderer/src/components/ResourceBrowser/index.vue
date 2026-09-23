@@ -8,6 +8,7 @@
       <button type="button" class="resource-browser__retry" @click="reset">重试</button>
     </div>
     <EmptyGuide v-else-if="!loading && total === 0" :hint="resolvedEmptyHint" />
+    <!-- 根据类型判断显示什么资源 --->
     <VirtualGrid v-else class="resource-browser__grid" :items="gridItems" :selected-ids="gridSelectedIds"
       @near-end="loadMore" @card-click="handleCardClick">
       <template #footer>
@@ -23,6 +24,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import BrowseControls from '@/components/BrowseControls/index.vue'
@@ -32,14 +34,14 @@ import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
-import { getResources, getResource, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
+import { consumeResource } from '@/infrastructure/consume/consumeResource'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/static'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
-import { consumeKindOf, FILE_ROLE, MODEL_PREVIEW_EXTENSIONS } from '@/domain'
-import { openLaunchOrPrimary } from '@/infrastructure/shell/openLibraryFile'
+import { consumeKindOf } from '@/domain'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
@@ -70,6 +72,7 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
 })
 const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
+const route = useRoute()
 
 imageViewer.bindPager({
   hasMore: () => hasMore.value,
@@ -89,28 +92,21 @@ function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   const item = items.value.find((row) => row.id === itemId)
   if (selection.selectedId === itemId) {
     if (!item) return
-    const kind = consumeKindOf(item.type)
-    if (kind == null || kind === 'overlay-series') return
-    if (kind === 'shell-open') {
-      void getResource(itemId).then((row) => openLaunchOrPrimary(row))
-      return
-    }
-    if (kind === 'overlay-model') {
-      void getResource(itemId).then((row) => {
-        const format = (row.files?.find((file) => file.role === FILE_ROLE.PRIMARY)?.format ?? '').toLowerCase()
-        if ((MODEL_PREVIEW_EXTENSIONS as readonly string[]).includes(format)) {
-          PlayerByConsume[kind].open(itemId, ids(item.type))
-          return
-        }
-        void openLaunchOrPrimary(row)
-      })
-      return
-    }
-    PlayerByConsume[kind].open(itemId, ids(item.type))
+    void consumeResource(item, ids(item.type))
     return
   }
   selection.select(itemId)
 }
+
+watch(
+  () => route.query.select,
+  (raw) => {
+    const id = Number(raw)
+    if (!Number.isFinite(id) || id <= 0) return
+    selection.select(id)
+  },
+  { immediate: true },
+)
 
 function ids(type: ResourceType): number[] {
   return items.value.flatMap((item) =>
@@ -262,6 +258,7 @@ const gridItems = computed(() =>
           id: item.id,
           title: item.title,
           coverUrl: resolveCardImageUrl(item),
+          badge: item.scrapePending ? '候选' : undefined,
         },
       ]
   )

@@ -3,6 +3,8 @@
  * 后端对应：apps/backend/app/scrape/domain/models.py
  */
 
+import type { WorkCatalog } from './resource'
+
 /** 抓取任务状态机 */
 export type ScrapeJobStatus = 'queued' | 'running' | 'done' | 'failed'
 
@@ -13,10 +15,9 @@ export interface ScrapeJob {
   status: ScrapeJobStatus
   startedAt?: string | null
   finishedAt?: string | null
-  /** 失败原因 */
   error?: string | null
-  /** 命中候选数 */
   matchCount: number
+  query?: string | null
 }
 
 /** 抓取候选（搜索结果条目） */
@@ -26,11 +27,41 @@ export interface Candidate {
   title: string
   url: string
   thumbnailUrl?: string | null
-  /** 来源适配器/站点标识（SearXNG / TMDB / Bangumi / 反查图…） */
   source: string
-  /** 相关度 0-1 */
   relevance?: number | null
-  /** 用户是否选中回填 */
   selected: boolean
   createdAt?: string | null
+}
+
+export interface ScrapeCurrent {
+  title: string
+  synopsis?: string | null
+  author?: string | null
+  tags: string[]
+  catalogSummary?: string | null
+}
+
+export interface ScrapePreview {
+  title: string
+  synopsis?: string | null
+  author?: string | null
+  tags: string[]
+  coverUrls: string[]
+  catalog?: WorkCatalog | null
+  catalogSummary?: string | null
+  sourceRef?: string
+  userCoverLocked?: boolean
+  current?: ScrapeCurrent
+}
+
+export interface ScrapeSelect {
+  candidateId: number
+  coverUrl?: string | null
+  applyTitle?: boolean
+  applySynopsis?: boolean
+  applyAuthor?: boolean
+  applyTags?: boolean
+  applyCatalog?: boolean
+  applyCover?: boolean
+  replaceUserCover?: boolean
 }

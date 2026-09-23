@@ -35,6 +35,7 @@ class ResourceType(str, Enum):
     GAME = "game"
     MODEL = "model"
     COMIC = "comic"
+    WORK_DIRECTORY = "work_directory"
 
 
 class StorageKind(str, Enum):
@@ -82,6 +83,23 @@ class SeriesExtra(ApiModel):
     duration: float | None = None
 
 
+class WorkCatalog(ApiModel):
+    """站点作品档案（刮削写入）。用户评价在 description，用户评分在 rating。"""
+
+    original_title: str | None = None
+    name_cn: str | None = None
+    date: str | None = None
+    platform: str | None = None
+    eps: int | None = None
+    total_episodes: int | None = None
+    site_score: float | None = None
+    infobox: list[dict[str, Any]] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    image_urls: list[str] = Field(default_factory=list)
+    source: str | None = None
+    source_id: str | None = None
+
+
 class Resource(ApiModel):
     """库内一条资源。图片/视频是单文件作品；anime/av 是整部作品，集在 seasons/episodes。"""
 
@@ -89,7 +107,9 @@ class Resource(ApiModel):
     type: ResourceType
     storage_kind: StorageKind = StorageKind.OWNED
     title: str = ""
-    description: str | None = None
+    description: str | None = None  # 用户对作品的评价/笔记
+    synopsis: str | None = None  # 作品简介（刮削/站点）
+    catalog: WorkCatalog | None = None  # 站点档案（番剧等）
     author: str | None = None
     rating: Rating | None = None  # 评分 0-10（约束类型值对象）
     cover_path: str | None = None  # 封面本地缓存路径（原图，信息栏用）
@@ -99,6 +119,7 @@ class Resource(ApiModel):
     last_scraped_at: datetime | None = None  # 上次元数据抓取时间
     scraped_source: str | None = None  # 抓取来源站点（审计）
     extra: dict[str, Any] = Field(default_factory=dict)  # 站点特有元数据兜底
+    scrape_pending: bool = False  # 有未确认的 search 候选
     created_at: datetime | None = None
     updated_at: datetime | None = None
     category: "Category | None" = None

@@ -3,16 +3,16 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { withMediaCacheBust } from './mediaUrl.ts'
 
-function resolveCardImageUrl(resource: { thumbnailPath?: string | null }): string {
-  return resource.thumbnailPath ?? ''
-}
-
-describe('resolveCardImageUrl', () => {
-  it('uses thumbnail only', () => {
-    assert.equal(resolveCardImageUrl({ thumbnailPath: '/library/resources/1/files/2/content' }), '/library/resources/1/files/2/content')
+describe('withMediaCacheBust', () => {
+  it('appends revision query', () => {
+    assert.equal(
+      withMediaCacheBust('/library/resources/1/files/2/content', '2026-09-22T01:00:00'),
+      '/library/resources/1/files/2/content?v=2026-09-22T01%3A00%3A00'
+    )
   })
-  it('does not fall back to cover', () => {
-    assert.equal(resolveCardImageUrl({}), '')
+  it('keeps empty url', () => {
+    assert.equal(withMediaCacheBust('', 'x'), '')
   })
 })

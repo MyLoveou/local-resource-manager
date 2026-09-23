@@ -1,10 +1,8 @@
 # 跨会话续作 · app-performance
 
-实现已落在分支 `feat/app-performance`。清库须先退出 `pnpm dev`，再：
+阶段：已归档（2026-09-23）。
 
-```powershell
-cd apps/backend
-.\.venv\Scripts\python scripts\reset_library.py --yes
-```
+OpenSpec：`openspec/changes/archive/2026-09-23-app-performance/`  
+主 spec：`openspec/specs/platform-performance`
 
-然后重新 `pnpm dev` 并导入。可选先预览残缺项：`python scripts/repair_thumbnails.py`（加 `--yes` 才删/补）。
+清库脚本仍在 `apps/backend/scripts/reset_library.py`，先退出 `pnpm dev` 再执行。

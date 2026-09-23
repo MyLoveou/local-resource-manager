@@ -14,6 +14,21 @@ function readArg(name: string): string | undefined {
   return arg?.slice(prefix.length)
 }
 
+type AppNotifyPayload = {
+  level: 'success' | 'info' | 'warning' | 'error'
+  title: string
+  description?: string
+  duration?: number
+}
+
+let pendingNotify: AppNotifyPayload | null = null
+let handlerRef: ((payload: AppNotifyPayload) => void) | null = null
+
+ipcRenderer.on('app:notify', (_event, payload: AppNotifyPayload) => {
+  pendingNotify = payload
+  handlerRef?.(payload)
+})
+
 const api = {
   platform: process.platform,
   versions: {
@@ -34,9 +49,26 @@ const api = {
     ipcRenderer.invoke('shell:openPath', { path }),
   openWith: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:openWith', { path }),
+  openAny: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:openAny', { path }),
+  runCommand: (payload: {
+    template: string
+    path: string
+  }): Promise<{ ok: true } | { ok: false; message: string }> => ipcRenderer.invoke('shell:runCommand', payload),
   selectThemeCss: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectThemeCss'),
   readThemeCss: (path: string): Promise<{ ok: true; css: string } | { ok: false; message: string }> =>
     ipcRenderer.invoke('theme:readCss', path),
+  onAppNotify: (
+    handler: (payload: {
+      level: 'success' | 'info' | 'warning' | 'error'
+      title: string
+      description?: string
+      duration?: number
+    }) => void
+  ): void => {
+    handlerRef = handler
+    if (pendingNotify) handler(pendingNotify)
+  },
 }
 
 contextBridge.exposeInMainWorld('electron', api)

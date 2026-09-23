@@ -24,6 +24,7 @@ from app.library.application.schemas import (
     TodoCreate,
     TodoPatch,
 )
+from app.library.application.workbench import active_work, recent_consumption
 from app.library.application.subtitle_naming import original_stem_from_extra, subtitle_dest_name
 from app.library.domain.type_profile import allows_user_cover
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
@@ -57,6 +58,8 @@ class LibraryQueryService:
             stats=ResourceStats(**await self._resources.stats()),
             recent=await self._resources.recent(limit=12),
             tasks=TaskSummary(**await self._tasks.summary()),
+            active_work=await active_work(self._resources.session),
+            recent_consumption=await recent_consumption(self._resources.session),
         )
 
     async def list_page(

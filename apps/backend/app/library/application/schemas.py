@@ -26,12 +26,25 @@ class TaskSummary(ApiModel):
     active_downloads: int = 0
 
 
+class ConsumptionItem(ApiModel):
+    """一次打开/播放记录。"""
+
+    id: int
+    resource_id: int
+    title: str
+    type: str
+    action: str
+    created_at: str | None = None
+
+
 class Overview(ApiModel):
-    """首页概览（统计 + 最近添加 + 任务）。"""
+    """首页概览（统计 + 最近添加 + 任务 + 工作）。"""
 
     stats: ResourceStats
     recent: list[Resource]
     tasks: TaskSummary
+    active_work: list[Resource] = Field(default_factory=list)
+    recent_consumption: list[ConsumptionItem] = Field(default_factory=list)
 
 
 class ResourceSortField(str, Enum):
@@ -71,6 +84,7 @@ class ResourcePatch(ApiModel):
 
     title: str | None = None
     description: str | None = None
+    synopsis: str | None = None
     author: str | None = None
     rating: Rating | None = None
     category_name: str | None = None

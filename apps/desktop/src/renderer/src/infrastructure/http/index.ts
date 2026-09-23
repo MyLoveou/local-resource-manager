@@ -24,3 +24,24 @@ export { getCategories, invalidateCategories, getTags, invalidateTags } from './
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
 export type { ImportCreate, ImportJob, ImportJobCreated, ImportSourceKind } from './imports'
+export {
+  getSettings,
+  patchScrapeSettings,
+  backupLibrary,
+} from './settings'
+export {
+  createDownloadTask,
+  listDownloadTasks,
+  pauseDownloadTask,
+  resumeDownloadTask,
+  cancelDownloadTask,
+} from './download'
+export {
+  createScrapeJob,
+  getScrapeJob,
+  listScrapeCandidates,
+  previewScrapeCandidate,
+  scrapeImageSrc,
+  selectScrapeCandidate,
+  getLatestScrapeJob,
+} from './scrape'

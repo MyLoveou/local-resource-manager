@@ -2,6 +2,80 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## library-collections（**设计待确认**）
+
+> 用户自建一组资源。不是系列。分支 `feat/library-collections`。禁止编码。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-collections/需求.md`](library-collections/需求.md) | IN/OUT、C1–C8 |
+| [`library-collections/设计.md`](library-collections/设计.md) | 两张表、与系列的边界 |
+| [`library-collections/handoff.md`](library-collections/handoff.md) | 待确认设计 |
+
+## app-settings-first（**已落地** · D-20260923-04）
+
+> 设置第一刀：刮削凭证 + 系统路径/备份。无扫描根。
+
+| 文档 | 内容 |
+|------|------|
+| [`app-settings-first/需求.md`](app-settings-first/需求.md) | IN/OUT、US-Z.1–5 |
+| [`app-settings-first/设计.md`](app-settings-first/设计.md) | KV、掩码、两页签 |
+| [`app-settings-first/实现方案.md`](app-settings-first/实现方案.md) | REST、文件清单 |
+| [`app-settings-first/handoff.md`](app-settings-first/handoff.md) | 待 apply |
+
+## download-magnet-aria2（**已落地** · D-20260923-06）
+
+> 磁力：本机 aria2c → 复制进视频库。HTTP 直链仍走 httpx。无 rqbit。
+
+| 文档 | 内容 |
+|------|------|
+| [`download-magnet-aria2/需求.md`](download-magnet-aria2/需求.md) | IN/OUT |
+| [`download-magnet-aria2/设计.md`](download-magnet-aria2/设计.md) | RPC、校验 |
+| [`download-magnet-aria2/实现方案.md`](download-magnet-aria2/实现方案.md) | 文件与错误文案 |
+| [`download-magnet-aria2/handoff.md`](download-magnet-aria2/handoff.md) | 待手验 |
+
+## download-http-ingest（**已落地** · D-20260923-02）
+
+> 下载第一刀：HTTP(S) 直链 → 暂存 → 复制进视频库。无磁力、无 aria2。
+
+| 文档 | 内容 |
+|------|------|
+| [`download-http-ingest/需求.md`](download-http-ingest/需求.md) | IN/OUT、US-D.1–5 |
+| [`download-http-ingest/设计.md`](download-http-ingest/设计.md) | 队列、入库、抽屉 |
+| [`download-http-ingest/实现方案.md`](download-http-ingest/实现方案.md) | REST、文件清单 |
+| [`download-http-ingest/handoff.md`](download-http-ingest/handoff.md) | 已编码，待手验 |
+
+## scrape-confirm-ux（**已落地** · 待手验）
+
+> 确认元数据分栏；按字段勾选覆盖。
+
+| 文档 | 内容 |
+|------|------|
+| [`scrape-confirm-ux/界面方向.md`](scrape-confirm-ux/界面方向.md) | 视觉 |
+| [`scrape-confirm-ux/需求.md`](scrape-confirm-ux/需求.md) | IN/OUT |
+| [`scrape-confirm-ux/设计.md`](scrape-confirm-ux/设计.md) | 字段开关 |
+
+## bilibili-scrape（**已落地** · D-20260922-03）
+
+> 视频附加 B 站公开稿件；信息栏可手填 BV。不登录、不下载。待 Electron 手验。
+
+| 文档 | 内容 |
+|------|------|
+| [`bilibili-scrape/需求.md`](bilibili-scrape/需求.md) | IN/OUT、US-B.6 手填 BV |
+| [`bilibili-scrape/设计.md`](bilibili-scrape/设计.md) | query 列、force 新 job |
+| [`bilibili-scrape/实现方案.md`](bilibili-scrape/实现方案.md) | 路径清单、契约 |
+| [`bilibili-scrape/handoff.md`](bilibili-scrape/handoff.md) | 已编码，待手验 |
+
+## metadata-scrape（**已落地** · D-20260919-10）
+
+> 视频/番剧直连 TMDB+Bangumi；确认后覆盖标题简介；批量确认；导入预搜不写库。
+
+| 文档 | 内容 |
+|------|------|
+| [`metadata-scrape/需求.md`](metadata-scrape/需求.md) | IN/OUT、已关开放问题 |
+| [`metadata-scrape/设计.md`](metadata-scrape/设计.md) | Provider、job、导入入队、批量 |
+| [`metadata-scrape/实现方案.md`](metadata-scrape/实现方案.md) | REST、worker、文件清单 |
+
 ## image-viewer-cross-page（**已落地** · D-20260919-08）
 
 > 图片查看器上一张/下一张越过当前已加载页。不环绕、不拉全库。待 Electron 手验。
@@ -14,7 +88,7 @@
 
 ## library-covers-complete（**已落地** · D-20260919-07）
 
-> 九种库类型封面策略收口。PDF/EPUB/cbz/同名贴图本刀；cbr 不抽页；不刮削、不回填。禁止编码。
+> 九种库类型封面策略收口。PDF/EPUB/cbz/同名贴图本刀；cbr 不抽页；不刮削、不回填。
 
 | 文档 | 内容 |
 |------|------|
@@ -24,7 +98,7 @@
 
 ## series-import-explain（**已落地** · D-20260919-06）
 
-> 番剧/AV 导入只读说明：为何失败、成功分成几集。不改映射。禁止编码。
+> 番剧/AV 导入只读说明：为何失败、成功分成几集。不改映射。
 
 | 文档 | 内容 |
 |------|------|
@@ -56,13 +130,13 @@
 
 ## image-exif-taken（**已落地**）
 
-> 图片深化第一刀（D1）：新导入写入 EXIF 拍摄时间并在信息栏展示。不做旧库回填。禁止编码。
+> 图片深化第一刀（D1）：新导入写入 EXIF 拍摄时间并在信息栏展示。不做旧库回填。
 
 | 文档 | 内容 |
 |------|------|
 | [`image-exif-taken/需求.md`](image-exif-taken/需求.md) | IN/OUT、故事 |
 | [`image-exif-taken/设计.md`](image-exif-taken/设计.md) | 探测优先级、存储格式、模块 |
-| OpenSpec | 尚未建（等 L3） |
+| OpenSpec | 未建独立 change（能力已落地） |
 
 ## image-library-depth（**草案 / 探索**）
 
@@ -73,9 +147,9 @@
 | [`image-library-depth/需求.md`](image-library-depth/需求.md) | 现状缺口、债（D1–D6）、候选（N1–N22）、开放问题 |
 | [`image-library-depth/handoff.md`](image-library-depth/handoff.md) | D1 已拆出 |
 
-## library-search-sort（**实现中 / 待 Electron 手工验**）
+## library-search-sort（**已落地 / 待 Electron 手工验**）
 
-> 库内共用与分类型搜索、排序。未授权实现。
+> 库内共用与分类型搜索、排序。代码与后端测试已在。
 
 | 文档 | 内容 |
 |------|------|
@@ -112,7 +186,7 @@
 | [`anime-av-types/实现方案.md`](anime-av-types/实现方案.md) | 枚举/CHECK/映射/消费 |
 | OpenSpec | `openspec/changes/anime-av-types/` |
 
-## app-performance（**已定稿 / 实现中**）
+## app-performance（**已定稿 / 已归档**）
 
 > 全项目性能：DB / 导入 / HTTP / 万级显示 / 查看器 / 清脏库；API 保持可远程。
 
@@ -120,7 +194,7 @@
 |------|------|
 | [`app-performance/需求.md`](app-performance/需求.md) | 现状分析、验收、阶段 |
 | [`app-performance/实现方案.md`](app-performance/实现方案.md) | S0–S5 文件清单 |
-| OpenSpec | `openspec/changes/app-performance/` |
+| OpenSpec | 已归档 `openspec/changes/archive/2026-09-23-app-performance/` |
 
 ## image-consume-perf（**已并入 app-performance**）
 
@@ -132,19 +206,20 @@
 | [`image-consume-perf/实现方案.md`](image-consume-perf/实现方案.md) | 封装 + 缓存文件清单 |
 | OpenSpec | `openspec/changes/image-consume-perf/` |
 
-## image-viewer-ux（**已定稿 / 实现中**）
+## image-viewer-ux（**已定稿 / 已归档**）
 
-> 查看器只盖中间网格；信息栏底部收纳；导航按钮上图。待确认。
+> 查看器只盖中间网格；信息栏底部收纳；导航按钮上图。
 
 | 文档 | 内容 |
 |------|------|
 | [`image-viewer-ux/需求.md`](image-viewer-ux/需求.md) | 占位与动作区 |
 | [`image-viewer-ux/实现方案.md`](image-viewer-ux/实现方案.md) | Overlay 进 main + 封装性能 |
-| OpenSpec | `openspec/changes/image-viewer-ux/` |
+| OpenSpec | 已归档 `openspec/changes/archive/2026-09-23-image-viewer-ux/` |
+| `fix-image-consume-ui` | 已归档 `openspec/changes/archive/2026-09-23-fix-image-consume-ui/`（无独立需求目录） |
 
 ## image-consume（**已定稿 / 实现中**）
 
-> 图片消费：二次点击打开左元数据+右完整查看器；打开所在位置；系统默认应用打开。待「可以按此实现」。
+> 图片消费：二次点击打开查看器（只盖主网格，信息栏留在壳右侧）；打开所在位置；系统默认应用打开。待手验 T1–T6。
 
 | 文档 | 内容 |
 |------|------|
@@ -152,9 +227,9 @@
 | [`image-consume/实现方案.md`](image-consume/实现方案.md) | 覆盖层 + Viewer.js + shell IPC |
 | OpenSpec | `openspec/changes/image-consume/` |
 
-## library-trash（**已定稿 / 实现中**）
+## library-trash（**已落地 / 待 Electron 手工验**）
 
-> 回收站页、多选批量移入/恢复/彻底删除（删库内包）。规划待「可以按此实现」。
+> 回收站页、多选批量移入/恢复/彻底删除（删库内包）。代码已写，T10–T16 待手验。
 
 | 文档 | 内容 |
 |------|------|
@@ -172,9 +247,9 @@
 | [`grid-media-performance/实现方案.md`](grid-media-performance/实现方案.md) | ResourcePackage / 文件清单 |
 | OpenSpec | `openspec/changes/grid-media-performance/` |
 
-## metadata-panel-fields（**已定稿 / 实现中**）
+## metadata-panel-fields（**已落地 / 待手验**）
 
-> 描述、立刻待办、图/视频技术字段（含帧率码率画质）、导入 Pillow/ffprobe、多语言字幕。评审中，待「可以按此实现」。
+> 描述、立刻待办、图/视频技术字段（含帧率码率画质）、导入 Pillow/ffprobe、多语言字幕。代码已写。
 
 | 文档 | 内容 |
 |------|------|
@@ -182,7 +257,7 @@
 | [`metadata-panel-fields/实现方案.md`](metadata-panel-fields/实现方案.md) | 包内 `subtitles/` 命名与文件清单 |
 | OpenSpec | `openspec/changes/metadata-panel-fields/` |
 
-## metadata-panel（**已定稿 / 已合入 master**）
+## metadata-panel（**已定稿 / 已归档**）
 
 > 右侧元数据面板：通用字段；独立词表；草稿点保存；编辑弹窗含换封面；删除确认。
 
@@ -190,7 +265,17 @@
 |------|------|
 | [`metadata-panel/需求.md`](metadata-panel/需求.md) | 范围、故事、验收、契约草案、开放问题 |
 | [`metadata-panel/实现方案.md`](metadata-panel/实现方案.md) | 沿用 InfoPanel + library；文件清单 |
-| OpenSpec | `openspec/changes/metadata-panel/` |
+| OpenSpec | 已归档 `openspec/changes/archive/2026-09-23-metadata-panel/` |
+
+## 早期 change（**已归档** · D-20260923-01）
+
+> 无独立 `需求.md`。任务当时已全部勾完，不变量已进基线。
+
+| change | 归档 |
+|--------|------|
+| `align-resource-api` | `openspec/changes/archive/2026-09-23-align-resource-api/` · 主 spec `library-resource-api` |
+| `assemble-api-routers` | `openspec/changes/archive/2026-09-23-assemble-api-routers/` · 无行为 spec |
+| `shell-layout-selection` | `openspec/changes/archive/2026-09-23-shell-layout-selection/` · 主 spec `desktop-shell-selection` |
 
 ## import-directory-scan（**已定稿 / 已归档**）
 
