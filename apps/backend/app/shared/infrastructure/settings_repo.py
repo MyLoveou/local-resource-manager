@@ -12,7 +12,7 @@ KEY_TMDB = "scrape.tmdb"
 KEY_BANGUMI = "scrape.bangumi"
 KEY_MIKAN = "scrape.mikan"
 KEY_CONSUME = "consume.channels"
-
+KEY_SYSTEM = "system.settings"
 
 class SettingsRepository:
     def __init__(self, session: AsyncSession) -> None:

@@ -56,3 +56,11 @@ class ScrapeSettingsPatch(ApiModel):
 
 class BackupResult(ApiModel):
     path: str
+
+
+class SystemSettingPatch(ApiModel):
+    db_path: str | None = None
+    library_path: str | None = None
+    log_dir: str | None = None
+    download_dir: str | None = None
+    backup_dir: str | None = None

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.orm import ConsumptionEventRow, FileRow, ResourceRow, ResourceTodoRow
-from app.shared.infrastructure.settings_repo import KEY_CONSUME, SettingsRepository
+from app.shared.infrastructure.settings_repo import KEY_CONSUME, KEY_SYSTEM, SettingsRepository
 from app.shared.media_types import FILE_ROLE_PRIMARY
 from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
 
@@ -61,6 +61,10 @@ async def save_channels(session: AsyncSession, channels: dict) -> dict[str, dict
     await SettingsRepository(session).put_json(KEY_CONSUME, {"channels": normalized})
     return normalized
 
+# 保存系统设置
+async def save_system_settings(session: AsyncSession, settings: dict) -> dict:
+    await SettingsRepository(session).put_json(KEY_SYSTEM, settings)
+    return settings
 
 async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
     folder = Path(raw_path)

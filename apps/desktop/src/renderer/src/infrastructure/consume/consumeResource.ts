@@ -14,7 +14,7 @@ import { getResource } from '@/infrastructure/http'
 import { postConsumption } from '@/infrastructure/http/workbench'
 import { getConsumeChannels, type ChannelMode } from '@/infrastructure/http/settings'
 import { launchOrPrimaryPath, openAny, openLaunchOrPrimary } from '@/infrastructure/shell/openLibraryFile'
-import { PlayerByConsume } from '@/static'
+import { PlayerByConsume } from './players'
 
 const DEFAULT_MODE: Record<ResourceType, ChannelMode> = {
   image: 'embedded',

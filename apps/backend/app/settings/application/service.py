@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.download.application.service import staging_root
 from app.library.application.packages.resource_package import default_library_store
 from app.settings.application.errors import SettingsError
-from app.library.application.workbench import load_channels, save_channels
+from app.library.application.workbench import load_channels, save_channels, save_system_settings
 from app.settings.application.schemas import (
     BackupResult,
     ConsumeSettingsOut,
@@ -23,6 +23,7 @@ from app.settings.application.schemas import (
     SecretState,
     SettingsView,
     SystemSettingsOut,
+    SystemSettingPatch,
 )
 from app.settings.application.secrets import (
     bangumi_token,
@@ -35,7 +36,8 @@ from app.settings.application.secrets import (
     tmdb_api_key,
 )
 from app.shared.config import resolve_log_dir
-from app.shared.infrastructure.settings_repo import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, SettingsRepository
+from app.shared.infrastructure.settings_repo import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, SettingsRepository, KEY_SYSTEM
+from app.shared.log import logger
 
 
 def _hint(secret: str) -> str | None:
@@ -51,16 +53,37 @@ def _secret_state(current: str, env_locked: bool) -> SecretState:
     return SecretState(configured=bool(current), hint=_hint(current), env_locked=env_locked)
 
 
+def _stored_path(stored: dict, key: str) -> Path | None:
+    raw = stored.get(key)
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return Path(text) if text else None
+
+
+def system_from_store(stored: dict, process_db: Path, backend_version: str) -> SystemSettingsOut:
+    """已保存路径优先；未写过的键按当前库文件位置回落。"""
+    anchor = (_stored_path(stored, "db_path") or process_db).resolve()
+    library = _stored_path(stored, "library_path") or default_library_store(anchor)
+    log_dir = _stored_path(stored, "log_dir") or resolve_log_dir()
+    downloads = _stored_path(stored, "download_dir") or staging_root(anchor)
+    backups = _stored_path(stored, "backup_dir") or backup_dir(anchor)
+    return SystemSettingsOut(
+        db_path=str(anchor),
+        library_path=str(library.resolve()),
+        log_dir=str(log_dir.resolve()),
+        download_dir=str(downloads.resolve()),
+        backup_dir=str(backups.resolve()),
+        backend_version=backend_version,
+    )
+
+
 async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -> SettingsView:
     invalidate_secret_cache()
     tmdb = tmdb_api_key()
     bangumi = bangumi_token()
     mikan = mikan_base_url()
-    resolved = db_path.resolve()
-    backups = backup_dir(resolved)
-    downloads = staging_root(resolved)
-    backups.mkdir(parents=True, exist_ok=True)
-    downloads.mkdir(parents=True, exist_ok=True)
+    stored = await SettingsRepository(session).get_json(KEY_SYSTEM)
     channels = await load_channels(session)
     return SettingsView(
         scrape=ScrapeSettingsOut(
@@ -68,14 +91,7 @@ async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -
             bangumi=_secret_state(bangumi, bool(env_bangumi_token())),
             mikan=MikanState(base_url=mikan, env_locked=bool(env_mikan_base())),
         ),
-        system=SystemSettingsOut(
-            db_path=str(resolved),
-            library_path=str(default_library_store(resolved).resolve()),
-            log_dir=str(resolve_log_dir().resolve()),
-            download_dir=str(downloads.resolve()),
-            backup_dir=str(backups.resolve()),
-            backend_version=backend_version,
-        ),
+        system=system_from_store(stored, db_path, backend_version),
         consume=ConsumeSettingsOut(channels=channels),
     )
 
@@ -115,7 +131,7 @@ async def patch_scrape(
         remember(KEY_MIKAN, blob)
     return await get_view(session, db_path, backend_version)
 
-
+# 更新消费渠道
 async def patch_consume(
     session: AsyncSession,
     body: ConsumeSettingsPatch,
@@ -126,6 +142,28 @@ async def patch_consume(
     await save_channels(session, payload)
     return await get_view(session, db_path, backend_version)
 
+_SYSTEM_PATH_KEYS = ("db_path", "library_path", "log_dir", "download_dir", "backup_dir")
+
+
+# 更新系统设置：只覆盖本次提交的路径，其余键保留。
+async def pathc_system_settings(
+    session: AsyncSession, body: SystemSettingPatch, db_path: Path, backend_version: str
+) -> SettingsView:
+    incoming = body.model_dump(exclude_unset=True)
+    stored = await SettingsRepository(session).get_json(KEY_SYSTEM)
+    merged = {key: stored[key] for key in _SYSTEM_PATH_KEYS if isinstance(stored.get(key), str)}
+    for key in _SYSTEM_PATH_KEYS:
+        if key not in incoming:
+            continue
+        value = incoming[key]
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            merged[key] = text
+    logger.info("pathc_system_settings payload %s", merged)
+    await save_system_settings(session, merged)
+    return await get_view(session, db_path, backend_version)
 
 def _assert_http_url(url: str) -> None:
     parsed = urlparse(url)

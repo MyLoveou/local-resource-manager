@@ -39,7 +39,7 @@ import { consumeResource } from '@/infrastructure/consume/consumeResource'
 import { storeToRefs } from 'pinia'
 import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
-import { PlayerByConsume } from '@/static'
+import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { consumeKindOf } from '@/domain'
 const BATCH_LIMIT = 200

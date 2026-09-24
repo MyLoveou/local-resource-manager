@@ -4,23 +4,13 @@
       <n-tab-pane name="scrape" tab="刮削">
         <p v-if="view?.scrape.tmdb.envLocked" class="set-modal__hint">TMDB Key 由环境变量提供</p>
         <n-form-item label="TMDB API Key">
-          <n-input
-            v-model:value="tmdbKey"
-            type="password"
-            show-password-on="click"
-            :disabled="busy || view?.scrape.tmdb.envLocked"
-            :placeholder="tmdbPlaceholder"
-          />
+          <n-input v-model:value="tmdbKey" type="password" show-password-on="click"
+            :disabled="busy || view?.scrape.tmdb.envLocked" :placeholder="tmdbPlaceholder" />
         </n-form-item>
         <p v-if="view?.scrape.bangumi.envLocked" class="set-modal__hint">Bangumi Token 由环境变量提供</p>
         <n-form-item label="Bangumi Token（可选）">
-          <n-input
-            v-model:value="bangumiToken"
-            type="password"
-            show-password-on="click"
-            :disabled="busy || view?.scrape.bangumi.envLocked"
-            :placeholder="bangumiPlaceholder"
-          />
+          <n-input v-model:value="bangumiToken" type="password" show-password-on="click"
+            :disabled="busy || view?.scrape.bangumi.envLocked" :placeholder="bangumiPlaceholder" />
         </n-form-item>
         <p v-if="view?.scrape.mikan.envLocked" class="set-modal__hint">蜜柑地址由环境变量提供</p>
         <n-form-item label="蜜柑 Base URL">
@@ -31,11 +21,14 @@
       <n-tab-pane name="system" tab="系统">
         <p class="set-modal__about">后端 {{ view?.system.backendVersion ?? '—' }}</p>
         <div v-for="row in paths" :key="row.label" class="set-modal__path">
-          <div>
+          <div class="set-modal__path-head">
             <div class="set-modal__label">{{ row.label }}</div>
-            <div class="set-modal__value">{{ row.path }}</div>
+            <div class="set-modal__path-buttons">
+              <n-button size="tiny" :disabled="!row.path" @click="openDir(row.path)">打开</n-button>
+              <n-button size="tiny" type="primary" @click="changeSystemPath(row)">修改</n-button>
+            </div>
           </div>
-          <n-button size="tiny" :disabled="!row.path" @click="openDir(row.path)">打开</n-button>
+          <div class="set-modal__value">{{ row.path }}</div>
         </div>
         <n-button size="small" type="primary" :loading="backing" @click="doBackup">立即备份</n-button>
       </n-tab-pane>
@@ -43,21 +36,10 @@
         <p class="set-modal__hint">自定义命令按空格拆成参数，{path} 单独成一段，不要加引号。例如：mpv {path}</p>
         <div v-for="row in channelRows" :key="row.type" class="set-modal__channel">
           <div class="set-modal__label">{{ row.label }}</div>
-          <n-select
-            size="small"
-            :value="channels[row.type]?.mode"
-            :options="row.modes"
-            :disabled="busy"
-            @update:value="(value: ChannelMode) => setMode(row.type, value)"
-          />
-          <n-input
-            v-if="channels[row.type]?.mode === 'command'"
-            size="small"
-            :value="channels[row.type]?.command ?? ''"
-            placeholder="程序 {path}"
-            :disabled="busy"
-            @update:value="(value: string) => setCommand(row.type, value)"
-          />
+          <n-select size="small" :value="channels[row.type]?.mode" :options="row.modes" :disabled="busy"
+            @update:value="(value: ChannelMode) => setMode(row.type, value)" />
+          <n-input v-if="channels[row.type]?.mode === 'command'" size="small" :value="channels[row.type]?.command ?? ''"
+            placeholder="程序 {path}" :disabled="busy" @update:value="(value: string) => setCommand(row.type, value)" />
         </div>
         <n-button size="small" type="primary" :loading="busy" @click="saveConsume">保存</n-button>
       </n-tab-pane>
@@ -78,7 +60,9 @@ import {
   type SettingsView,
 } from '@/infrastructure/http/settings'
 import { TYPE_PROFILES } from '@/domain'
-
+import { patchSystemSettings } from '@/infrastructure/http/settings'
+import logger from '@/infrastructure/logging/logger'
+import { SYSTEM_SETTING_PATH_MAP } from '@/static'
 const props = defineProps<{ show: boolean; tab?: string }>()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
 
@@ -123,13 +107,11 @@ const channelRows = computed(() =>
 const paths = computed(() => {
   const sys = view.value?.system
   if (!sys) return []
-  return [
-    { label: '数据库', path: sys.dbPath },
-    { label: '资源库', path: sys.libraryPath },
-    { label: '日志', path: sys.logDir },
-    { label: '下载暂存', path: sys.downloadDir },
-    { label: '备份', path: sys.backupDir },
-  ]
+  return Object.entries(SYSTEM_SETTING_PATH_MAP).map(([key, label]) => ({
+    key,
+    label,
+    path: sys[key as keyof SettingsView['system']],
+  }))
 })
 
 function onShow(value: boolean): void {
@@ -209,7 +191,32 @@ async function openDir(path: string): Promise<void> {
   const result = await api.openAny(path)
   if (!result.ok) message.error(result.message)
 }
-
+async function changeSystemPath(item: { key: string; path: string, label: string }): Promise<void> {
+  const api = window.electron
+  if (!api?.selectDirectory) {
+    message.error('当前环境不能选择文件夹')
+    return
+  }
+  const result = await api.selectDirectory()
+  logger.info('selectDirectory', result)
+  if (!result) {
+    message.error('没有选择文件夹')
+    return
+  }
+  logger.info('changeSystemPath', item.label, item.key, result)
+  try {
+    const body = {
+      ...view.value?.system,
+      [item.key]: result,
+    }
+    logger.info('changeSystemPath body', body)
+    view.value = await patchSystemSettings(body as SettingsView['system'])
+    logger.info('changeSystemPath view', view.value)
+    message.success('已保存')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存失败')
+  }
+}
 async function doBackup(): Promise<void> {
   backing.value = true
   try {
@@ -254,10 +261,24 @@ watch(
 
 .set-modal__path {
   display: flex;
-  justify-content: space-between;
-  gap: var(--sm-space-2);
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
   margin-bottom: var(--sm-space-3);
+  padding-bottom: var(--sm-space-3);
+  border-bottom: 1px solid var(--sm-color-border, rgba(0, 0, 0, 0.08));
+}
+
+.set-modal__path-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.set-modal__path-buttons {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
 .set-modal__label {
@@ -267,6 +288,7 @@ watch(
 
 .set-modal__value {
   font-size: 12px;
+  line-height: 1.45;
   word-break: break-all;
 }
 
