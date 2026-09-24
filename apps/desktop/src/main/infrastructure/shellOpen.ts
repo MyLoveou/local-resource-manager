@@ -76,7 +76,7 @@ async function openWithOther(filePath: string): Promise<ShellOpenResult> {
 export function registerShellOpenIpc(): void {
   ipcMain.handle('shell:showItemInFolder', async (_event, payload: unknown): Promise<ShellOpenResult> => {
     try {
-      shell.showItemInFolder(parsePath(payload))
+      shell.showItemInFolder(resolveExistingTarget(payload))
       return ok()
     } catch (err) {
       return fail(err instanceof Error ? err.message : 'showItemInFolder failed')

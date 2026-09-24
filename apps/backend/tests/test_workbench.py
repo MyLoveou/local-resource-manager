@@ -15,6 +15,7 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.settings.application.schemas import ChannelSetting, ConsumeSettingsPatch
 from app.settings.application.service import get_view, patch_consume
 from app.shared.db.migrations import migrate
+from app.shared.db.orm import ResourceRow
 
 
 class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
@@ -89,3 +90,34 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         async with self.factory() as session:
             again = await get_view(session, self.db_path, "0.0.0")
             self.assertEqual(again.consume.channels["video"].command, "mpv {path}")
+
+    async def test_trashed_directory_is_restored_on_add(self) -> None:
+        folder = self.root / "again"
+        folder.mkdir()
+        async with self.factory() as session:
+            created = await add_work_directory(session, str(folder))
+            rid = created.id
+            assert rid is not None
+            repo = ResourceRepository(session)
+            row = await repo.get(rid)
+            assert row is not None
+            row.to_trash()
+            await repo.update(rid, row)
+            restored = await add_work_directory(session, str(folder))
+            self.assertEqual(restored.id, rid)
+            self.assertEqual(restored.status.value, "active")
+
+    async def test_recent_open_stays_on_home_after_metadata_goes_stale(self) -> None:
+        folder = self.root / "stale"
+        folder.mkdir()
+        async with self.factory() as session:
+            created = await add_work_directory(session, str(folder))
+            rid = created.id
+            assert rid is not None
+            stored = await session.get(ResourceRow, rid)
+            assert stored is not None
+            stored.updated_at = "2000-01-01 00:00:00"
+            await session.commit()
+            await record_consumption(session, rid, "workbench")
+            overview = await self._svc(session).overview()
+            self.assertTrue(any(item.id == rid for item in overview.active_work))

@@ -3,7 +3,7 @@
     <n-button size="small" type="primary" @click="wizardRef?.open()">导入</n-button>
     <n-button v-if="isWork" size="small" :loading="addingWork" @click="addWorkDirectory">添加工作目录</n-button>
     <n-button size="small" @click="downloadOpen = true">下载</n-button>
-    <n-button size="small" @click="settingsOpen = true">设置</n-button>
+    <n-button size="small" @click="openSettings()">设置</n-button>
     <n-input
       class="tool-bar__search"
       size="small"
@@ -69,13 +69,13 @@
     </n-dropdown>
     <ImportWizard ref="wizardRef" />
     <DownloadDrawer v-model:show="downloadOpen" />
-    <SettingsModal v-model:show="settingsOpen" />
+    <SettingsModal v-model:show="settingsOpen" :tab="settingsTab" />
     <ScrapeConfirmQueue v-model:show="scrapeOpen" :resource-ids="scrapeIds" />
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDropdown, NInput, NPopconfirm, useMessage, type DropdownOption } from 'naive-ui'
 import { storeToRefs } from 'pinia'
@@ -102,6 +102,7 @@ const scrapeOpen = ref(false)
 const scrapeIds = ref<number[]>([])
 const downloadOpen = ref(false)
 const settingsOpen = ref(false)
+const settingsTab = ref('scrape')
 const addingWork = ref(false)
 const route = useRoute()
 const router = useRouter()
@@ -191,9 +192,24 @@ const themeOptions: DropdownOption[] = [
   { label: '恢复默认', key: 'reset' },
 ]
 
+function openSettings(name = 'scrape'): void {
+  settingsTab.value = name
+  settingsOpen.value = true
+}
+
+function onOpenSettings(event: Event): void {
+  const name = (event as CustomEvent<string>).detail
+  openSettings(name === 'consume' ? 'consume' : 'scrape')
+}
+
 onMounted(() => {
+  window.addEventListener('sm:open-settings', onOpenSettings)
   const warning = theme.consumeHydrateWarning()
   if (warning) message.warning(warning)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('sm:open-settings', onOpenSettings)
 })
 
 async function onThemeSelect(key: string): Promise<void> {

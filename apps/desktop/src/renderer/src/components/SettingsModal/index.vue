@@ -1,6 +1,6 @@
 <template>
   <n-modal :show="show" preset="card" title="设置" style="width: 640px" @update:show="onShow">
-    <n-tabs type="line" animated>
+    <n-tabs type="line" animated :value="tab" @update:value="tab = $event">
       <n-tab-pane name="scrape" tab="刮削">
         <p v-if="view?.scrape.tmdb.envLocked" class="set-modal__hint">TMDB Key 由环境变量提供</p>
         <n-form-item label="TMDB API Key">
@@ -79,10 +79,11 @@ import {
 } from '@/infrastructure/http/settings'
 import { TYPE_PROFILES } from '@/domain'
 
-const props = defineProps<{ show: boolean }>()
+const props = defineProps<{ show: boolean; tab?: string }>()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
 
 const message = useMessage()
+const tab = ref('scrape')
 const busy = ref(false)
 const backing = ref(false)
 const view = ref<SettingsView | null>(null)
@@ -201,11 +202,11 @@ async function saveConsume(): Promise<void> {
 
 async function openDir(path: string): Promise<void> {
   const api = window.electron
-  if (!api?.openPath) {
+  if (!api?.openAny) {
     message.error('当前环境不能打开文件夹')
     return
   }
-  const result = await api.openPath(path)
+  const result = await api.openAny(path)
   if (!result.ok) message.error(result.message)
 }
 
@@ -223,9 +224,18 @@ async function doBackup(): Promise<void> {
 }
 
 watch(
+  () => props.tab,
+  (name) => {
+    if (props.show && name) tab.value = name
+  }
+)
+
+watch(
   () => props.show,
   (open) => {
-    if (open) void load()
+    if (!open) return
+    if (props.tab) tab.value = props.tab
+    void load()
   }
 )
 </script>

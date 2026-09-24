@@ -2,6 +2,15 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## quality-and-deploy（**草案**）
+
+> 设置页、下载/刮削弹层、主题、Docker 与远程后端。实现/架构/算法未点名之前不做。禁止编码。
+
+| 文档 | 内容 |
+|------|------|
+| [`quality-and-deploy/需求.md`](quality-and-deploy/需求.md) | 七条拆分、冲突、开放问题 |
+| [`quality-and-deploy/handoff.md`](quality-and-deploy/handoff.md) | 轮次 1，待回答 |
+
 ## library-collections（**设计待确认**）
 
 > 用户自建一组资源。不是系列。分支 `feat/library-collections`。禁止编码。

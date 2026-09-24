@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.db.orm import ConsumptionEventRow, ResourceRow, ResourceTodoRow
+from app.shared.db.orm import ConsumptionEventRow, FileRow, ResourceRow, ResourceTodoRow
 from app.shared.infrastructure.settings_repo import KEY_CONSUME, SettingsRepository
 from app.shared.media_types import FILE_ROLE_PRIMARY
 from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
@@ -68,8 +68,20 @@ async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
         raise ValueError("path is not a directory")
     resolved = str(folder.resolve())
     repo = ResourceRepository(session)
-    if await repo.file_exists_by_path(resolved):
-        raise ValueError("directory already added")
+    existing = await _work_directory_at(session, resolved)
+    if existing is not None and existing.id is not None:
+        if existing.status == ResourceStatus.ACTIVE:
+            raise ValueError("directory already added")
+        if existing.is_trashed:
+            existing.restore()
+        elif existing.is_lost:
+            existing.status = ResourceStatus.ACTIVE
+            existing._touch()
+        else:
+            raise ValueError("directory already added")
+        updated = await repo.update(existing.id, existing)
+        assert updated is not None
+        return updated
     created = await repo.create(
         Resource(
             type=ResourceType.WORK_DIRECTORY,
@@ -93,6 +105,23 @@ async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
     got = await repo.get(created.id)
     assert got is not None
     return got
+
+
+async def _work_directory_at(session: AsyncSession, resolved: str) -> Resource | None:
+    stmt = (
+        select(ResourceRow.id)
+        .join(FileRow, FileRow.resource_id == ResourceRow.id)
+        .where(
+            FileRow.path == resolved,
+            FileRow.role == FILE_ROLE_PRIMARY,
+            ResourceRow.type == ResourceType.WORK_DIRECTORY.value,
+        )
+        .limit(1)
+    )
+    resource_id = await session.scalar(stmt)
+    if resource_id is None:
+        return None
+    return await ResourceRepository(session).get(int(resource_id))
 
 
 def _notes(resource: Resource) -> list[dict]:
@@ -147,12 +176,17 @@ async def record_consumption(session: AsyncSession, resource_id: int, action: st
 async def active_work(session: AsyncSession, limit: int = 10) -> list[Resource]:
     cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     open_ids = select(ResourceTodoRow.resource_id).where(ResourceTodoRow.done == 0)
+    recent_open = select(ConsumptionEventRow.resource_id).where(ConsumptionEventRow.created_at >= cutoff)
     stmt = (
         select(ResourceRow)
         .where(
             ResourceRow.type == ResourceType.WORK_DIRECTORY.value,
             ResourceRow.status == ResourceStatus.ACTIVE.value,
-            or_(ResourceRow.id.in_(open_ids), ResourceRow.updated_at >= cutoff),
+            or_(
+                ResourceRow.id.in_(open_ids),
+                ResourceRow.updated_at >= cutoff,
+                ResourceRow.id.in_(recent_open),
+            ),
         )
         .order_by(ResourceRow.updated_at.desc())
         .limit(limit)

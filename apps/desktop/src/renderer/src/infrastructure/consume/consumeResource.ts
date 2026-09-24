@@ -29,8 +29,18 @@ const DEFAULT_MODE: Record<ResourceType, ChannelMode> = {
   work_directory: 'workbench',
 }
 
-function fail(description: string): void {
-  notify.push({ level: 'error', title: '无法打开', description })
+function fail(description: string, offerSettings = false): void {
+  notify.push({
+    level: 'error',
+    title: '无法打开',
+    description,
+    action: offerSettings
+      ? {
+          label: '配置打开方式',
+          onClick: () => window.dispatchEvent(new CustomEvent('sm:open-settings', { detail: 'consume' })),
+        }
+      : undefined,
+  })
 }
 
 export async function consumeResource(item: Resource, playlist: number[]): Promise<void> {
@@ -41,6 +51,8 @@ export async function consumeResource(item: Resource, playlist: number[]): Promi
   const configured = channels[row.type]
   const mode = configured?.mode ?? DEFAULT_MODE[row.type]
   const command = configured?.command ?? ''
+  const kind = consumeKindOf(row.type)
+  if (mode === 'embedded' && (kind == null || kind === 'overlay-series')) return
   void postConsumption(row.id, mode).catch(() => undefined)
   if (mode === 'workbench') return
   if (mode === 'command') {
@@ -50,7 +62,7 @@ export async function consumeResource(item: Resource, playlist: number[]): Promi
       return
     }
     if (!command.includes('{path}')) {
-      fail('命令须包含 {path}，请到设置 → 消费渠道配置打开方式')
+      fail('命令须包含 {path}', true)
       return
     }
     const api = window.electron
@@ -59,7 +71,7 @@ export async function consumeResource(item: Resource, playlist: number[]): Promi
       return
     }
     const result = await api.runCommand({ template: command, path })
-    if (!result.ok) fail(result.message || '请到设置 → 消费渠道配置打开方式')
+    if (!result.ok) fail(result.message || '找不到命令', true)
     return
   }
   if (mode === 'system') {
@@ -67,7 +79,6 @@ export async function consumeResource(item: Resource, playlist: number[]): Promi
     if (message) fail(message)
     return
   }
-  const kind = consumeKindOf(row.type)
   if (kind == null || kind === 'overlay-series') return
   if (kind === 'shell-open') {
     const message = await openAny(row)
