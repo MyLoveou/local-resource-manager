@@ -3,12 +3,15 @@ import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
 import { useModelPreviewStore } from '@/application/stores/modelPreview'
 import type { ConsumeKind } from '@/domain/libraryTypes'
-
+import type { AudioPlayerPager } from '@/application/stores/audioPlayer'
+import type { ImageViewerPager } from '@/application/stores/imageViewer'
 type PlayerApi = {
   open: (id: number, ids: number[]) => void
   close: () => void
   prev?: () => void
   next?: () => void
+  bindPager?: (pager: AudioPlayerPager | ImageViewerPager) => void
+  unbindPager?: () => void
 }
 
 function playerByConsume(): Record<ConsumeKind, PlayerApi> {
@@ -26,10 +29,16 @@ function playerByConsume(): Record<ConsumeKind, PlayerApi> {
       open: imageViewer.open,
       prev: imageViewer.prev,
       next: imageViewer.next,
+      bindPager: imageViewer.bindPager,
+      unbindPager: imageViewer.unbindPager,
     },
     'overlay-audio': {
       close: audioPlayer.close,
       open: audioPlayer.open,
+      prev: audioPlayer.prev,
+      next: audioPlayer.next,
+      bindPager: audioPlayer.bindPager,
+      unbindPager: audioPlayer.unbindPager,
     },
     'overlay-model': {
       close: modelPreview.close,

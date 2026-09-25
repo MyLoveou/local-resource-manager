@@ -41,7 +41,7 @@ import type { ResourceStatus, ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
-import { consumeKindOf } from '@/domain'
+import { consumeKindOf, TYPE_PROFILES } from '@/domain'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
@@ -74,12 +74,34 @@ const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
 const route = useRoute()
 
-imageViewer.bindPager({
-  hasMore: () => hasMore.value,
-  loadingMore: () => loadingMore.value,
-  loadMore,
-  imageIds: () => ids('image'),
-})
+function pagerFor(resourceType: ResourceType) {
+  return {
+    hasMore: () => hasMore.value,
+    loadingMore: () => loadingMore.value,
+    loadMore,
+    imageIds: () => ids(resourceType),
+  }
+}
+
+function typesForPager(): readonly ResourceType[] {
+  return props.type ? [props.type] : TYPE_PROFILES.map((profile) => profile.type)
+}
+
+function bindPagers(): void {
+  for (const type of typesForPager()) {
+    const kind = consumeKindOf(type)
+    if (kind) PlayerByConsume[kind].bindPager?.(pagerFor(type))
+  }
+}
+
+function unbindPagers(): void {
+  for (const type of typesForPager()) {
+    const kind = consumeKindOf(type)
+    if (kind) PlayerByConsume[kind].unbindPager?.()
+  }
+}
+
+bindPagers()
 
 const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []))
 
@@ -242,7 +264,7 @@ watch(
 )
 
 onUnmounted(() => {
-  imageViewer.unbindPager()
+  unbindPagers()
   if (imageViewer.visible) imageViewer.close()
   shellBatch.unbind()
   const kind = props.type ? consumeKindOf(props.type) : undefined

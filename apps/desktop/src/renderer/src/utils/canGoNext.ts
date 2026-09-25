@@ -1,4 +1,4 @@
-/** 查看器下一张：已加载范围内，或列表还有后续页。 */
+/** 下一张：已加载范围内，或列表还有后续页。 */
 export function canGoNext(
   index: number,
   length: number,
