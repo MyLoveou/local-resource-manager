@@ -9,7 +9,7 @@ from app.scrape.application.providers import enqueue_after_import
 from app.scrape.application.queue import enqueue_job, worker_is_running
 from app.scrape.domain.models import ScrapeJobStatus
 from app.shared.log import logger
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 
 async def enqueue_search_after_import(

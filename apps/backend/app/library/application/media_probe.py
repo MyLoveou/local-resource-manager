@@ -9,9 +9,14 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.shared.media_types import AUDIO_PROBE_TYPES, FFPROBE_BIN, FFPROBE_TIMEOUT_SEC, VIDEO_PROBE_TYPES
+from app.library.domain.media_types import (
+    AUDIO_PROBE_TYPES,
+    FFPROBE_BIN,
+    FFPROBE_TIMEOUT_SEC,
+    VIDEO_PROBE_TYPES,
+)
 from app.shared.log import logger
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 
 @dataclass(frozen=True)

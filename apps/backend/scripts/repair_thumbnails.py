@@ -27,7 +27,7 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.shared.config import settings  # noqa: E402
 from app.shared.db.migrations import migrate  # noqa: E402
 from app.shared.fs.file_ops import FileOps  # noqa: E402
-from app.shared.media_types import FILE_ROLE_THUMBNAIL  # noqa: E402
+from app.library.domain.media_types import FILE_ROLE_THUMBNAIL  # noqa: E402
 import sqlite3  # noqa: E402
 
 

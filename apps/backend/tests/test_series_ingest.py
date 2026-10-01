@@ -17,7 +17,11 @@ from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 
 class SeriesPlanTests(unittest.TestCase):

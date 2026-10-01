@@ -7,7 +7,7 @@ import httpx
 from app.scrape.application.images import unique_https
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
 from app.settings.application.secrets import tmdb_api_key
-from app.shared.models import WorkCatalog
+from app.library.domain.models import WorkCatalog
 
 _API = "https://api.themoviedb.org/3"
 _IMG = "https://image.tmdb.org/t/p/w500"

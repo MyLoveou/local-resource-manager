@@ -5,8 +5,8 @@ from pathlib import Path
 
 from app.library.application.packages.resource_package import ResourcePackage
 from app.library.domain.type_profile import TYPE_PROFILES
-from app.shared.media_types import FILE_ROLE_PRIMARY
-from app.shared.models import ResourceType
+from app.library.domain.media_types import FILE_ROLE_PRIMARY
+from app.library.domain.models import ResourceType
 
 
 @dataclass(frozen=True)

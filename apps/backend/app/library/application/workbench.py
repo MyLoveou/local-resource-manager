@@ -12,8 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.orm import ConsumptionEventRow, FileRow, ResourceRow, ResourceTodoRow
 from app.shared.infrastructure.settings_repo import KEY_CONSUME, KEY_SYSTEM, SettingsRepository
-from app.shared.media_types import FILE_ROLE_PRIMARY
-from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
+from app.library.domain.media_types import FILE_ROLE_PRIMARY
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    StorageKind,
+)
 
 ChannelMode = str
 MODES = ("embedded", "system", "command", "workbench")

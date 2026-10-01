@@ -18,8 +18,12 @@ from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.shared.media_types import FILE_ROLE_THUMBNAIL, THUMB_DIR, THUMB_GRID_NAME
-from app.shared.models import ResourceType
+from app.library.domain.media_types import (
+    FILE_ROLE_THUMBNAIL,
+    THUMB_DIR,
+    THUMB_GRID_NAME,
+)
+from app.library.domain.models import ResourceType
 
 
 class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):

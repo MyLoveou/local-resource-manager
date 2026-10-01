@@ -31,7 +31,7 @@ from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
-from app.shared.media_types import (
+from app.library.domain.media_types import (
     FILE_ROLE_EPISODE,
     FILE_ROLE_EXTRA,
     FILE_ROLE_LAUNCH,
@@ -39,7 +39,12 @@ from app.shared.media_types import (
     FILE_ROLE_PRIMARY,
     FILE_ROLE_THUMBNAIL,
 )
-from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    StorageKind,
+)
 
 
 def hash_file(path: Path) -> tuple[str, int]:

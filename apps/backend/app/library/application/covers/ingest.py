@@ -28,8 +28,11 @@ from app.library.application.packages.resource_package import ResourcePackage
 from app.library.domain.type_profile import IMAGE_EXTENSIONS
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.log import logger
-from app.shared.media_types import FILE_ROLE_PRIMARY
-from app.shared.models import Resource, ResourceType
+from app.library.domain.media_types import FILE_ROLE_PRIMARY
+from app.library.domain.models import (
+    Resource,
+    ResourceType,
+)
 
 
 async def apply_ingest_cover(

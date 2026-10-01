@@ -4,8 +4,15 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.shared.constants import SourceKind
-from app.shared.models import ApiModel, Category, Resource, ResourceType, StorageKind, Tag
+from app.library.domain.models import SourceKind
+from app.shared.models import ApiModel
+from app.library.domain.models import (
+    Category,
+    Resource,
+    ResourceType,
+    StorageKind,
+    Tag,
+)
 from app.shared.value_objects import Rating
 
 

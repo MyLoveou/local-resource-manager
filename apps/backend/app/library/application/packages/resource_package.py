@@ -3,8 +3,12 @@
 from pathlib import Path
 
 from app.shared.fs.file_ops import FileOps
-from app.shared.media_types import FILE_ROLE_SUBTITLE, THUMB_DIR, THUMB_GRID_NAME
-from app.shared.models import ResourceType
+from app.library.domain.media_types import (
+    FILE_ROLE_SUBTITLE,
+    THUMB_DIR,
+    THUMB_GRID_NAME,
+)
+from app.library.domain.models import ResourceType
 
 
 def default_library_store(db_path: Path) -> Path:

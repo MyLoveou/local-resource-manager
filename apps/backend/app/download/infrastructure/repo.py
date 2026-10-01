@@ -6,7 +6,10 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.download.domain.models import DownloadStatus, DownloadTask
-from app.shared.constants import DownloadEngine, Protocol
+from app.download.domain.models import (
+    DownloadEngine,
+    Protocol,
+)
 from app.shared.db.orm import DownloadTaskRow
 from app.shared.utils.time import db_now
 

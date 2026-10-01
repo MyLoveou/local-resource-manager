@@ -19,9 +19,12 @@ from app.download.domain.models import DownloadStatus
 from app.download.infrastructure.repo import DownloadRepository
 from app.library.application.media_probe import ProbeFields
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.constants import DownloadEngine, Protocol
+from app.download.domain.models import (
+    DownloadEngine,
+    Protocol,
+)
 from app.shared.db.migrations import migrate
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 _HASH = "0123456789abcdef0123456789abcdef01234567"
 

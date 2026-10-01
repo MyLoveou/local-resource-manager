@@ -4,10 +4,36 @@
 """
 from enum import Enum
 
-from app.shared.constants import PROTOCOL_TO_ENGINE, DownloadEngine, Protocol
 from app.shared.errors import InvalidStateError
 from app.shared.models import ApiModel
 from app.shared.value_objects import Progress
+
+
+class Protocol(str, Enum):
+    """下载协议。"""
+
+    HTTP = "http"
+    FTP = "ftp"
+    MAGNET = "magnet"
+    TORRENT = "torrent"
+
+
+class DownloadEngine(str, Enum):
+    """下载引擎。"""
+
+    ARIA2 = "aria2"
+    RQBIT = "rqbit"
+    YTDLP = "yt-dlp"
+    HTTPX = "httpx"
+
+
+# 协议 → 默认引擎 路由表（aria2 兼 BT 兜底；rqbit 负责现代 BT/流式）
+PROTOCOL_TO_ENGINE: dict[Protocol, DownloadEngine] = {
+    Protocol.HTTP: DownloadEngine.ARIA2,
+    Protocol.FTP: DownloadEngine.ARIA2,
+    Protocol.MAGNET: DownloadEngine.RQBIT,
+    Protocol.TORRENT: DownloadEngine.RQBIT,
+}
 
 
 class DownloadStatus(str, Enum):

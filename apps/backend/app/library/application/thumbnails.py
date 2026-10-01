@@ -8,8 +8,13 @@ from PIL import Image, UnidentifiedImageError
 
 from app.shared.log import logger
 from app.library.domain.type_profile import profile_for
-from app.shared.media_types import FILE_ROLE_COVER, FILE_ROLE_PRIMARY, THUMB_MAX_EDGE_PX, THUMB_WEBP_QUALITY
-from app.shared.models import ResourceType
+from app.library.domain.media_types import (
+    FILE_ROLE_COVER,
+    FILE_ROLE_PRIMARY,
+    THUMB_MAX_EDGE_PX,
+    THUMB_WEBP_QUALITY,
+)
+from app.library.domain.models import ResourceType
 
 
 def source_for_grid_thumbnail(type_: ResourceType, role_paths: dict[str, Path]) -> Path | None:

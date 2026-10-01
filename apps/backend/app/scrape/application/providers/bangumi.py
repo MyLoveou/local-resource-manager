@@ -9,7 +9,7 @@ import httpx
 from app.scrape.application.images import unique_https
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
 from app.settings.application.secrets import bangumi_token
-from app.shared.models import WorkCatalog
+from app.library.domain.models import WorkCatalog
 
 _UA = {"User-Agent": "SourceManager/0.1 (local library; metadata scrape)"}
 

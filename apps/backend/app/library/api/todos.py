@@ -5,7 +5,7 @@ from app.library.api.deps import get_repos
 from app.library.application.schemas import TodoCreate, TodoPatch
 from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
-from app.shared.models import Resource
+from app.library.domain.models import Resource
 
 router = APIRouter(prefix="/resources", tags=["library-todos"])
 

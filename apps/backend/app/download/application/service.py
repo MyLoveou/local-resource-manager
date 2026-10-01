@@ -21,7 +21,10 @@ from app.download.application.ssrf import validate_http_url
 from app.download.domain.models import DownloadStatus, DownloadTask
 from app.download.infrastructure.repo import DownloadRepository
 from app.library.application.packages.resource_package import default_library_store
-from app.shared.constants import DownloadEngine, Protocol
+from app.download.domain.models import (
+    DownloadEngine,
+    Protocol,
+)
 from app.shared.errors import InvalidStateError
 from app.shared.log import logger
 

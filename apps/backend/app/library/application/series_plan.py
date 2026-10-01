@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from app.shared.media_types import (
+from app.library.domain.media_types import (
     SERIES_EXTRA_DIR_MARKERS,
     SERIES_EXTRA_TOKEN_PREFIXES,
     SERIES_EXTRA_TOKENS,

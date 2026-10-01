@@ -17,7 +17,11 @@ from app.scrape.application.jobs import ScrapeError, create_or_reuse_job, run_se
 from app.scrape.application.providers.base import MetadataProvider, SearchHit
 from app.scrape.application.providers.og import OgProvider, page_url_or_error, parse_open_graph
 from app.shared.db.migrations import migrate
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 _HTML = """
 <html><head>

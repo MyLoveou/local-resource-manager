@@ -25,7 +25,11 @@ from app.download.infrastructure.repo import DownloadRepository
 from app.library.application.media_probe import ProbeFields
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.db.migrations import migrate
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 
 class SsrfTests(unittest.TestCase):

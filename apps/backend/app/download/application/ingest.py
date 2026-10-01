@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.library.application.import_service import ImportService, hash_file
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 
 async def ingest_downloaded_video(

@@ -21,7 +21,11 @@ from app.library.application.covers import CoverNotAllowedError
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
 from app.shared.errors import InvalidStateError
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 router = APIRouter(prefix="/resources", tags=["library-resources"])
 

@@ -6,7 +6,7 @@ from app.scrape.application.providers.bilibili import BilibiliProvider
 from app.scrape.application.providers.mikan import MikanProvider
 from app.scrape.application.providers.og import OgProvider
 from app.scrape.application.providers.tmdb import TmdbProvider
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 _SCRAPEABLE = frozenset({ResourceType.VIDEO, ResourceType.ANIME, ResourceType.IMAGE})
 _IMPORT_ENQUEUE = frozenset({ResourceType.VIDEO, ResourceType.ANIME})

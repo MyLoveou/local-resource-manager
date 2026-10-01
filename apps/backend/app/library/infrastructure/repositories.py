@@ -23,9 +23,13 @@ from app.shared.db.orm import (
     SeasonRow,
     TagRow,
 )
-from app.shared.media_types import FILE_ROLE_PAGE, FILE_ROLE_THUMBNAIL, is_series_type
+from app.library.domain.media_types import (
+    FILE_ROLE_PAGE,
+    FILE_ROLE_THUMBNAIL,
+    is_series_type,
+)
 from app.shared.utils.time import db_now, db_ts
-from app.shared.models import (
+from app.library.domain.models import (
     Category,
     Resource,
     WorkCatalog,

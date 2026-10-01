@@ -32,8 +32,16 @@ from app.shared.config import settings
 from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
-from app.shared.media_types import COVER_EXTENSIONS, FILE_ROLE_PRIMARY, SUBTITLE_EXTENSIONS
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.media_types import (
+    COVER_EXTENSIONS,
+    FILE_ROLE_PRIMARY,
+    SUBTITLE_EXTENSIONS,
+)
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 
 class LibraryQueryService:

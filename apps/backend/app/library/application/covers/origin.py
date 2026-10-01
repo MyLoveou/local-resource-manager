@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.shared.models import Resource
+from app.library.domain.models import Resource
 
 COVER_ORIGIN_USER = "user"
 COVER_ORIGIN_FOLDER = "folder"
