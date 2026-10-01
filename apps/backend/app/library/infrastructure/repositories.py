@@ -4,7 +4,6 @@ ORM 行 ↔ Pydantic 领域模型；API camelCase 由 ApiModel 负责。
 """
 import json
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import and_, asc, desc, exists, func, or_, select
@@ -25,6 +24,7 @@ from app.shared.db.orm import (
     TagRow,
 )
 from app.shared.media_types import FILE_ROLE_PAGE, FILE_ROLE_THUMBNAIL, is_series_type
+from app.shared.utils.time import db_now, db_ts
 from app.shared.models import (
     Category,
     Resource,
@@ -39,20 +39,6 @@ from app.shared.models import (
     StorageKind,
     Tag,
 )
-
-
-def _now() -> str:
-    """与 SQLite datetime('now') 同格式的时间戳。"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _ts(value: datetime | str | None) -> str | None:
-    """领域 datetime / 已有字符串 → SQLite 文本列。"""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _file_content_url(resource_id: int, file_id: int) -> str:
@@ -132,7 +118,7 @@ class ResourceRepository:
 
     async def create(self, resource: Resource, *, commit: bool = True) -> Resource:
         """插入并返回带 id 的完整实体。"""
-        ts = _now()
+        ts = db_now()
         row = ResourceRow(
             type=resource.type.value,
             storage_kind=resource.storage_kind.value,
@@ -165,11 +151,11 @@ class ResourceRepository:
         row.rating = resource.rating
         row.cover_path = resource.cover_path
         row.status = resource.status.value
-        row.deleted_at = _ts(resource.deleted_at)
-        row.last_scraped_at = _ts(resource.last_scraped_at)
+        row.deleted_at = db_ts(resource.deleted_at)
+        row.last_scraped_at = db_ts(resource.last_scraped_at)
         row.scraped_source = resource.scraped_source
         row.extra = _dump_extra(resource)
-        row.updated_at = _now()
+        row.updated_at = db_now()
 
     async def update(self, resource_id: int, resource: Resource, *, commit: bool = True) -> Resource | None:
         """按路径 id 更新可变字段；不存在则 None。"""
@@ -587,7 +573,7 @@ class ResourceRepository:
 
     async def create_many(self, resources: list[Resource]) -> int:
         """批量插入（演示 seed），一次提交。"""
-        ts = _now()
+        ts = db_now()
         rows = [
             ResourceRow(
                 type=r.type.value,
@@ -654,7 +640,7 @@ class ResourceRepository:
         commit: bool = True,
     ) -> FileRow:
         """写入库内文件行。"""
-        ts = _now()
+        ts = db_now()
         row = FileRow(
             resource_id=resource_id,
             path=path,
@@ -828,7 +814,7 @@ class ResourceRepository:
         if row is None:
             return
         row.category_id = category_id
-        row.updated_at = _now()
+        row.updated_at = db_now()
         if commit:
             await self._session.commit()
         else:
@@ -966,7 +952,7 @@ class ResourceRepository:
             content=content.strip(),
             done=0,
             sort=int(max_sort or -1) + 1,
-            created_at=_now(),
+            created_at=db_now(),
         )
         self._session.add(row)
         if commit:

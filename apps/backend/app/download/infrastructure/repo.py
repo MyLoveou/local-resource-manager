@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.download.domain.models import DownloadStatus, DownloadTask
 from app.shared.constants import DownloadEngine, Protocol
 from app.shared.db.orm import DownloadTaskRow
-
-
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+from app.shared.utils.time import db_now
 
 
 def _task(row: DownloadTaskRow) -> DownloadTask:
@@ -40,7 +35,7 @@ class DownloadRepository:
         self._session = session
 
     async def create(self, task: DownloadTask) -> DownloadTask:
-        now = _now()
+        now = db_now()
         row = DownloadTaskRow(
             url=task.url,
             protocol=task.protocol.value,
@@ -86,7 +81,7 @@ class DownloadRepository:
         row.error = task.error
         row.target_resource_id = task.target_resource_id
         row.filename = task.filename
-        row.updated_at = _now()
+        row.updated_at = db_now()
         await self._session.commit()
         await self._session.refresh(row)
         return _task(row)
@@ -95,7 +90,7 @@ class DownloadRepository:
         stmt = (
             update(DownloadTaskRow)
             .where(DownloadTaskRow.status == DownloadStatus.RUNNING.value)
-            .values(status=DownloadStatus.QUEUED.value, updated_at=_now())
+            .values(status=DownloadStatus.QUEUED.value, updated_at=db_now())
         )
         await self._session.execute(stmt)
         await self._session.commit()
