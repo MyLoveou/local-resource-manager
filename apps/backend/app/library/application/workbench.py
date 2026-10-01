@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.orm import ConsumptionEventRow, FileRow, ResourceRow, ResourceTodoRow
-from app.shared.infrastructure.settings_repo import KEY_CONSUME, KEY_SYSTEM, SettingsRepository
+from app.settings.domain.constants import KEY_CONSUME, KEY_SYSTEM
+from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.library.domain.media_types import FILE_ROLE_PRIMARY
 from app.library.domain.models import (
     Resource,

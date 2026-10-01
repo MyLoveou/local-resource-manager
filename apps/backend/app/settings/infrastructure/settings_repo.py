@@ -1,4 +1,4 @@
-"""settings KV。"""
+"""设置应用 · settings KV 仓储。"""
 
 from __future__ import annotations
 
@@ -8,11 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.settings.infrastructure.orm import SettingsRow
 
-KEY_TMDB = "scrape.tmdb"
-KEY_BANGUMI = "scrape.bangumi"
-KEY_MIKAN = "scrape.mikan"
-KEY_CONSUME = "consume.channels"
-KEY_SYSTEM = "system.settings"
 
 class SettingsRepository:
     def __init__(self, session: AsyncSession) -> None:

@@ -36,7 +36,8 @@ from app.settings.application.secrets import (
     tmdb_api_key,
 )
 from app.shared.config import resolve_log_dir
-from app.shared.infrastructure.settings_repo import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, SettingsRepository, KEY_SYSTEM
+from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, KEY_SYSTEM
+from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.shared.log import logger
 
 
