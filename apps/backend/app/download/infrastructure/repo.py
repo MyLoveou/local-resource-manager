@@ -10,7 +10,7 @@ from app.download.domain.models import (
     DownloadEngine,
     Protocol,
 )
-from app.shared.db.orm import DownloadTaskRow
+from app.download.infrastructure.orm import DownloadTaskRow
 from app.shared.utils.time import db_now
 
 

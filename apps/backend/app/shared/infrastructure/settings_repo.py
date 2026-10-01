@@ -6,7 +6,7 @@ import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.db.orm import SettingsRow
+from app.settings.infrastructure.orm import SettingsRow
 
 KEY_TMDB = "scrape.tmdb"
 KEY_BANGUMI = "scrape.bangumi"

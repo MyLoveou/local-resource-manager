@@ -15,7 +15,7 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.settings.application.schemas import ChannelSetting, ConsumeSettingsPatch
 from app.settings.application.service import get_view, patch_consume
 from app.shared.db.migrations import migrate
-from app.shared.db.orm import ResourceRow
+from app.library.infrastructure.orm import ResourceRow
 
 
 class WorkbenchTests(unittest.IsolatedAsyncioTestCase):

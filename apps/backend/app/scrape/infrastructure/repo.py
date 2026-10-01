@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.scrape.application.providers.base import SearchHit
 from app.scrape.domain.models import Candidate, ScrapeJob, ScrapeJobStatus
-from app.shared.db.orm import CandidateRow, ScrapeJobRow
+from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
 from app.shared.utils.time import db_now, db_ts
 
 

@@ -9,20 +9,19 @@ from typing import Any
 from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.db.orm import (
-    CandidateRow,
+from app.library.infrastructure.orm import (
     CategoryRow,
-    DownloadTaskRow,
     EpisodeRow,
     ExtraRow,
     FileRow,
     ResourceRow,
     ResourceTagRow,
     ResourceTodoRow,
-    ScrapeJobRow,
     SeasonRow,
     TagRow,
 )
+from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
+from app.download.infrastructure.orm import DownloadTaskRow
 from app.library.domain.media_types import (
     FILE_ROLE_PAGE,
     FILE_ROLE_THUMBNAIL,
