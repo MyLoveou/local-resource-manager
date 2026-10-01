@@ -1,6 +1,6 @@
 <template>
   <n-modal :show="show" preset="card" title="设置" style="width: 640px" @update:show="onShow">
-    <n-tabs type="line" animated :value="tab" @update:value="tab = $event">
+    <n-tabs type="line" animated :value="activeTab" @update:value="activeTab = $event">
       <n-tab-pane name="scrape" tab="刮削">
         <p v-if="view?.scrape.tmdb.envLocked" class="set-modal__hint">TMDB Key 由环境变量提供</p>
         <n-form-item label="TMDB API Key">
@@ -49,7 +49,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NFormItem, NInput, NModal, NSelect, NTabPane, NTabs, useMessage } from 'naive-ui'
+import { NButton, NFormItem, NInput, NModal, NSelect, NTabPane, NTabs } from 'naive-ui'
+import { notify } from '@/application/notify'
 import {
   backupLibrary,
   getSettings,
@@ -66,8 +67,7 @@ import { SYSTEM_SETTING_PATH_MAP } from '@/static'
 const props = defineProps<{ show: boolean; tab?: string }>()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
 
-const message = useMessage()
-const tab = ref('scrape')
+const activeTab = ref('scrape')
 const busy = ref(false)
 const backing = ref(false)
 const view = ref<SettingsView | null>(null)
@@ -126,7 +126,7 @@ async function load(): Promise<void> {
     mikanUrl.value = view.value.scrape.mikan.baseUrl
     channels.value = { ...(view.value.consume?.channels ?? {}) }
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '无法读取设置')
+    notify.fromError(error, { context: '读取设置' })
   }
 }
 
@@ -142,7 +142,7 @@ async function saveScrape(): Promise<void> {
     body.mikanBaseUrl = mikanUrl.value.trim()
   }
   if (!Object.keys(body).length) {
-    message.info('没有要保存的更改')
+    notify.toast.info('没有要保存的更改')
     return
   }
   busy.value = true
@@ -151,9 +151,9 @@ async function saveScrape(): Promise<void> {
     tmdbKey.value = ''
     bangumiToken.value = ''
     mikanUrl.value = view.value.scrape.mikan.baseUrl
-    message.success('已保存')
+    notify.toast.success('已保存')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '保存失败')
+    notify.fromError(error, { context: '保存刮削设置' })
   } finally {
     busy.value = false
   }
@@ -174,9 +174,9 @@ async function saveConsume(): Promise<void> {
   try {
     view.value = await patchConsumeSettings({ channels: channels.value })
     channels.value = { ...(view.value.consume?.channels ?? {}) }
-    message.success('已保存')
+    notify.toast.success('已保存')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '保存失败')
+    notify.fromError(error, { context: '保存消费渠道' })
   } finally {
     busy.value = false
   }
@@ -185,24 +185,22 @@ async function saveConsume(): Promise<void> {
 async function openDir(path: string): Promise<void> {
   const api = window.electron
   if (!api?.openAny) {
-    message.error('当前环境不能打开文件夹')
+    notify.toast.error('当前环境不能打开文件夹')
     return
   }
   const result = await api.openAny(path)
-  if (!result.ok) message.error(result.message)
+  if (!result.ok) notify.fromError(new Error(result.message), { context: '打开文件夹' })
 }
 async function changeSystemPath(item: { key: string; path: string, label: string }): Promise<void> {
   const api = window.electron
   if (!api?.selectDirectory) {
-    message.error('当前环境不能选择文件夹')
+    notify.toast.error('当前环境不能选择文件夹')
     return
   }
   const result = await api.selectDirectory()
   logger.info('selectDirectory', result)
-  if (!result) {
-    message.error('没有选择文件夹')
-    return
-  }
+  // 用户取消选择不提示（设计 04 §2.4）
+  if (!result) return
   logger.info('changeSystemPath', item.label, item.key, result)
   try {
     const body = {
@@ -212,19 +210,19 @@ async function changeSystemPath(item: { key: string; path: string, label: string
     logger.info('changeSystemPath body', body)
     view.value = await patchSystemSettings(body as SettingsView['system'])
     logger.info('changeSystemPath view', view.value)
-    message.success('已保存')
+    notify.toast.success('已保存')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '保存失败')
+    notify.fromError(error, { context: '保存系统路径' })
   }
 }
 async function doBackup(): Promise<void> {
   backing.value = true
   try {
     const result = await backupLibrary()
-    message.success(`已备份到 ${result.path}`)
+    notify.toast.success(`已备份到 ${result.path}`)
     await load()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '备份失败')
+    notify.fromError(error, { context: '备份数据库' })
   } finally {
     backing.value = false
   }
@@ -233,7 +231,7 @@ async function doBackup(): Promise<void> {
 watch(
   () => props.tab,
   (name) => {
-    if (props.show && name) tab.value = name
+    if (props.show && name) activeTab.value = name
   }
 )
 
@@ -241,7 +239,7 @@ watch(
   () => props.show,
   (open) => {
     if (!open) return
-    if (props.tab) tab.value = props.tab
+    if (props.tab) activeTab.value = props.tab
     void load()
   }
 )

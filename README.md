@@ -57,7 +57,15 @@ pnpm backend:install     # 首次：建 venv + 装依赖
 pnpm backend:start
 ```
 
+```bash
+# 后端测试（可选）
+apps/backend/.venv/Scripts/pip install -r apps/backend/requirements-dev.txt
+apps/backend/.venv/Scripts/python -m pytest -q apps/backend/tests
+```
+
 > pip 网络受限时：`pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/`
+
+> 鉴权：桌面启动时主进程会生成随机 token 注入后端并随请求带上；`pnpm backend:start` 裸跑没有 token，此时后端**不校验鉴权**（启动日志打 WARN），仅适合本机排障。
 
 ## 工作流约定
 

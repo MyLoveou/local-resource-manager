@@ -91,9 +91,9 @@ async def _apply_ingest_cover_inner(
         return
     sidecar = None
     if source_root is not None:
-        sidecar = find_folder_cover(source_root)
+        sidecar = await asyncio.to_thread(find_folder_cover, source_root)
     elif source_file is not None:
-        sidecar = find_sidecar_cover(source_file)
+        sidecar = await asyncio.to_thread(find_sidecar_cover, source_file)
     if sidecar is not None:
         await attach_cover_image(
             resources, resource, package, sidecar, COVER_ORIGIN_FOLDER, role_paths=role_paths
@@ -218,7 +218,7 @@ async def _attach_game_icon(
     exe = launch_path
     suffix = launch_path.suffix.lower()
     if suffix == ".lnk":
-        resolved = resolve_lnk_target(launch_path)
+        resolved = await asyncio.to_thread(resolve_lnk_target, launch_path)
         if resolved is None or resolved.suffix.lower() != ".exe":
             return
         exe = resolved

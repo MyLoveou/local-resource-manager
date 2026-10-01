@@ -107,6 +107,9 @@ const phaseLabel = computed(() => {
   if (job.value.phase === 'copy') return '正在复制…'
   if (job.value.phase === 'probe') return '正在计算元数据…'
   if (job.value.phase === 'hash') return '正在校验文件…'
+  if (job.value.phase === 'cover') return '正在生成封面…'
+  if (job.value.phase === 'thumb') return '正在生成缩略图…'
+  if (job.value.phase === 'index') return '正在加入抓取队列…'
   return '正在导入…'
 })
 

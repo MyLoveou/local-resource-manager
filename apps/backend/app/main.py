@@ -22,6 +22,7 @@ from app.shared.api_envelope import (
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
 from app.shared.log import logger
+from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
 
 
@@ -35,6 +36,8 @@ async def lifespan(_: FastAPI):
             logger.info("已创建数据库 %s", db_path)
         else:
             logger.info("已连接数据库 %s", db_path)
+        if not settings.token:
+            logger.warning("BACKEND_TOKEN 未配置：本次启动不校验鉴权（仅限本机开发）")
         factory = get_session_factory()
         async with factory() as session:
             repo = ResourceRepository(session)
@@ -64,7 +67,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS：Electron 渲染进程与后端端口不同源，需允许跨源（token 鉴权，非 cookie）
+app.middleware("http")(log_requests)
+app.middleware("http")(require_token)
+app.middleware("http")(wrap_json_envelope)
+
+# CORS：Electron 渲染进程与后端端口不同源，需允许跨源（token 鉴权，非 cookie）。
+# 必须在**最后**注册（Starlette 里最后注册的中间件在最外层），否则：
+# 1) 预检 OPTIONS 会先被鉴权中间件 401，浏览器随后拒绝发出真正请求；
+# 2) 401 响应不带 CORS 头，渲染进程只能看到 "Network Error"，看不到真实原因。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -73,8 +83,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.middleware("http")(log_requests)
-app.middleware("http")(wrap_json_envelope)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)

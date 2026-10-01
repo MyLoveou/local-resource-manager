@@ -77,8 +77,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDropdown, NInput, NPopconfirm, useMessage, type DropdownOption } from 'naive-ui'
+import { NButton, NDropdown, NInput, NPopconfirm, type DropdownOption } from 'naive-ui'
 import { storeToRefs } from 'pinia'
+import { notify } from '@/application/notify'
 import ImportWizard from '@/components/ImportWizard/index.vue'
 import DownloadDrawer from '@/components/DownloadDrawer/index.vue'
 import SettingsModal from '@/components/SettingsModal/index.vue'
@@ -92,7 +93,6 @@ import { getResource } from '@/infrastructure/http'
 import { createWorkDirectory } from '@/infrastructure/http/workbench'
 
 const wizardRef = ref<{ open: () => void } | null>(null)
-const message = useMessage()
 const theme = useThemeStore()
 const shellBatch = useShellBatchStore()
 const selection = useSelectionStore()
@@ -122,9 +122,9 @@ async function addWorkDirectory(): Promise<void> {
     const created = await createWorkDirectory(dir)
     library.bump('work_directory')
     if (created.id != null) selection.select(created.id)
-    message.success('已添加工作目录')
+    notify.toast.success('已添加工作目录')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '添加失败')
+    notify.fromError(error, { context: '添加工作目录' })
   } finally {
     addingWork.value = false
   }
@@ -147,11 +147,11 @@ async function startScrape(): Promise<void> {
     }
   }
   if (scrapeable.length === 0) {
-    message.warning('所选没有视频或番剧')
+    notify.toast.warning('所选没有视频或番剧')
     return
   }
   if (scrapeable.length < ids.length) {
-    message.info(`已跳过 ${ids.length - scrapeable.length} 项非视频/番剧`)
+    notify.toast.info(`已跳过 ${ids.length - scrapeable.length} 项非视频/番剧`)
   }
   scrapeIds.value = scrapeable
   scrapeOpen.value = true
@@ -205,7 +205,7 @@ function onOpenSettings(event: Event): void {
 onMounted(() => {
   window.addEventListener('sm:open-settings', onOpenSettings)
   const warning = theme.consumeHydrateWarning()
-  if (warning) message.warning(warning)
+  if (warning) notify.toast.warning(warning)
 })
 
 onUnmounted(() => {
@@ -223,7 +223,7 @@ async function onThemeSelect(key: string): Promise<void> {
   }
   if (key === 'file') {
     const error = await theme.pickFile()
-    if (error) message.error(error)
+    if (error) notify.fromError(new Error(error), { context: '应用主题' })
   }
 }
 </script>

@@ -50,10 +50,25 @@ API_MESSAGE_OK = "ok"
 
 ENVELOPE_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
 
+# 鉴权豁免：健康检查（/health 与各子应用 /xxx/health）、OpenAPI 文档、
+# 媒体字节流（img / video / model-viewer 无法带请求头）
+AUTH_EXEMPT_PREFIXES = ("/docs", "/redoc", "/openapi.json")
+AUTH_EXEMPT_SUFFIXES = ("/health", "/content")
+AUTH_EXEMPT_PATHS = ("/scrape/proxy-image",)
+
 
 def is_hidden_fs_name(name: str) -> bool:
     """点开头的文件或目录不参与导入收集。"""
     return name.startswith(HIDDEN_NAME_PREFIX)
+
+
+def is_auth_exempt(path: str) -> bool:
+    """该路径是否免 token 校验（清单集中在本文，不在路由里写条件）。"""
+    if path in AUTH_EXEMPT_PATHS:
+        return True
+    if path.startswith(AUTH_EXEMPT_PREFIXES):
+        return True
+    return path.endswith(AUTH_EXEMPT_SUFFIXES)
 
 
 # 协议 → 默认引擎 路由表（aria2 兼 BT 兜底；rqbit 负责现代 BT/流式）

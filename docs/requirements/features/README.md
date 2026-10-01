@@ -2,24 +2,42 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## quality-and-deploy（**草案**）
+## platform-debt（**已定稿 · 已落地** · D-20260927-06）
 
-> 设置页、下载/刮削弹层、主题、Docker 与远程后端。实现/架构/算法未点名之前不做。禁止编码。
-
-| 文档 | 内容 |
-|------|------|
-| [`quality-and-deploy/需求.md`](quality-and-deploy/需求.md) | 七条拆分、冲突、开放问题 |
-| [`quality-and-deploy/handoff.md`](quality-and-deploy/handoff.md) | 轮次 1，待回答 |
-
-## library-collections（**设计待确认**）
-
-> 用户自建一组资源。不是系列。分支 `feat/library-collections`。禁止编码。
+> D1 Notify 迁移、D2 token 校验、D3 导入进度分相、D4 事件循环**四项均已落地**（2026-09-27）。余 Electron 手验（媒体豁免生效 + 导入大目录时 `/health` 可用）。
 
 | 文档 | 内容 |
 |------|------|
-| [`library-collections/需求.md`](library-collections/需求.md) | IN/OUT、C1–C8 |
-| [`library-collections/设计.md`](library-collections/设计.md) | 两张表、与系列的边界 |
-| [`library-collections/handoff.md`](library-collections/handoff.md) | 待确认设计 |
+| [`platform-debt/需求.md`](platform-debt/需求.md) | 四项债的 IN/OUT、可测验收 A1–A6 / B1–B3 |
+| [`platform-debt/设计.md`](platform-debt/设计.md) | token 中间件与豁免取舍、事件循环判定规则、切片契约 |
+| [`platform-debt/实现方案.md`](platform-debt/实现方案.md) | L3：文件清单、纵向步骤、阻塞点核对表 |
+
+## theme-tokens（**已定稿** · 来自 D-20260927-04）
+
+> 主题令牌补齐：状态色/交互态/背景层次/圆角，并清零组件内硬编码颜色。第一刀不做字号/阴影。
+
+| 文档 | 内容 |
+|------|------|
+| [`theme-tokens/需求.md`](theme-tokens/需求.md) | IN/OUT、T1–T6 验收、Q1–Q4 已确认 |
+
+## quality-and-deploy（**已定稿 · 边界结论** · D-20260927-04）
+
+> 只保留拆分与边界：S3 已拆为 `theme-tokens`；S4 Docker/远程后端**冻结**；S1/S2 退回观察；S5–S7 保持 OUT。本文件不再作为可实施需求。
+
+| 文档 | 内容 |
+|------|------|
+| [`quality-and-deploy/需求.md`](quality-and-deploy/需求.md) | 七条拆分（S1–S7）与逐条定论 §7 |
+| [`quality-and-deploy/handoff.md`](quality-and-deploy/handoff.md) | 轮次 2 结论 |
+
+## library-collections（**已定稿** · 需求 + L2 设计 · D-20260927-03）
+
+> 用户自建一组资源。不是系列。需求与 L2 设计均已定稿，待 L3 后才可编码。分支 `feat/library-collections`。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-collections/需求.md`](library-collections/需求.md) | IN/OUT、C1–C8、轮次 2 决策清单 |
+| [`library-collections/设计.md`](library-collections/设计.md) | 两张表、与系列的边界（L2 已定稿） |
+| [`library-collections/handoff.md`](library-collections/handoff.md) | 下一步 L3 |
 
 ## app-settings-first（**已落地** · D-20260923-04）
 
@@ -305,17 +323,17 @@
 | `lrm-ui.md` | 页面结构（三栏布局） |
 | `lrm-tech-stack.md` | 技术栈决策（三进程架构、双服务、双引擎） |
 
-## tag-category-hygiene（**草案**）
+## tag-category-hygiene（**已定稿** · D-20260927-02）
 
-> LRM **P1 增量**：标签/分类词表统计与删除。依赖 M4 打标能力；实现排在 MS4.1，不挡当前浏览闭环。
+> LRM **P1 增量**：标签/分类词表统计与删除。依赖 M4 打标能力；实现排在 MS4.1，不挡当前浏览闭环。需求已定稿，待 L2/L3。
 
 | 文档 | 内容 |
 |------|------|
-| `tag-category-hygiene.md` | 词表膨胀治理：统计、删除、与 M4 边界、开放问题 |
+| `tag-category-hygiene.md` | 词表膨胀治理：统计、删除、与 M4 边界、轮次 2 决策清单 |
 
-## work-consumption-hub（**草案**）
+## work-consumption-hub（**已定稿** · D-20260927-05）
 
-> LRM 增量 Feature：工作上下文 + 消费渠道。依赖 LRM M0–M6。
+> LRM 增量 Feature：工作上下文 + 消费渠道。三份文档已定稿；主体已编码待手验，MS5/MS6 不再返工。
 
 | 文档 | 内容 |
 |------|------|

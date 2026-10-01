@@ -7,6 +7,68 @@
 
 ## 有效决策
 
+### D-20260927-06 · 平台债 D2/D4 口径：媒体豁免 + 空 token 放行
+
+- 日期：2026-09-27
+- 场景：批次 3 的 Q1–Q5 —— token 校验与导入事件循环的实现口径
+- **决定**：**Q1** token 为空 = 未启用鉴权（启动打 `WARN`；Electron 路径始终注入 token，故发布态始终校验）。**Q2** 媒体端点走**豁免**：`*/content` 与 `/scrape/proxy-image` 免请求头。**Q3** 既有 159 项测试不改造，另建 `test_auth.py`。**Q4** 只补齐 `to_thread` + 核对表，导入搬进程另立项。**Q5** 不写进 baseline 常规验收，改为「线程探针」确定性单测 + 手验顺带看。
+- **为何**：`img`/`video`/`model-viewer` 无法带请求头，豁免是唯一不改前端媒体主路径的方案；空 token 放行保住 `pnpm backend:start` 手测与既有测试；线程探针（断言调用线程 ≠ 事件循环线程）比计时更快更可证。
+- **不选**：fail-closed（裸跑后端与既有测试会全 401）；前端取 blob；签名 URL；本刀把导入搬进独立进程。
+- **落点**：`openspec/changes/platform-debt/`；`shared/middleware/auth.py`、`shared/constants.py`、`shared/config.py`；`tests/test_auth.py`、`tests/test_import_concurrency.py`
+- 状态：有效（D2/D4 已落地；文件流豁免与空 token 语义可随时单点改回 fail-closed）
+
+> 补充（同日）：CORS 预检 `OPTIONS` 必须放行，且 **CORS 中间件注册在最外层**，否则预检被 401、401 响应又缺 CORS 头，渲染进程只会看到 `Network Error`。踩坑记录见 `docs/经验总结/05-CORS跨域配置.md`。
+
+### D-20260927-05 · WCH 定稿：模型以 3D 为主
+
+- 日期：2026-09-27
+- 场景：`work-consumption-hub` 的 4 个开放问题阻碍定稿；其主体已编码待手验
+- **决定**：`model` 类型以 **3D（gltf/glb，已内嵌预览）** 为准；AI 权重（safetensors/ckpt）不并入，留给 P5「模型管理」。待办/备注**仅应用内**存储，不导出、不同步外部笔记。**不改仓库名**。M7/M8 顺序问题**失效**（已同批完成）。
+- **为何**：`facts.md` 已把模型 A-min 定义为内置 gltf 预览；权重涉及版本/来源/校验，属另一能力；导出属 P6。
+- **不选**：权重并入 `model`；待办备注同步 Obsidian/Notion；改产品名；为顺序问题返工。
+- **落点**：`work-consumption-hub.md` / `wch-modules.md` / `wch-ui.md`；`todo.md` P5
+- 状态：有效（需求已定稿；MS5/MS6 只剩手验）
+
+### D-20260927-04 · quality-and-deploy 拆分定稿：只留主题一条
+
+- 日期：2026-09-27
+- 场景：七条意图捆在一份草案里，多数缺可观察的失败与可测验收
+- **决定**：**S3 主题**单独立项 `theme-tokens`（补齐令牌覆盖）；**S4 Docker/远程后端冻结为不做**；**S1 设置页、S2 下载/刮削弹层退回观察**（真有问题时按 fix/style 单独立项）；**S5 实现、S6 架构、S7 算法保持 OUT**。
+- **为何**：无复现/无指标的「更好」不是验收标准；S4 与「只绑本机、媒体复制在库内、磁力依赖本机 aria2c」三条已拍板冲突，且依赖 token 校验先落地。
+- **不选**：七条捆成一次编码；未拍板就加 Dockerfile 或远程后端地址；为「更好」平行另起一套分层。
+- **落点**：`docs/requirements/features/quality-and-deploy/需求.md` §7；新需求 `docs/requirements/features/theme-tokens/`
+- 状态：有效
+
+### D-20260927-03 · 合集定稿：分组，不是作品
+
+- 日期：2026-09-27
+- 场景：`library-collections` 的设计与 4 个开放问题待确认
+- **决定**：按 L2 默认全部通过 —— 一条资源可进多个合集、**允许跨类型**、成员**手动 `position` 排序**、封面取第一张仍 active 成员的 `thumbnailPath`（**不落封面文件**）、**软删保留成员行**（恢复后回原位）、`/collections` 进侧栏而 `/collections/:id` 不进。新表 `collections` + `collection_items`，落在现有 `library`，不新建顶层包。
+- **为何**：标签不能表达顺序、也不能单独打开成一页；合集是"用户起的一组资源"，必须与系列的季/集结构严格分开。
+- **不选**：智能合集/规则引擎；合集嵌套；把合集做成 `ResourceType`；合集自己的刮削、下载、连播；单独上传合集封面。
+- **落点**：`docs/requirements/features/library-collections/`
+- 状态：有效（需求 + L2 设计已定稿，待 L3）
+
+### D-20260927-02 · 词表治理定稿：统计 + 删除
+
+- 日期：2026-09-27
+- 场景：`tag-category-hygiene` 轮次 1 的 6 个开放问题
+- **决定**：分类 = **独立受控词表**（Q1，已拍板）；删除仍被引用的词条 = **二次确认后级联摘标**并显示引用数；管理入口 = **设置弹窗新页签**；引用统计**只算 `active`**，删除时提示「回收站中另有 N 条」；提供**「一键清理 0 引用」**（二次确认 + 单事务）；**重命名/合并 OUT，另立项**。
+- **为何**：schema 已是 `ON DELETE CASCADE`，删词条天然摘标；0 引用清理是词表治理存在的理由；把回收站算进统计会给用户错误阻力；合并需定大小写/近义/冲突顺序，属另一量级。
+- **不选**：禁止删除有引用的词条；管理入口放左侧类型菜单（那是库类型语义）；回收站计入统计；本刀做重命名/合并。
+- **落点**：`docs/requirements/features/tag-category-hygiene.md`；路线图 MS4.1
+- 状态：有效（需求已定稿，待 L2/L3）
+
+### D-20260927-01 · 放开「常驻文件监视」禁令
+
+- 日期：2026-09-27
+- 场景：`apps/backend/app/shared/utils/fileWatcher.py` 草稿做源目录常驻监视，与基线禁止项冲突；用户明确要求保留该能力
+- **决定**：放开常驻文件监视禁令。允许对**用户显式添加**的源目录用 watchdog 常驻监视，事件驱动地发现新文件并按类型入库。
+- **边界（未放开）**：入库仍是**复制进 owned 包** + sha256 去重；**不把源目录登记为可反复全量重扫的库根**——本次只放开「监视」，没有放开「持久扫描根」。
+- **不选**：周期性全库重扫；把源目录当库根持久化；用监视取代导入向导。
+- **落点**：需求与 L2 待立项（`docs/requirements/features/<id>/`）；草稿 `shared/utils/fileWatcher.py` 尚未实现（`watchdog` 不在 `requirements.txt`）
+- 状态：有效（**方向已放开，实现未立项**）
+
 ### D-20260923-06 · 磁力走本机 aria2，HTTP 仍用 httpx
 
 - 日期：2026-09-23
@@ -407,7 +469,7 @@
 - **为何**：单机场景不需要多后端进程抢 SQLite；引擎子进程才是隔离边界。
 - **不选**：多用户、移动端、常驻文件监视、ED2K/WebDAV。
 - **落点**：`docs/requirements/features/local-resource-manager.md`、`facts.md` §二
-- 状态：有效
+- 状态：有效（其中「不做常驻文件监视」一条已被 D-20260927-01 取代）
 
 ### D-20260912-01 · 资源 HTTP 用复数路径 + PATCH + 软删
 

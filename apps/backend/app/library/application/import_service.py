@@ -293,7 +293,7 @@ class ImportService:
                 await resources.update(resource.id, resource, commit=False)
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             primary = role_paths.get(FILE_ROLE_PRIMARY)
             await apply_ingest_cover(
                 resources,
@@ -306,7 +306,9 @@ class ImportService:
                 video_duration=video_duration if type_ == ResourceType.VIDEO else None,
                 audio_path=primary if type_ == ResourceType.AUDIO else None,
             )
+            job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            job.phase = "index"
             from app.scrape.application.enqueue import enqueue_search_after_import
 
             await enqueue_search_after_import(resources._session, resource.id, type_)
@@ -434,7 +436,7 @@ class ImportService:
                     )
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             first_ep = min(episode_files, default=None)
             await apply_ingest_cover(
                 resources,
@@ -446,7 +448,9 @@ class ImportService:
                 episode_path=None if first_ep is None else first_ep[2],
                 episode_duration=None if first_ep is None else first_ep[3],
             )
+            job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            job.phase = "index"
             from app.scrape.application.enqueue import enqueue_search_after_import
 
             await enqueue_search_after_import(resources._session, resource.id, type_)
@@ -522,7 +526,7 @@ class ImportService:
         layout: PackageLayout,
         root: Path,
     ) -> None:
-        pages = comic_pages(root)
+        pages = await asyncio.to_thread(comic_pages, root)
         if not pages:
             job.skipped_error += 1
             return
@@ -577,10 +581,11 @@ class ImportService:
                 )
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             await apply_ingest_cover(
                 resources, resource, package, type_, role_paths=role_paths, source_root=root
             )
+            job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
@@ -603,7 +608,7 @@ class ImportService:
         root: Path,
         storage: StorageKind,
     ) -> None:
-        launch_src = find_launch(root)
+        launch_src = await asyncio.to_thread(find_launch, root)
         package: ResourcePackage | None = None
         try:
             digest: str | None = None
@@ -663,7 +668,7 @@ class ImportService:
                 role_paths[FILE_ROLE_PRIMARY] = launch_store
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             await apply_ingest_cover(
                 resources,
                 resource,
@@ -673,6 +678,7 @@ class ImportService:
                 source_root=root,
                 launch_path=launch_store,
             )
+            job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()

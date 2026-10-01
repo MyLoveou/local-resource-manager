@@ -4,7 +4,6 @@
 import { acceptHMRUpdate, defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useSelectionStore } from './selection'
-import logger from '@/infrastructure/logging/logger'
 
 export const useVideoPlayerStore = defineStore('videoPlayer', () => {
   const visible = ref(false)
@@ -14,7 +13,6 @@ export const useVideoPlayerStore = defineStore('videoPlayer', () => {
   const selection = useSelectionStore()
 
   function open(id: number, ids: number[], fileId?: number | null): void {
-    logger.info('视频播放器打开2', id, ids)
     playlistIds.value = ids
     currentId.value = id
     currentFileId.value = fileId ?? null

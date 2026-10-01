@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # apps/backend 目录（相对本文件向上两级）
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -13,9 +13,13 @@ APPS_DIR = BACKEND_DIR.parent
 class Settings(BaseSettings):
     """后端服务共享配置。"""
 
+    # 环境变量前缀：BACKEND_TOKEN / BACKEND_HOST / BACKEND_PORT / BACKEND_DB_PATH …
+    # 桌面主进程按 BACKEND_TOKEN 注入，故此处必须有前缀，否则字段名 token 读的是 TOKEN。
+    model_config = SettingsConfigDict(env_prefix="BACKEND_")
+
     host: str = "127.0.0.1"
     port: int = 8000
-    token: str = ""  # 后续：进程间鉴权 token
+    token: str = ""  # 进程间鉴权 token；为空表示未启用鉴权（见 shared/middleware/auth.py）
     db_path: Path = BACKEND_DIR / "data" / "library.db"  # SQLite 单文件
     # CORS 允许源：本地服务绑定 127.0.0.1 + token 鉴权（非 cookie），"*" 安全
     # 覆盖开发态 vite(localhost:5173) 与生产态 Electron(file:///app://) 源

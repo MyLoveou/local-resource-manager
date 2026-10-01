@@ -31,6 +31,7 @@ class ResourceRow(Base):
     )
     created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    md5: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class CategoryRow(Base):

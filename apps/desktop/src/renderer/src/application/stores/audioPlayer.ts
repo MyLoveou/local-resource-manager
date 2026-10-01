@@ -53,7 +53,7 @@ export const useAudioPlayerStore = defineStore('audioPlayer', () => {
     listHasMore.value = pager?.hasMore() ?? false
     listLoadingMore.value = pager?.loadingMore() ?? false
   }
-  // 获取绑定分页器的图片 ID 列表
+  // 获取绑定分页器的音频 ID 列表
   function boundImageIds(): number[] {
     return pager?.imageIds() ?? []
   }

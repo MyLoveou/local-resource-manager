@@ -71,7 +71,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NDrawer, NDrawerContent, NInput, NProgress, useMessage } from 'naive-ui'
+import { NButton, NDrawer, NDrawerContent, NInput, NProgress } from 'naive-ui'
+import { notify } from '@/application/notify'
 import {
   cancelDownloadTask,
   createDownloadTask,
@@ -87,7 +88,6 @@ import type { DownloadTask } from '@/domain'
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
 
-const message = useMessage()
 const router = useRouter()
 const library = useLibraryStore()
 const selection = useSelectionStore()
@@ -108,14 +108,14 @@ async function refresh(): Promise<void> {
   try {
     tasks.value = await listDownloadTasks()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '无法读取下载任务')
+    notify.fromError(error, { context: '读取下载任务' })
   }
 }
 
 async function start(): Promise<void> {
   const raw = url.value.trim()
   if (!raw) {
-    message.warning('请填写下载地址')
+    notify.toast.warning('请填写下载地址')
     return
   }
   busy.value = true
@@ -124,7 +124,7 @@ async function start(): Promise<void> {
     url.value = ''
     await refresh()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '无法开始下载')
+    notify.fromError(error, { context: '开始下载' })
   } finally {
     busy.value = false
   }
@@ -136,7 +136,7 @@ async function act(run: () => Promise<DownloadTask>): Promise<void> {
     await run()
     await refresh()
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '操作失败')
+    notify.fromError(error, { context: '下载操作' })
   } finally {
     busy.value = false
   }
