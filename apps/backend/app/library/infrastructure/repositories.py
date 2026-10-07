@@ -21,7 +21,6 @@ from app.library.infrastructure.orm import (
     TagRow,
 )
 from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
-from app.download.infrastructure.orm import DownloadTaskRow
 from app.library.domain.media_types import (
     FILE_ROLE_PAGE,
     FILE_ROLE_THUMBNAIL,
@@ -1079,13 +1078,9 @@ class TaskSummaryRepository:
             .select_from(ScrapeJobRow)
             .where(ScrapeJobRow.status == "failed")
         )
-        active_downloads = await self._session.scalar(
-            select(func.count())
-            .select_from(DownloadTaskRow)
-            .where(DownloadTaskRow.status == "running")
-        )
+        # 自建下载已移除（D-20261007-01）：下载计数恒为 0，字段保留兼容
         return {
             "running_scrape_jobs": int(running_scrape_jobs or 0),
             "failed_scrape_jobs": int(failed_scrape_jobs or 0),
-            "active_downloads": int(active_downloads or 0),
+            "active_downloads": 0,
         }

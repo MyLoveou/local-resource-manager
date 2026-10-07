@@ -7,3 +7,4 @@ Pillow
 pefile
 pypdfium2
 httpx
+watchdog

@@ -7,6 +7,18 @@ import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 const DETAIL_CACHE_LIMIT = 50
 const detailCache = new Map<number, Resource>()
 
+/** 监视导入修订号（后端 /library/watch-revision） */
+export interface WatchRevision {
+  revision: number
+  type: string | null
+}
+
+/** 获取监视导入修订号：前端轮询，变化时刷新对应类型列表 */
+export async function getWatchRevision(): Promise<WatchRevision> {
+  const { data } = await client.get<WatchRevision>('/library/watch-revision')
+  return data
+}
+
 export function invalidateResourceCache(resourceId?: number): void {
   if (resourceId === undefined) {
     detailCache.clear()

@@ -106,6 +106,40 @@ export function useResourcePage(options: {
     await fetchPage(false)
   }
 
+  /** 监视导入软刷新：重拉首页，只把新项插到列表头部，保留浏览位置。 */
+  async function refreshTop(): Promise<void> {
+    const id = ++requestId
+    loading.value = true
+    error.value = null
+    try {
+      const page = await getResources({
+        type: type.value,
+        status: status.value,
+        limit,
+        sort: sort.value,
+        order: order.value,
+        q: q.value.trim() || undefined,
+        tagIds: tagIds.value.length ? tagIds.value : undefined,
+      })
+      if (id !== requestId) return
+      total.value = page.total
+      hasMore.value = page.hasMore
+      const seen = new Set(items.value.map((item) => item.id))
+      const fresh = page.items.filter((item) => item.id !== undefined && !seen.has(item.id))
+      if (fresh.length) {
+        items.value = [...fresh, ...items.value]
+      }
+    } catch (err) {
+      if (id !== requestId) return
+      error.value = err
+    } finally {
+      if (id === requestId) {
+        loading.value = false
+        loadingMore.value = false
+      }
+    }
+  }
+
   async function loadMore(): Promise<void> {
     const waitingAppend = inflight != null && inflightAppend
     if (inflight) await inflight
@@ -133,6 +167,20 @@ export function useResourcePage(options: {
     }
   )
 
+  watch(
+    () => library.watchRevision,
+    () => {
+      invalidateResourceCache()
+      if (
+        type.value === undefined ||
+        library.watchType === null ||
+        library.watchType === type.value
+      ) {
+        void refreshTop()
+      }
+    }
+  )
+
   watch([type, q, sort, order, tagIds], () => {
     void reset()
   })
@@ -145,6 +193,7 @@ export function useResourcePage(options: {
     loadingMore,
     error,
     reset,
+    refreshTop,
     loadMore,
   }
 }

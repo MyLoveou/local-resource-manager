@@ -94,7 +94,12 @@ class ImportService:
         source_kind: str,
         paths: list[str],
         storage_kind: str | None = None,
+        *,
+        prehashed: dict[str, str] | None = None,
+        auto_scrape: bool = True,
     ) -> None:
+        """执行导入。prehashed: 路径→sha256（监视导入复用事件预计算值，避免二次全量哈希）；
+        auto_scrape=False 时导入后不入刮削队列（监视导入默认关）。"""
         importer = importer_for(type_)
         layout = layout_for(type_)
         profile = profile_for(type_)
@@ -116,12 +121,16 @@ class ImportService:
         job.total = len(candidates)
         job.phase = "hash"
         if self._session_factory is not None:
-            await self._run_pooled(job, type_, layout, candidates)
+            await self._run_pooled(job, type_, layout, candidates, prehashed, auto_scrape)
             return
         if self._resources is None:
             raise RuntimeError("ImportService needs resources or session_factory")
         for candidate in candidates:
-            await self._ingest_one(self._resources, job, type_, layout, candidate)
+            digest = prehashed.get(str(candidate)) if prehashed else None
+            await self._ingest_one(
+                self._resources, job, type_, layout, candidate,
+                digest=digest, auto_scrape=auto_scrape,
+            )
             job.done += 1
             await asyncio.sleep(0)
 
@@ -131,6 +140,8 @@ class ImportService:
         type_: ResourceType,
         layout: PackageLayout,
         candidates: list[Path],
+        prehashed: dict[str, str] | None = None,
+        auto_scrape: bool = True,
     ) -> None:
         factory = self._session_factory
         assert factory is not None
@@ -143,7 +154,11 @@ class ImportService:
                     try:
                         async with factory() as session:
                             repo = ResourceRepository(session)
-                            await self._ingest_one(repo, job, type_, layout, source)
+                            digest = prehashed.get(str(source)) if prehashed else None
+                            await self._ingest_one(
+                                repo, job, type_, layout, source,
+                                digest=digest, auto_scrape=auto_scrape,
+                            )
                         last_error = None
                         break
                     except OperationalError as exc:
@@ -233,9 +248,16 @@ class ImportService:
         type_: ResourceType,
         layout: PackageLayout,
         source: Path,
+        *,
+        digest: str | None = None,
+        auto_scrape: bool = True,
     ) -> None:
         try:
-            digest, size = await asyncio.to_thread(hash_file, source)
+            if digest is not None:
+                # 复用事件预计算的 sha256，只补一次 stat 拿大小（避免二次全量哈希）
+                size = await asyncio.to_thread(os.path.getsize, source)
+            else:
+                digest, size = await asyncio.to_thread(hash_file, source)
         except OSError as exc:
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
@@ -314,9 +336,10 @@ class ImportService:
             job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
             job.phase = "index"
-            from app.scrape.application.enqueue import enqueue_search_after_import
+            if auto_scrape:
+                from app.scrape.application.enqueue import enqueue_search_after_import
 
-            await enqueue_search_after_import(resources._session, resource.id, type_)
+                await enqueue_search_after_import(resources._session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
@@ -337,6 +360,8 @@ class ImportService:
         layout: PackageLayout,
         root: Path,
         videos: list[Path],
+        *,
+        auto_scrape: bool = True,
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
         explained = explain_series_plan(root, videos)
@@ -456,9 +481,10 @@ class ImportService:
             job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
             job.phase = "index"
-            from app.scrape.application.enqueue import enqueue_search_after_import
+            if auto_scrape:
+                from app.scrape.application.enqueue import enqueue_search_after_import
 
-            await enqueue_search_after_import(resources._session, resource.id, type_)
+                await enqueue_search_after_import(resources._session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:

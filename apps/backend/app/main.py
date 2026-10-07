@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
 
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.download.api.router import router as download_router
-from app.download.application.queue import recover_downloads, start_download_worker, stop_download_worker
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
@@ -22,8 +22,24 @@ from app.shared.api_envelope import (
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
 from app.shared.log import logger
+from app.shared.utils.watch_manager import watch_manager
+from app.shared.utils.watch_bridge import watch_bridge
 from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
+from app.settings.application.service import load_watch_dirs
+from app.library.domain.models import ResourceType
+
+
+def parse_watch_dirs(raw: dict[str, list[str]]) -> dict[ResourceType, list[str]]:
+    """设置里的字符串键 → ResourceType；无效键记日志跳过。"""
+    parsed: dict[ResourceType, list[str]] = {}
+    for key, dirs in raw.items():
+        try:
+            parsed[ResourceType(key)] = dirs
+        except ValueError:
+            logger.warning("未知资源类型的监视目录配置，跳过: %s", key)
+    return parsed
+
 
 
 @asynccontextmanager
@@ -48,22 +64,38 @@ async def lifespan(_: FastAPI):
                 logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
         start_scrape_worker()
         await recover_unfinished()
-        start_download_worker()
-        await recover_downloads()
+
+        # 监视目录：环境变量优先（锁定 UI），否则读数据库设置
+        env_dirs = parse_watch_dirs(settings.watch_dirs)
+        if env_dirs:
+            applied_dirs = env_dirs
+            logger.info("监视目录来自环境变量: %s", env_dirs)
+        else:
+            async with factory() as session:
+                applied_dirs = parse_watch_dirs(await load_watch_dirs(session))
+            logger.info("监视目录来自设置: %s", applied_dirs)
+
+        watch_bridge.start()
+        watch_manager.apply(applied_dirs, callbacks=watch_bridge.callbacks())
+        # 补扫：后台未运行期间放进监视目录的文件，合成事件补导入
+        if applied_dirs:
+            asyncio.create_task(watch_bridge.catch_up(applied_dirs))
+
     except Exception as e:
         logger.error(f"数据库启动失败: {e}")
         raise
     yield
     logger.info("数据库关闭连接")
     await stop_scrape_worker()
-    await stop_download_worker()
+    watch_manager.shutdown()
+    await watch_bridge.stop()
     await dispose_engine()
 
 
 app = FastAPI(
     title="backend",
     version="0.0.0",
-    description="本地资源管理器后端：library / scrape / download 以 APIRouter 挂入",
+    description="本地资源管理器后端：library / scrape / settings 以 APIRouter 挂入（下载不自建，D-20261007-01）",
     lifespan=lifespan,
 )
 
@@ -88,7 +120,6 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
 app.include_router(scrape_router, prefix="/scrape")
-app.include_router(download_router, prefix="/download")
 app.include_router(settings_router, prefix="/settings")
 
 

@@ -8,7 +8,6 @@ export type { TypeProfile, ConsumeKind, IngestKind, StorageKind } from './librar
 export { TYPE_PROFILES, SHARED_SORT_KEYS, SORT_LABELS, allowedSortKeys } from './libraryTypes'
 export * from './mediaLabels'
 export * from './scrape'
-export * from './download'
 export * from './settings'
 export * from './overview'
 export * from './constants'

@@ -8,7 +8,7 @@ from pathlib import Path
 # from app.library.domain.models import ResourceType
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
-from calculateSHA256 import calculate_sha256_from_file
+from apps.backend.app.shared.utils.calculateSHA256 import calculate_sha256_from_file
 # from ..log import logger
 import os
 import time
@@ -93,21 +93,21 @@ class FileWatcher():
     self.observer.stop()
     self.observer.join()
 
-  def handle(self,file: str):
-    if self.wait_until_stable(file):
-      # 计算sha256值
-      try:
-        sha256 = calculate_sha256_from_file(file)
-        if self._processed.get(file) == sha256:
-          return          # 内容没变，跳过
-        self._processed[file] = sha256
-        dataList = ['测试hash','测试hash','测试hash',]
-        if sha256 in dataList:
-          return
-        else:
-          self.callback(file, sha256)
-      except Exception as e:
-        print(f"计算sha256失败： {file}, 错误信息: {e}")
+  # def handle(self,file: str):
+  #   if self.wait_until_stable(file):
+  #     # 计算sha256值
+  #     try:
+  #       sha256 = calculate_sha256_from_file(file)
+  #       if self._processed.get(file) == sha256:
+  #         return          # 内容没变，跳过
+  #       self._processed[file] = sha256
+  #       dataList = ['测试hash','测试hash','测试hash',]
+  #       if sha256 in dataList:
+  #         return
+  #       else:
+  #         self.callback(file, sha256)
+  #     except Exception as e:
+  #       print(f"计算sha256失败： {file}, 错误信息: {e}")
 
   # 处理入队列的文件路径
   """

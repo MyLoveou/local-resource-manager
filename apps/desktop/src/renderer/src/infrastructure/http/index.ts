@@ -30,13 +30,6 @@ export {
   backupLibrary,
 } from './settings'
 export {
-  createDownloadTask,
-  listDownloadTasks,
-  pauseDownloadTask,
-  resumeDownloadTask,
-  cancelDownloadTask,
-} from './download'
-export {
   createScrapeJob,
   getScrapeJob,
   listScrapeCandidates,

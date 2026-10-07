@@ -50,27 +50,7 @@
 | [`app-settings-first/实现方案.md`](app-settings-first/实现方案.md) | REST、文件清单 |
 | [`app-settings-first/handoff.md`](app-settings-first/handoff.md) | 待 apply |
 
-## download-magnet-aria2（**已落地** · D-20260923-06）
-
-> 磁力：本机 aria2c → 复制进视频库。HTTP 直链仍走 httpx。无 rqbit。
-
-| 文档 | 内容 |
-|------|------|
-| [`download-magnet-aria2/需求.md`](download-magnet-aria2/需求.md) | IN/OUT |
-| [`download-magnet-aria2/设计.md`](download-magnet-aria2/设计.md) | RPC、校验 |
-| [`download-magnet-aria2/实现方案.md`](download-magnet-aria2/实现方案.md) | 文件与错误文案 |
-| [`download-magnet-aria2/handoff.md`](download-magnet-aria2/handoff.md) | 待手验 |
-
-## download-http-ingest（**已落地** · D-20260923-02）
-
-> 下载第一刀：HTTP(S) 直链 → 暂存 → 复制进视频库。无磁力、无 aria2。
-
-| 文档 | 内容 |
-|------|------|
-| [`download-http-ingest/需求.md`](download-http-ingest/需求.md) | IN/OUT、US-D.1–5 |
-| [`download-http-ingest/设计.md`](download-http-ingest/设计.md) | 队列、入库、抽屉 |
-| [`download-http-ingest/实现方案.md`](download-http-ingest/实现方案.md) | REST、文件清单 |
-| [`download-http-ingest/handoff.md`](download-http-ingest/handoff.md) | 已编码，待手验 |
+> 自建下载功能（download-http-ingest / download-magnet-aria2）已随方向调整移除（D-20261007-01：下载委托第三方成熟下载器，产物经监视目录入库）。
 
 ## scrape-confirm-ux（**已落地** · 待手验）
 

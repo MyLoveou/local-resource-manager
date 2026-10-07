@@ -1,9 +1,9 @@
 """HTTP / API 横切常量（单一事实源）。
 
 领域枚举已按限界上下文归位：
-- Protocol / DownloadEngine → app.download.domain.models
 - SourceKind → app.library.domain.models
 - AdapterKey → app.settings.domain.models
+- 下载域枚举已随下载功能移除（D-20261007-01）
 """
 API_CODE_OK = 0
 API_STATUS_SUCCESS = "success"

@@ -1,47 +1,217 @@
 <template>
-  <n-modal :show="show" preset="card" title="设置" style="width: 640px" @update:show="onShow">
-    <n-tabs type="line" animated :value="activeTab" @update:value="activeTab = $event">
-      <n-tab-pane name="scrape" tab="刮削">
-        <p v-if="view?.scrape.tmdb.envLocked" class="set-modal__hint">TMDB Key 由环境变量提供</p>
+  <n-modal
+    :show="show"
+    preset="card"
+    title="设置"
+    style="width: 640px"
+    @update:show="onShow"
+  >
+    <n-tabs
+      type="line"
+      animated
+      :value="activeTab"
+      @update:value="activeTab = $event"
+    >
+      <n-tab-pane
+        name="scrape"
+        tab="刮削"
+      >
+        <p
+          v-if="view?.scrape.tmdb.envLocked"
+          class="set-modal__hint"
+        >
+          TMDB Key 由环境变量提供
+        </p>
         <n-form-item label="TMDB API Key">
-          <n-input v-model:value="tmdbKey" type="password" show-password-on="click"
-            :disabled="busy || view?.scrape.tmdb.envLocked" :placeholder="tmdbPlaceholder" />
+          <n-input
+            v-model:value="tmdbKey"
+            type="password"
+            show-password-on="click"
+            :disabled="busy || view?.scrape.tmdb.envLocked"
+            :placeholder="tmdbPlaceholder"
+          />
         </n-form-item>
-        <p v-if="view?.scrape.bangumi.envLocked" class="set-modal__hint">Bangumi Token 由环境变量提供</p>
+        <p
+          v-if="view?.scrape.bangumi.envLocked"
+          class="set-modal__hint"
+        >
+          Bangumi Token 由环境变量提供
+        </p>
         <n-form-item label="Bangumi Token（可选）">
-          <n-input v-model:value="bangumiToken" type="password" show-password-on="click"
-            :disabled="busy || view?.scrape.bangumi.envLocked" :placeholder="bangumiPlaceholder" />
+          <n-input
+            v-model:value="bangumiToken"
+            type="password"
+            show-password-on="click"
+            :disabled="busy || view?.scrape.bangumi.envLocked"
+            :placeholder="bangumiPlaceholder"
+          />
         </n-form-item>
-        <p v-if="view?.scrape.mikan.envLocked" class="set-modal__hint">蜜柑地址由环境变量提供</p>
+        <p
+          v-if="view?.scrape.mikan.envLocked"
+          class="set-modal__hint"
+        >
+          蜜柑地址由环境变量提供
+        </p>
         <n-form-item label="蜜柑 Base URL">
-          <n-input v-model:value="mikanUrl" :disabled="busy || view?.scrape.mikan.envLocked" />
+          <n-input
+            v-model:value="mikanUrl"
+            :disabled="busy || view?.scrape.mikan.envLocked"
+          />
         </n-form-item>
-        <n-button size="small" type="primary" :loading="busy" @click="saveScrape">保存</n-button>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="busy"
+          @click="saveScrape"
+        >
+          保存
+        </n-button>
       </n-tab-pane>
-      <n-tab-pane name="system" tab="系统">
-        <p class="set-modal__about">后端 {{ view?.system.backendVersion ?? '—' }}</p>
-        <div v-for="row in paths" :key="row.label" class="set-modal__path">
+      <n-tab-pane
+        name="system"
+        tab="系统"
+      >
+        <p class="set-modal__about">
+          后端 {{ view?.system.backendVersion ?? '—' }}
+        </p>
+        <div
+          v-for="row in paths"
+          :key="row.label"
+          class="set-modal__path"
+        >
           <div class="set-modal__path-head">
-            <div class="set-modal__label">{{ row.label }}</div>
+            <div class="set-modal__label">
+              {{ row.label }}
+            </div>
             <div class="set-modal__path-buttons">
-              <n-button size="tiny" :disabled="!row.path" @click="openDir(row.path)">打开</n-button>
-              <n-button size="tiny" type="primary" @click="changeSystemPath(row)">修改</n-button>
+              <n-button
+                size="tiny"
+                :disabled="!row.path"
+                @click="openDir(row.path)"
+              >
+                打开
+              </n-button>
+              <n-button
+                size="tiny"
+                type="primary"
+                @click="changeSystemPath(row)"
+              >
+                修改
+              </n-button>
             </div>
           </div>
-          <div class="set-modal__value">{{ row.path }}</div>
+          <div class="set-modal__value">
+            {{ row.path }}
+          </div>
         </div>
-        <n-button size="small" type="primary" :loading="backing" @click="doBackup">立即备份</n-button>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="backing"
+          @click="doBackup"
+        >
+          立即备份
+        </n-button>
       </n-tab-pane>
-      <n-tab-pane name="consume" tab="消费渠道">
-        <p class="set-modal__hint">自定义命令按空格拆成参数，{path} 单独成一段，不要加引号。例如：mpv {path}</p>
-        <div v-for="row in channelRows" :key="row.type" class="set-modal__channel">
-          <div class="set-modal__label">{{ row.label }}</div>
-          <n-select size="small" :value="channels[row.type]?.mode" :options="row.modes" :disabled="busy"
-            @update:value="(value: ChannelMode) => setMode(row.type, value)" />
-          <n-input v-if="channels[row.type]?.mode === 'command'" size="small" :value="channels[row.type]?.command ?? ''"
-            placeholder="程序 {path}" :disabled="busy" @update:value="(value: string) => setCommand(row.type, value)" />
+      <n-tab-pane
+        name="consume"
+        tab="消费渠道"
+      >
+        <p class="set-modal__hint">
+          自定义命令按空格拆成参数，{path} 单独成一段，不要加引号。例如：mpv {path}
+        </p>
+        <div
+          v-for="row in channelRows"
+          :key="row.type"
+          class="set-modal__channel"
+        >
+          <div class="set-modal__label">
+            {{ row.label }}
+          </div>
+          <n-select
+            size="small"
+            :value="channels[row.type]?.mode"
+            :options="row.modes"
+            :disabled="busy"
+            @update:value="(value: ChannelMode) => setMode(row.type, value)"
+          />
+          <n-input
+            v-if="channels[row.type]?.mode === 'command'"
+            size="small"
+            :value="channels[row.type]?.command ?? ''"
+            placeholder="程序 {path}"
+            :disabled="busy"
+            @update:value="(value: string) => setCommand(row.type, value)"
+          />
         </div>
-        <n-button size="small" type="primary" :loading="busy" @click="saveConsume">保存</n-button>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="busy"
+          @click="saveConsume"
+        >
+          保存
+        </n-button>
+      </n-tab-pane>
+      <n-tab-pane
+        name="watch"
+        tab="监视目录"
+      >
+        <p
+          v-if="watchEnvLocked"
+          class="set-modal__hint"
+        >
+          监视目录由环境变量提供，不能在此修改
+        </p>
+        <p
+          v-else
+          class="set-modal__hint"
+        >
+          按资源类型监视源目录，目录内新增文件会自动进入对应类型。保存后立即生效。
+        </p>
+        <div
+          v-for="row in watchRows"
+          :key="row.type"
+          class="set-modal__watch"
+        >
+          <div class="set-modal__watch-head">
+            <div class="set-modal__label">
+              {{ row.label }}
+            </div>
+            <n-button
+              size="tiny"
+              :disabled="busy || watchEnvLocked"
+              @click="addWatchDir(row.type)"
+            >
+              添加目录
+            </n-button>
+          </div>
+          <div class="set-modal__watch-tags">
+            <n-tag
+              v-for="dir in watchDirs[row.type] ?? []"
+              :key="dir"
+              closable
+              size="small"
+              :disabled="busy || watchEnvLocked"
+              @close="removeWatchDir(row.type, dir)"
+            >
+              {{ dir }}
+            </n-tag>
+            <span
+              v-if="!(watchDirs[row.type]?.length)"
+              class="set-modal__watch-empty"
+            >未监视</span>
+          </div>
+        </div>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="busy"
+          :disabled="watchEnvLocked"
+          @click="saveWatch"
+        >
+          保存
+        </n-button>
       </n-tab-pane>
     </n-tabs>
   </n-modal>
@@ -49,13 +219,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NFormItem, NInput, NModal, NSelect, NTabPane, NTabs } from 'naive-ui'
+import { NButton, NFormItem, NInput, NModal, NSelect, NTabPane, NTabs, NTag } from 'naive-ui'
 import { notify } from '@/application/notify'
 import {
   backupLibrary,
   getSettings,
   patchConsumeSettings,
   patchScrapeSettings,
+  patchWatchSettings,
   type ChannelMode,
   type ChannelSetting,
   type SettingsView,
@@ -75,6 +246,7 @@ const tmdbKey = ref('')
 const bangumiToken = ref('')
 const mikanUrl = ref('')
 const channels = ref<Record<string, ChannelSetting>>({})
+const watchDirs = ref<Record<string, string[]>>({})
 
 const MODE_LABEL: Record<ChannelMode, string> = {
   embedded: '内嵌预览',
@@ -104,6 +276,18 @@ const channelRows = computed(() =>
   }),
 )
 
+// 可监视类型 = 有扩展名映射且非 package 型（与后端 File_Extension_Map/WATCHABLE_TYPES 对齐）
+const watchRows = computed(() =>
+  TYPE_PROFILES.filter((profile) => profile.extensions.length > 0 && profile.ingestKind !== 'package').map(
+    (profile) => ({
+      type: profile.type,
+      label: profile.label,
+    }),
+  ),
+)
+
+const watchEnvLocked = computed(() => view.value?.watch.envLocked ?? false)
+
 const paths = computed(() => {
   const sys = view.value?.system
   if (!sys) return []
@@ -125,6 +309,7 @@ async function load(): Promise<void> {
     bangumiToken.value = ''
     mikanUrl.value = view.value.scrape.mikan.baseUrl
     channels.value = { ...(view.value.consume?.channels ?? {}) }
+    watchDirs.value = { ...(view.value.watch?.dirs ?? {}) }
   } catch (error) {
     notify.fromError(error, { context: '读取设置' })
   }
@@ -177,6 +362,41 @@ async function saveConsume(): Promise<void> {
     notify.toast.success('已保存')
   } catch (error) {
     notify.fromError(error, { context: '保存消费渠道' })
+  } finally {
+    busy.value = false
+  }
+}
+
+async function addWatchDir(type: string): Promise<void> {
+  const api = window.electron
+  if (!api?.selectDirectory) {
+    notify.toast.error('当前环境不能选择文件夹')
+    return
+  }
+  const result = await api.selectDirectory()
+  // 用户取消选择不提示
+  if (!result) return
+  const current = watchDirs.value[type] ?? []
+  if (current.includes(result)) {
+    notify.toast.info('该目录已在监视列表中')
+    return
+  }
+  watchDirs.value = { ...watchDirs.value, [type]: [...current, result] }
+}
+
+function removeWatchDir(type: string, dir: string): void {
+  const current = watchDirs.value[type] ?? []
+  watchDirs.value = { ...watchDirs.value, [type]: current.filter((item) => item !== dir) }
+}
+
+async function saveWatch(): Promise<void> {
+  busy.value = true
+  try {
+    view.value = await patchWatchSettings({ dirs: watchDirs.value })
+    watchDirs.value = { ...(view.value.watch?.dirs ?? {}) }
+    notify.toast.success('已保存，监视已生效')
+  } catch (error) {
+    notify.fromError(error, { context: '保存监视目录' })
   } finally {
     busy.value = false
   }
@@ -296,5 +516,28 @@ watch(
   gap: 8px;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.set-modal__watch {
+  margin-bottom: 14px;
+}
+
+.set-modal__watch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.set-modal__watch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.set-modal__watch-empty {
+  font-size: 12px;
+  color: var(--sm-color-text-muted);
 }
 </style>

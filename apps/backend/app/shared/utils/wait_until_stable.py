@@ -4,7 +4,7 @@
 import time
 import os
 
-def wait_until_stable(path:str,checks: int = 3, interval: float = 1.0, timeout: float = 10) -> bool:
+def wait_until_stable(path:str,checks: int = 3, interval: float = 0.1, timeout: float = 5) -> bool:
   last_size = -1
   stable = 0
   start_time = time.time()

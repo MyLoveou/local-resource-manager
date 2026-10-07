@@ -38,10 +38,22 @@ class ConsumeSettingsOut(ApiModel):
     channels: dict[str, ChannelSetting]
 
 
+class WatchSettingsOut(ApiModel):
+    """监视目录：资源类型 → 目录列表。"""
+
+    dirs: dict[str, list[str]]
+    env_locked: bool = False
+
+
 class SettingsView(ApiModel):
     scrape: ScrapeSettingsOut
     system: SystemSettingsOut
     consume: ConsumeSettingsOut
+    watch: WatchSettingsOut
+
+
+class WatchSettingsPatch(ApiModel):
+    dirs: dict[str, list[str]]
 
 
 class ConsumeSettingsPatch(ApiModel):

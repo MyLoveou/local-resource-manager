@@ -38,6 +38,10 @@ export interface SettingsView {
   consume: {
     channels: Record<string, ChannelSetting>
   }
+  watch: {
+    dirs: Record<string, string[]>
+    envLocked: boolean
+  }
 }
 
 export interface ScrapeSettingsPatch {
@@ -112,5 +116,17 @@ export async function backupLibrary(): Promise<BackupResult> {
 
 export async function patchSystemSettings(body: SettingsView['system']): Promise<SettingsView> {
   const { data } = await client.patch<SettingsView>('/settings/system', body)
+  return data
+}
+
+/**
+ * 更新监视目录设置（保存后后端即时重配监视器）
+ * @param body 监视目录
+ * @returns SettingsView
+ */
+export async function patchWatchSettings(body: {
+  dirs: Record<string, string[]>
+}): Promise<SettingsView> {
+  const { data } = await client.patch<SettingsView>('/settings/watch', body)
   return data
 }

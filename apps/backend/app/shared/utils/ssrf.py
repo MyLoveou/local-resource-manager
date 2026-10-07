@@ -1,4 +1,8 @@
-"""拒绝非 HTTP(S) 与解析到私网的下载 URL。"""
+"""URL 安全校验（SSRF 防护）：拒绝非 HTTP(S) 与解析到私网的地址。
+
+原属 download 应用（2026-10-07 下载功能移除，D-20261007-01），
+scrape 的 OG/图片页面链接校验仍需要，迁至 shared 复用。
+"""
 
 from __future__ import annotations
 
@@ -6,21 +10,21 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
-from app.download.application.errors import DownloadError
+from app.shared.errors import DownloadError
 
 
 def validate_http_url(raw: str) -> str:
     text = (raw or "").strip()
     if not text:
-        raise DownloadError("请填写下载地址", 400)
+        raise DownloadError("请填写地址", 400)
     lowered = text.lower()
     if lowered.startswith("magnet:"):
-        raise DownloadError("本刀仅支持 HTTP(S) 直链", 400)
+        raise DownloadError("仅支持 HTTP(S) 链接", 400)
     if lowered.startswith("file:"):
         raise DownloadError("不支持本地文件地址", 400)
     parsed = urlparse(text)
     if parsed.scheme not in ("http", "https"):
-        raise DownloadError("仅支持 HTTP(S) 直链", 400)
+        raise DownloadError("仅支持 HTTP(S) 链接", 400)
     if parsed.username or parsed.password:
         raise DownloadError("地址不能包含账号信息", 400)
     host = (parsed.hostname or "").strip().rstrip(".")
@@ -41,7 +45,7 @@ def _assert_public_host(host: str) -> None:
         literal = None
     if literal is not None:
         if _blocked_ip(literal):
-            raise DownloadError("不允许下载内网或本机地址", 400)
+            raise DownloadError("不允许访问内网或本机地址", 400)
         return
     try:
         infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
@@ -53,7 +57,7 @@ def _assert_public_host(host: str) -> None:
         packed = info[4][0]
         ip = ipaddress.ip_address(packed)
         if _blocked_ip(ip):
-            raise DownloadError("不允许下载内网或本机地址", 400)
+            raise DownloadError("不允许访问内网或本机地址", 400)
 
 
 def _blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:

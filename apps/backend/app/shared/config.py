@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # 覆盖开发态 vite(localhost:5173) 与生产态 Electron(file:///app://) 源
 
     cors_origins: list[str] = ["*"]
+    # 常驻监视：资源类型("image"/"video"…) → 源目录列表；一个类型可多个目录，同一目录可多类型。
+    # env 用 JSON 对象：BACKEND_WATCH_DIRS='{"image":["D:\\Pics"],"video":["D:\\Videos","E:\\Videos"]}'
+    watch_dirs: dict[str, list[str]] = {}
 
 
 def resolve_log_dir() -> Path:

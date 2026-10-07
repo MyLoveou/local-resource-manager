@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.download.application.errors import DownloadError
+from app.shared.errors import DownloadError
 from app.library.infrastructure.repositories import ResourceRepository
 from app.scrape.application.images import public_image_url, unique_https
 from app.scrape.application.jobs import ScrapeError, create_or_reuse_job, run_search

@@ -12,6 +12,7 @@ import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
 import { useThemeStore } from '@/application/stores/theme'
 import { readNaiveOverrides } from '@/ui/theme/applyTheme'
+import { useWatchAutoRefresh } from '@/hooks/useWatchAutoRefresh'
 
 const menuItems = computed(() => menuFromRoutes(routes))
 const theme = useThemeStore()
@@ -19,10 +20,15 @@ const themeOverrides = computed(() => {
   void theme.revision
   return readNaiveOverrides()
 })
+// 监视目录自动导入后，轮询检测并刷新资源列表
+useWatchAutoRefresh()
 </script>
 
 <template>
-  <n-config-provider abstract :theme-overrides="themeOverrides">
+  <n-config-provider
+    abstract
+    :theme-overrides="themeOverrides"
+  >
     <n-message-provider>
       <div class="container">
         <ToolBar />

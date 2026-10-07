@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -9,10 +10,11 @@ from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.download.application.service import staging_root
 from app.library.application.packages.resource_package import default_library_store
 from app.settings.application.errors import SettingsError
+from app.settings.application.watch_dirs import normalize_watch_dirs, validate_watch_dirs
 from app.library.application.workbench import load_channels, save_channels, save_system_settings
+from app.library.domain.models import ResourceType
 from app.settings.application.schemas import (
     BackupResult,
     ConsumeSettingsOut,
@@ -24,6 +26,8 @@ from app.settings.application.schemas import (
     SettingsView,
     SystemSettingsOut,
     SystemSettingPatch,
+    WatchSettingsOut,
+    WatchSettingsPatch,
 )
 from app.settings.application.secrets import (
     bangumi_token,
@@ -36,9 +40,11 @@ from app.settings.application.secrets import (
     tmdb_api_key,
 )
 from app.shared.config import resolve_log_dir
-from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, KEY_SYSTEM
+from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, KEY_WATCH, KEY_SYSTEM
 from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.shared.log import logger
+from app.shared.utils.watch_manager import watch_manager
+from app.shared.utils.watch_bridge import watch_bridge
 
 
 def _hint(secret: str) -> str | None:
@@ -62,12 +68,17 @@ def _stored_path(stored: dict, key: str) -> Path | None:
     return Path(text) if text else None
 
 
+def _default_download_dir(db_path: Path) -> Path:
+    """下载目录默认值：第三方下载器的输出目录（入库靠监视该目录，D-20261007-01）。"""
+    return db_path.parent / "downloads"
+
+
 def system_from_store(stored: dict, process_db: Path, backend_version: str) -> SystemSettingsOut:
     """已保存路径优先；未写过的键按当前库文件位置回落。"""
     anchor = (_stored_path(stored, "db_path") or process_db).resolve()
     library = _stored_path(stored, "library_path") or default_library_store(anchor)
     log_dir = _stored_path(stored, "log_dir") or resolve_log_dir()
-    downloads = _stored_path(stored, "download_dir") or staging_root(anchor)
+    downloads = _stored_path(stored, "download_dir") or _default_download_dir(anchor)
     backups = _stored_path(stored, "backup_dir") or backup_dir(anchor)
     return SystemSettingsOut(
         db_path=str(anchor),
@@ -79,6 +90,20 @@ def system_from_store(stored: dict, process_db: Path, backend_version: str) -> S
     )
 
 
+async def load_watch_dirs(session: AsyncSession) -> dict[str, list[str]]:
+    """已保存的监视目录（归一化后）。"""
+    raw = await SettingsRepository(session).get_json(KEY_WATCH)
+    dirs = raw.get("dirs")
+    return normalize_watch_dirs(dirs if isinstance(dirs, dict) else {})
+
+
+def env_watch_dirs() -> bool:
+    """监视目录是否由环境变量锁定。"""
+    import os
+
+    return bool(os.environ.get("BACKEND_WATCH_DIRS"))
+
+
 async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -> SettingsView:
     invalidate_secret_cache()
     tmdb = tmdb_api_key()
@@ -86,6 +111,7 @@ async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -
     mikan = mikan_base_url()
     stored = await SettingsRepository(session).get_json(KEY_SYSTEM)
     channels = await load_channels(session)
+    watch_dirs = await load_watch_dirs(session)
     return SettingsView(
         scrape=ScrapeSettingsOut(
             tmdb=_secret_state(tmdb, bool(env_tmdb_key())),
@@ -94,6 +120,7 @@ async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -
         ),
         system=system_from_store(stored, db_path, backend_version),
         consume=ConsumeSettingsOut(channels=channels),
+        watch=WatchSettingsOut(dirs=watch_dirs, env_locked=env_watch_dirs()),
     )
 
 
@@ -141,6 +168,26 @@ async def patch_consume(
 ) -> SettingsView:
     payload = {key: value.model_dump() for key, value in body.channels.items()}
     await save_channels(session, payload)
+    return await get_view(session, db_path, backend_version)
+
+
+async def patch_watch(
+    session: AsyncSession,
+    body: WatchSettingsPatch,
+    db_path: Path,
+    backend_version: str,
+) -> SettingsView:
+    """保存监视目录：归一化 + 校验 + 持久化 + 重配监视器。"""
+    if env_watch_dirs():
+        raise SettingsError("监视目录由环境变量提供，不能在此修改", 400)
+    normalized = normalize_watch_dirs(body.dirs)
+    validate_watch_dirs(normalized)
+    await SettingsRepository(session).put_json(KEY_WATCH, {"dirs": normalized})
+    applied = {ResourceType(key): dirs for key, dirs in normalized.items()}
+    watch_manager.apply(applied)
+    # 重配后补扫新目录，把后台未运行期间放入的文件补导入
+    if applied:
+        asyncio.create_task(watch_bridge.catch_up(applied))
     return await get_view(session, db_path, backend_version)
 
 _SYSTEM_PATH_KEYS = ("db_path", "library_path", "log_dir", "download_dir", "backup_dir")

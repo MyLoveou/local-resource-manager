@@ -2,7 +2,6 @@
   <header class="tool-bar">
     <n-button size="small" type="primary" @click="wizardRef?.open()">导入</n-button>
     <n-button v-if="isWork" size="small" :loading="addingWork" @click="addWorkDirectory">添加工作目录</n-button>
-    <n-button size="small" @click="downloadOpen = true">下载</n-button>
     <n-button size="small" @click="openSettings()">设置</n-button>
     <n-input
       class="tool-bar__search"
@@ -68,7 +67,6 @@
       <n-button size="small">主题</n-button>
     </n-dropdown>
     <ImportWizard ref="wizardRef" />
-    <DownloadDrawer v-model:show="downloadOpen" />
     <SettingsModal v-model:show="settingsOpen" :tab="settingsTab" />
     <ScrapeConfirmQueue v-model:show="scrapeOpen" :resource-ids="scrapeIds" />
   </header>
@@ -81,7 +79,6 @@ import { NButton, NDropdown, NInput, NPopconfirm, type DropdownOption } from 'na
 import { storeToRefs } from 'pinia'
 import { notify } from '@/application/notify'
 import ImportWizard from '@/components/ImportWizard/index.vue'
-import DownloadDrawer from '@/components/DownloadDrawer/index.vue'
 import SettingsModal from '@/components/SettingsModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
@@ -100,7 +97,6 @@ const library = useLibraryStore()
 const browse = useBrowseQueryStore()
 const scrapeOpen = ref(false)
 const scrapeIds = ref<number[]>([])
-const downloadOpen = ref(false)
 const settingsOpen = ref(false)
 const settingsTab = ref('scrape')
 const addingWork = ref(false)
