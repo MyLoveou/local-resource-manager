@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-mutating-props -- draft 是共享工作副本，弹窗内直改后由父组件统一保存，属本仓既定约定 -->
 <template>
   <n-modal
     :show="show"
@@ -27,6 +28,17 @@
         :value="draft.description"
         @update:value="draft.description = $event"
       />
+      <label class="edit-resource__label">作者</label>
+      <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
+      <template v-if="showTakenAt">
+        <label class="edit-resource__label">拍摄</label>
+        <input
+          class="edit-resource__taken"
+          type="datetime-local"
+          :value="draft.takenAtLocal"
+          @input="onTakenAtInput"
+        />
+      </template>
       <label class="edit-resource__label">评分</label>
       <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
       <label class="edit-resource__label">分类</label>
@@ -63,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+/* eslint-disable vue/no-mutating-props -- draft 是共享工作副本，弹窗内直改后由父组件统一保存，属本仓既定约定 */
 import { NButton, NInput, NModal, NRate, NSelect, NSpace, NTag } from 'naive-ui'
 import type { MetadataDraft } from '@/domain'
 
@@ -73,6 +86,7 @@ const props = defineProps<{
   coverUrl: string
   saving: boolean
   allowCover: boolean
+  showTakenAt?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -88,6 +102,10 @@ function onShow(value: boolean): void {
     return
   }
   emit('update:show', true)
+}
+
+function onTakenAtInput(event: Event): void {
+  props.draft.takenAtLocal = (event.target as HTMLInputElement).value
 }
 
 function commitTagInput(): void {
@@ -126,6 +144,16 @@ function removeTag(name: string): void {
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.edit-resource__taken {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
 }
 
 .edit-resource__label {

@@ -1,19 +1,56 @@
 <template>
   <div class="resource-browser">
-    <BrowseControls :type="type" :status="status" :placeholder="searchPlaceholder" />
-    <p v-if="batchMessage" class="resource-browser__hint">{{ batchMessage }}</p>
-    <div v-if="loading && items.length === 0" class="resource-browser__state">加载中…</div>
-    <div v-else-if="error && items.length === 0" class="resource-browser__state">
-      <p>加载失败</p>
-      <button type="button" class="resource-browser__retry" @click="reset">重试</button>
+    <BrowseControls
+      :type="type"
+      :status="status"
+      :placeholder="searchPlaceholder"
+    />
+    <p
+      v-if="batchMessage"
+      class="resource-browser__hint"
+    >
+      {{ batchMessage }}
+    </p>
+    <div
+      v-if="loading && items.length === 0"
+      class="resource-browser__state"
+    >
+      加载中…
     </div>
-    <EmptyGuide v-else-if="!loading && total === 0" :hint="resolvedEmptyHint" />
+    <div
+      v-else-if="error && items.length === 0"
+      class="resource-browser__state"
+    >
+      <p>加载失败</p>
+      <button
+        type="button"
+        class="resource-browser__retry"
+        @click="reset"
+      >
+        重试
+      </button>
+    </div>
+    <EmptyGuide
+      v-else-if="!loading && total === 0"
+      :hint="resolvedEmptyHint"
+    />
     <!-- 根据类型判断显示什么资源 --->
-    <VirtualGrid v-else class="resource-browser__grid" :items="gridItems" :selected-ids="gridSelectedIds"
-      @near-end="loadMore" @card-click="handleCardClick">
+    <VirtualGrid
+      v-else
+      class="resource-browser__grid"
+      :items="gridItems"
+      :selected-ids="gridSelectedIds"
+      @near-end="loadMore"
+      @card-click="handleCardClick"
+    >
       <template #footer>
         <span v-if="loadingMore">加载中…</span>
-        <button v-else-if="error && items.length > 0" type="button" class="resource-browser__retry" @click="loadMore">
+        <button
+          v-else-if="error && items.length > 0"
+          type="button"
+          class="resource-browser__retry"
+          @click="loadMore"
+        >
           加载失败，点击重试
         </button>
         <span v-else-if="!hasMore && total > 0">已加载全部 {{ total }} 项</span>
@@ -58,7 +95,9 @@ const browse = useBrowseQueryStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const searchPlaceholder = computed(() => (props.type ? '在本类中搜索' : isTrash.value ? '在回收站中搜索' : '在结果中筛选'))
 const resolvedEmptyHint = computed(() =>
-  session.value.q.trim() || session.value.tagIds.length ? '无匹配' : props.emptyHint
+  session.value.q.trim() || session.value.tagIds.length
+    ? '无匹配 · 搜索范围：标题 / 作者 / 描述 / 分类 / 标签 / 文件名'
+    : props.emptyHint
 )
 const { selectedIds } = storeToRefs(selection)
 const { batchMode, message: batchMessage, busy: batchBusy } = storeToRefs(shellBatch)

@@ -623,6 +623,41 @@ class ResourceRepository:
         stmt = select(FileRow.id).where(FileRow.path == path).limit(1)
         return (await self._session.scalar(stmt)) is not None
 
+    async def find_by_import_source(self, source_path: str) -> Resource | None:
+        """按导入源路径找既有资源（监视番剧增量入库用：extra.importSourcePath）。"""
+        stmt = (
+            select(ResourceRow)
+            .where(func.json_extract(ResourceRow.extra, "$.importSourcePath") == source_path)
+            .limit(1)
+        )
+        row = (await self._session.execute(stmt)).scalars().first()
+        return _orm_to_resource(row) if row else None
+
+    async def get_season(self, resource_id: int, season_number: int) -> SeasonRow | None:
+        stmt = (
+            select(SeasonRow)
+            .where(SeasonRow.resource_id == resource_id, SeasonRow.season_number == season_number)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalars().first()
+
+    async def get_episode(self, season_id: int, episode_number: int) -> EpisodeRow | None:
+        stmt = (
+            select(EpisodeRow)
+            .where(EpisodeRow.season_id == season_id, EpisodeRow.episode_number == episode_number)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalars().first()
+
+    async def max_episode_number(self, season_id: int) -> int:
+        stmt = select(func.max(EpisodeRow.episode_number)).where(EpisodeRow.season_id == season_id)
+        value = await self._session.scalar(stmt)
+        return int(value) if value is not None else 0
+
+    async def list_extras(self, resource_id: int) -> list[ExtraRow]:
+        stmt = select(ExtraRow).where(ExtraRow.resource_id == resource_id)
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def add_file(
         self,
         resource_id: int,
@@ -927,8 +962,19 @@ class ResourceRepository:
         ).scalars().all()
         return [Category(id=r.id, name=r.name) for r in rows]
 
-    async def list_tags(self) -> list[Tag]:
-        rows = (await self._session.execute(select(TagRow).order_by(TagRow.name))).scalars().all()
+    async def list_tags(self, type_: ResourceType | None = None) -> list[Tag]:
+        """标签词表；给类型时只返回该类型 active 资源实际打过的标签（本类标签筛选）。"""
+        stmt = select(TagRow).order_by(TagRow.name)
+        if type_ is not None:
+            stmt = (
+                select(TagRow)
+                .join(ResourceTagRow, ResourceTagRow.tag_id == TagRow.id)
+                .join(ResourceRow, ResourceRow.id == ResourceTagRow.resource_id)
+                .where(ResourceRow.type == type_.value, ResourceRow.status == "active")
+                .distinct()
+                .order_by(TagRow.name)
+            )
+        rows = (await self._session.execute(stmt)).scalars().all()
         return [Tag(id=r.id, name=r.name) for r in rows]
 
     async def get_file_by_role(self, resource_id: int, role: str) -> FileRow | None:

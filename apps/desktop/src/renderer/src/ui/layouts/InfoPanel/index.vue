@@ -42,7 +42,7 @@
             </button>
           </template>
           <template v-else>
-            <div class="info-panel-meta">格式 {{ formatLabel }}</div>
+            <div v-if="shown(formatLabel)" class="info-panel-meta">格式 {{ formatLabel }}</div>
             <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
           </template>
           <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
@@ -50,16 +50,16 @@
             删除 {{ resource.deletedAt || '—' }}
           </div>
           <template v-if="isImage">
-            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-            <div class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
           </template>
           <template v-else-if="isVideo">
-            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-            <div class="info-panel-meta">清晰度 {{ clarityText }}</div>
-            <div class="info-panel-meta">时长 {{ durationLabel }}</div>
-            <div class="info-panel-meta">帧率 {{ fpsLabel }}</div>
-            <div class="info-panel-meta">码率 {{ bitrateLabel }}</div>
-            <div class="info-panel-meta">画质 {{ qualityText }}</div>
+            <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div v-if="shown(clarityText)" class="info-panel-meta">清晰度 {{ clarityText }}</div>
+            <div v-if="shown(durationLabel)" class="info-panel-meta">时长 {{ durationLabel }}</div>
+            <div v-if="shown(fpsLabel)" class="info-panel-meta">帧率 {{ fpsLabel }}</div>
+            <div v-if="shown(bitrateLabel)" class="info-panel-meta">码率 {{ bitrateLabel }}</div>
+            <div v-if="shown(qualityText)" class="info-panel-meta">画质 {{ qualityText }}</div>
             <div v-if="subtitleNames.length" class="info-panel-meta">
               字幕 {{ subtitleNames.join('、') }}
             </div>
@@ -84,33 +84,39 @@
         </section>
         <section class="info-panel-section">
           <div class="info-panel-section-title">编辑</div>
-          <div class="info-panel-label">作品简介</div>
-          <n-input
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 5 }"
-            :value="draft.synopsis"
-            placeholder="站点或自行填写的作品简介"
-            @update:value="draft.synopsis = $event"
-          />
-          <div class="info-panel-label">我的评价</div>
-          <n-input
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 5 }"
-            :value="draft.description"
-            placeholder="你对这部作品的评价，刮削不会覆盖"
-            @update:value="draft.description = $event"
-          />
-          <div class="info-panel-label">作者</div>
-        <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
-        <template v-if="isImage">
-          <div class="info-panel-label">拍摄</div>
-          <input
-            class="info-panel-taken"
-            type="datetime-local"
-            :value="draft.takenAtLocal"
-            @input="onTakenAtInput"
-          />
-        </template>
+          <template v-if="shown(draft.synopsis)">
+            <div class="info-panel-label">作品简介</div>
+            <n-input
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+              :value="draft.synopsis"
+              placeholder="站点或自行填写的作品简介"
+              @update:value="draft.synopsis = $event"
+            />
+          </template>
+          <template v-if="shown(draft.description)">
+            <div class="info-panel-label">我的评价</div>
+            <n-input
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+              :value="draft.description"
+              placeholder="你对这部作品的评价，刮削不会覆盖"
+              @update:value="draft.description = $event"
+            />
+          </template>
+          <template v-if="shown(draft.author)">
+            <div class="info-panel-label">作者</div>
+            <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
+          </template>
+          <template v-if="isImage && shown(draft.takenAtLocal)">
+            <div class="info-panel-label">拍摄</div>
+            <input
+              class="info-panel-taken"
+              type="datetime-local"
+              :value="draft.takenAtLocal"
+              @input="onTakenAtInput"
+            />
+          </template>
         <div class="info-panel-label">待办</div>
         <div class="info-panel-todos">
           <div v-for="todo in resource.todos ?? []" :key="todo.id ?? todo.content" class="info-panel-todo">
@@ -234,8 +240,8 @@
         <p v-if="errorMessage" class="info-panel-error">{{ errorMessage }}</p>
       </div>
       <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
-        :saving="saving" :allow-cover="canChangeCover" @update:show="onModalShow" @save="saveModal"
-        @cancel="cancelModal" @pick-cover="pickCoverForModal" />
+        :saving="saving" :allow-cover="canChangeCover" :show-taken-at="isImage" @update:show="onModalShow"
+        @save="saveModal" @cancel="cancelModal" @pick-cover="pickCoverForModal" />
       <ScrapeConfirmQueue
         v-model:show="scrapeOpen"
         :resource-ids="scrapeIds"
@@ -603,6 +609,12 @@ function formatBytes(n: number | null | undefined): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** 空值（''/占位 '—'）不展示：次要字段美观收敛 */
+function shown(text: string): boolean {
+  const value = text.trim()
+  return value !== '' && value !== '—'
 }
 
 function commitTagInput(): void {

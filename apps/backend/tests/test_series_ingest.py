@@ -45,25 +45,27 @@ class SeriesPlanTests(unittest.TestCase):
         assert plan is not None
         self.assertEqual([p.episode for p in plan], [1, 2])
 
-    def test_unparseable_fails(self) -> None:
+    def test_unparseable_auto_numbers(self) -> None:
+        """完全抽不出集号 → 按文件名顺序自动编号，仍可入库（D-20261007 增强）。"""
         root = Path("Show")
-        self.assertIsNone(plan_series_videos(root, [root / "random.mkv"]))
         explained = explain_series_plan(root, [root / "random.mkv"])
-        self.assertFalse(explained.ok)
-        self.assertEqual(explained.code, "unrecognized_names")
-        self.assertIn("无法从文件名识别集号", explained.message)
-        self.assertIn("random.mkv", explained.details)
+        self.assertTrue(explained.ok)
+        episodes = [item for item in explained.items if item.kind == "episode"]
+        self.assertEqual([(item.season, item.episode) for item in episodes], [(1, 1)])
+        self.assertIn("自动编号", explained.message)
 
-    def test_missing_episode_in_season_dir(self) -> None:
+    def test_unparsed_in_season_dir_auto_numbers(self) -> None:
+        """季目录内抽不出集号 → 在已识别最大集号后顺延自动编号。"""
         root = Path("Show")
         explained = explain_series_plan(
             root,
             [root / "Season 01" / "01.mkv", root / "Season 01" / "untitled.mkv"],
         )
-        self.assertFalse(explained.ok)
-        self.assertEqual(explained.code, "missing_episode")
-        self.assertEqual(explained.items, ())
-        self.assertIn("untitled.mkv", explained.details)
+        self.assertTrue(explained.ok)
+        eps = sorted(
+            (item.season, item.episode) for item in explained.items if item.kind == "episode"
+        )
+        self.assertEqual(eps, [(1, 1), (1, 2)])
 
     def test_mixed_season_dirs(self) -> None:
         root = Path("Show")
@@ -109,7 +111,7 @@ class SeriesPlanTests(unittest.TestCase):
         root = Path("Show")
         videos = [root / f"random-{i}.mkv" for i in range(21)]
         explained = explain_series_plan(root, videos)
-        self.assertEqual(explained.code, "unrecognized_names")
+        self.assertTrue(explained.ok)
         self.assertEqual(len(explained.details), 20)
         self.assertEqual(explained.details[-1], "另有 2 个文件未列出")
 
@@ -246,7 +248,8 @@ class SeriesIngestTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(err, "series import requires a directory")
 
-    async def test_unparseable_dir_not_imported(self) -> None:
+    async def test_unparseable_dir_imports_auto_numbered(self) -> None:
+        """抽不出集号的目录按文件名顺序自动编号入库（D-20261007 增强）。"""
         folder = self.root / "Messy"
         self._mkv("Messy/random.mkv", b"x")
         async with self.factory() as session:
@@ -255,11 +258,8 @@ class SeriesIngestTests(unittest.IsolatedAsyncioTestCase):
             await ImportService(repo, store_root=self.store, file_ops=self.ops).run(
                 job, ResourceType.ANIME, "directory", [str(folder)]
             )
-            self.assertEqual(job.imported, 0)
-            self.assertGreaterEqual(job.skipped_error, 1)
-            self.assertEqual(job.message, "无法从文件名识别集号（需要 Season 目录、SxxExx 或可解析序号）")
-            self.assertEqual(job.code, "unrecognized_names")
-            self.assertTrue(any("random.mkv" in line for line in job.details))
+            self.assertEqual(job.imported, 1)
+            self.assertIn("自动编号", job.message)
 
 
 if __name__ == "__main__":

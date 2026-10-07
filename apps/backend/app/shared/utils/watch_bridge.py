@@ -9,14 +9,23 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from app.library.application.import_service import ImportService
-from app.library.domain.models import ResourceType
+from app.library.application.import_service import ImportService, hash_file
+from app.library.application.importers import importer_for
+from app.library.application.packages.layouts import layout_for
+from app.library.application.packages.resource_package import ResourcePackage, default_library_store
+from app.library.application.series_plan import classify_single_video
+from app.library.domain.media_types import FILE_ROLE_EPISODE, FILE_ROLE_EXTRA
+from app.library.domain.models import Resource, ResourceType, SourceKind
 from app.library.infrastructure.import_job_store import ImportJobState
+from app.library.infrastructure.repositories import ResourceRepository
+from app.shared.config import settings
 from app.shared.db.db import get_session_factory
+from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
 from app.shared.utils.file_watcher import EventType, FileEvent, File_Extension_Map
 from app.shared.utils.watch_events import watch_events
@@ -58,10 +67,122 @@ async def _import_files(events: list[FileEvent], type_: ResourceType) -> None:
         logger.warning("监视导入跳过（错误）: %s 个", job.skipped_error)
 
 
-async def _defer_series(events: list[FileEvent], type_: ResourceType) -> None:
-    """剧集型占位：自动导入未接入（需要目录级上下文，后续立项换实现）。"""
+async def _import_series(events: list[FileEvent], type_: ResourceType) -> None:
+    """剧集型（anime/av）：目录级增量入库。
+
+    事件按父目录分组；目录已有资源（extra.importSourcePath）→ 增量挂集；
+    没有 → 整目录系列导入（复用 ImportService series 路径，内部已做 sha256 去重与集树解析）。
+    """
+    factory = get_session_factory()
+    importer = importer_for(type_)
+    layout = layout_for(type_)
+    if importer is None or layout is None:
+        logger.warning("%s 无导入策略，跳过监视事件", type_.value)
+        return
+    by_dir: dict[str, list[FileEvent]] = {}
     for event in events:
-        logger.info("%s 监视目录自动导入未接入，跳过: %s", type_.value, event.path)
+        parent = str(Path(event.path).resolve().parent)
+        by_dir.setdefault(parent, []).append(event)
+    for dir_path, dir_events in by_dir.items():
+        try:
+            async with factory() as session:
+                repo = ResourceRepository(session)
+                existing = await repo.find_by_import_source(dir_path)
+                if existing is None:
+                    await _bootstrap_series(factory, type_, dir_path)
+                else:
+                    await _append_events(repo, existing, type_, layout, dir_path, dir_events)
+        except Exception as exc:  # noqa: BLE001 — 单目录失败不拖垮消费循环
+            logger.warning("监视剧集导入失败 %s: %s", dir_path, exc)
+
+
+async def _bootstrap_series(factory, type_: ResourceType, dir_path: str) -> None:
+    """首次监视到该目录：整目录系列导入。"""
+    job = ImportJobState(id=f"watch-{uuid.uuid4().hex}")
+    await ImportService(session_factory=factory).run(
+        job, type_, SourceKind.DIRECTORY.value, [dir_path], auto_scrape=False
+    )
+    if job.imported > 0:
+        logger.info("监视剧集导入完成（新建）: %s → %s", dir_path, type_.value)
+        watch_events.record(type_.value)
+    elif job.skipped_duplicate or job.skipped_error:
+        logger.info(
+            "监视剧集跳过: %s（重复 %s / 错误 %s）",
+            dir_path, job.skipped_duplicate, job.skipped_error,
+        )
+
+
+async def _append_events(
+    repo: ResourceRepository,
+    resource: Resource,
+    type_: ResourceType,
+    layout,
+    dir_path: str,
+    events: list[FileEvent],
+) -> None:
+    """增量：把监视到的新文件挂到既有系列（含季/集树）。"""
+    root = Path(dir_path)
+    store_root = default_library_store(settings.db_path)
+    imported = 0
+    skipped_dup = 0
+    for event in events:
+        src = Path(event.path)
+        digest = event.sha256
+        try:
+            if digest is None:
+                digest, size = await asyncio.to_thread(hash_file, src)
+            else:
+                size = await asyncio.to_thread(os.path.getsize, src)
+        except OSError as exc:
+            logger.warning("监视剧集跳过 %s: %s", src, exc)
+            continue
+        if await repo.file_exists_by_sha256(digest):
+            skipped_dup += 1
+            continue
+        kind, season, episode, title = classify_single_video(root, src)
+        season_row = None
+        if kind == "episode":
+            season_row = await repo.get_season(resource.id, season)
+            if season_row is not None and await repo.get_episode(season_row.id, episode) is not None:
+                skipped_dup += 1
+                logger.info("监视剧集跳过（集号已存在）: %s", src.name)
+                continue
+        suffix = src.suffix.lower()
+        if kind == "episode":
+            dest_rel = f"seasons/{season:02d}/S{season:02d}E{episode:02d}{suffix}"
+        else:
+            dest_rel = f"extras/{src.name}"
+        package = ResourcePackage(
+            store_root, type_, resource.id, FileOps(),
+            cover_falls_back_to_primary=layout.cover_falls_back_to_primary,
+        )
+        try:
+            dest = await asyncio.to_thread(package.put_relative, src, dest_rel)
+        except OSError as exc:
+            logger.warning("监视剧集复制失败 %s: %s", src, exc)
+            continue
+        file_row = await repo.add_file(
+            resource.id,
+            path=str(dest),
+            sha256=digest,
+            size=size,
+            format_=suffix.lstrip("."),
+            role=FILE_ROLE_EPISODE if kind == "episode" else FILE_ROLE_EXTRA,
+            commit=False,
+        )
+        if kind == "episode":
+            if season_row is None:
+                season_row = await repo.add_season(resource.id, season, sort_index=season, commit=False)
+            await repo.add_episode(season_row.id, file_row.id, episode, sort_index=episode, commit=False)
+        else:
+            await repo.add_extra(resource.id, file_row.id, title=title or src.stem, sort_index=0, commit=False)
+        imported += 1
+    if imported:
+        await repo.session.commit()
+        logger.info("监视剧集增量入库: %s 个 → %s(%s)", imported, resource.title, type_.value)
+        watch_events.record(type_.value)
+    if skipped_dup:
+        logger.info("监视剧集跳过（重复）: %s 个", skipped_dup)
 
 
 HANDLERS: dict[ResourceType, WatchHandler] = {
@@ -71,8 +192,8 @@ HANDLERS: dict[ResourceType, WatchHandler] = {
     ResourceType.NOVEL: _import_files,
     ResourceType.COMIC: _import_files,
     ResourceType.MODEL: _import_files,
-    ResourceType.ANIME: _defer_series,
-    ResourceType.AV: _defer_series,
+    ResourceType.ANIME: _import_series,
+    ResourceType.AV: _import_series,
 }
 
 

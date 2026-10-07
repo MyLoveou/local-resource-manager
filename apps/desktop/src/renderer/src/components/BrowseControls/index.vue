@@ -15,7 +15,10 @@
       :value="session.sort"
       @update:value="(value: string) => patch({ sort: value })"
     />
-    <n-button size="small" @click="toggleOrder">
+    <n-button
+      size="small"
+      @click="toggleOrder"
+    >
       {{ session.order === 'desc' ? '降序' : '升序' }}
     </n-button>
     <n-select
@@ -66,12 +69,23 @@ watch(
 )
 
 onMounted(() => {
-  void getTags().then((tags) => {
-    tagOptions.value = tags.flatMap((tag) =>
-      tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
-    )
-  })
+  void loadTags()
 })
+
+watch(
+  () => props.type,
+  () => {
+    void loadTags()
+  }
+)
+
+async function loadTags(): Promise<void> {
+  // 本类标签：给类型时只拉该类型实际打过的标签；全库页不传类型（全部标签）
+  const tags = await getTags(props.type)
+  tagOptions.value = tags.flatMap((tag) =>
+    tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+  )
+}
 
 onUnmounted(() => {
   if (timer) clearTimeout(timer)

@@ -81,11 +81,13 @@ def _fail(code: str, details: list[str]) -> ExplainedPlan:
     return ExplainedPlan(False, (), code, _FAIL_MESSAGES[code], _cap_details(details))
 
 
-def _ok(items: list[PlannedItem]) -> ExplainedPlan:
+def _ok(items: list[PlannedItem], auto_numbered: int = 0) -> ExplainedPlan:
     episodes = [item for item in items if item.kind == "episode"]
     extras = [item for item in items if item.kind == "extra"]
     seasons = {item.season for item in episodes}
     message = f"已识别 {len(seasons)} 季 · {len(episodes)} 集 · {len(extras)} 特典"
+    if auto_numbered:
+        message += f"（{auto_numbered} 集按文件名顺序自动编号）"
     details: list[str] = []
     for item in items:
         if item.kind == "episode" and item.episode is not None:
@@ -219,6 +221,15 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         mode = "flat"
     elif not episodes and extras:
         mode = "extras"
+    elif episodes and not any(
+        episode_number_from_stem(path.stem) is not None or sxx_season_from_stem(path.stem) is not None
+        for path in episodes
+    ):
+        # L3 降级：完全抽不出集号 → 按文件名顺序自动编号，仍可入库
+        mode = "numbered"
+    elif episodes:
+        # 混合：识别出的照用，抽不出的顺延自动编号
+        mode = "flat"
     else:
         unnamed = [
             path.name
@@ -229,7 +240,8 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
 
     items: list[PlannedItem] = []
     seen: dict[tuple[int, int], str] = {}
-    missing: list[str] = []
+    auto_numbered = 0
+    next_by_season: dict[int, int] = {}
     duplicates: list[str] = []
     for path in sorted(episodes, key=lambda item: item.as_posix().lower()):
         if mode == "dir":
@@ -238,12 +250,24 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         elif mode == "sxx":
             season = sxx_season_from_stem(path.stem)
             episode = episode_number_from_stem(path.stem)
-        else:
+        elif mode == "numbered":
             season = 1
+            episode = None
+        else:
+            season = sxx_season_from_stem(path.stem) or 1
             episode = episode_number_from_stem(path.stem)
-        if season is None or episode is None:
-            missing.append(path.name)
+        if season is None:
             continue
+        if episode is None:
+            # 抽不出集号的：在该季已识别最大集号之后按文件名顺序顺延编号
+            start = next_by_season.get(season)
+            if start is None:
+                recognized_max = max((ep for (s, ep) in seen if s == season), default=0)
+                start = recognized_max + 1
+                next_by_season[season] = start
+            episode = next_by_season[season]
+            next_by_season[season] = episode + 1
+            auto_numbered += 1
         key = (season, episode)
         previous = seen.get(key)
         if previous is not None:
@@ -254,8 +278,6 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         items.append(PlannedItem(path, "episode", season, episode, dest, None))
     if duplicates:
         return _fail("duplicate_episode", duplicates)
-    if missing:
-        return _fail("missing_episode", missing)
 
     used_names: set[str] = set()
     for index, path in enumerate(sorted(extras, key=lambda item: item.name.lower())):
@@ -264,10 +286,26 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
             name = f"{path.stem}_{index}{path.suffix.lower()}"
         used_names.add(name.lower())
         items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", path.stem))
-    return _ok(items)
+    return _ok(items, auto_numbered)
 
 
 def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | None:
     """全部可自动识别才返回计划；否则 None。"""
     explained = explain_series_plan(root, videos)
     return list(explained.items) if explained.ok else None
+
+
+def classify_single_video(root: Path, path: Path) -> tuple[str, int, int | None, str | None]:
+    """单文件分类（监视增量入库用）：(kind, season, episode, title)。
+
+    抽不出集号的视频归特典（title=文件名），保证任何渠道的文件都能进库。
+    """
+    if _is_extra(root, path):
+        return ("extra", 0, None, path.stem)
+    season = _season_in_path(root, path)
+    if season is None:
+        season = sxx_season_from_stem(path.stem)
+    episode = episode_number_from_stem(path.stem)
+    if episode is None:
+        return ("extra", 0, None, path.stem)
+    return ("episode", season or 1, episode, None)
