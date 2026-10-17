@@ -529,6 +529,22 @@
 
 ---
 
+### D-20261007-03 · 分区可见性用代码配置，统一隐藏未完成分区入口
+
+- 日期：2026-10-07
+- 场景：部分分区未实现/未完整实现，菜单仍占位；需求 `section-visibility`
+- **决定**：
+  1. 单一 TS 常量 `HIDDEN_SECTIONS`（key = 路由 path）+ 纯谓词 `isSectionHidden`，重启生效
+  2. 全链路一致：菜单不渲染、直达 URL 重定向 `/`、导入向导不提供该类型、首页概览不出该卡
+  3. 默认隐藏 `/av` `/novel` `/comic` `/game` `/model`；直接隐藏不灰显；`/` 不可隐藏；未知 key 忽略
+  4. 搜索与合集混排 v1 不过滤；不改后端/DB/资源类型，清空配置即恢复
+- **为何**：代码配置零新增持久化与 API；同一判定四处复用避免入口不一致
+- **不选**：设置页开关/环境变量；后端过滤契约；通配符；单功能级开关
+- **落点**：`facts.md` §一、`docs/requirements/features/section-visibility/`、`openspec/changes/section-visibility/`
+- 状态：有效
+
+---
+
 ## 已撤销 / 被取代
 
 ### D-20260830-mount · 子应用用 FastAPI.mount

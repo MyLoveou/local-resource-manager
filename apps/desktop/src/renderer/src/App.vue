@@ -10,11 +10,12 @@ import AudioPlayerOverlay from '@/components/AudioPlayerOverlay/index.vue'
 import ModelPreviewOverlay from '@/components/ModelPreviewOverlay/index.vue'
 import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
+import { isSectionHidden } from '@/domain/visibility'
 import { useThemeStore } from '@/application/stores/theme'
 import { readNaiveOverrides } from '@/ui/theme/applyTheme'
 import { useWatchAutoRefresh } from '@/hooks/useWatchAutoRefresh'
 
-const menuItems = computed(() => menuFromRoutes(routes))
+const menuItems = computed(() => menuFromRoutes(routes, isSectionHidden))
 const theme = useThemeStore()
 const themeOverrides = computed(() => {
   void theme.revision

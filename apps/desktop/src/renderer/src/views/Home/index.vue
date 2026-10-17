@@ -5,9 +5,9 @@
         <div class="overview-content">
           <h2>概览</h2>
           <div class="overview-content-cards">
-            <n-card v-for="(count, type) in overviewData?.stats.byType" :key="type" :title="typeMap[type] ?? type"
+            <n-card v-for="item in visibleStats" :key="item.type" :title="typeMap[item.type] ?? item.type"
               class="overview-content-card" hoverable>
-              {{ count }}
+              {{ item.count }}
             </n-card>
           </div>
         </div>
@@ -50,6 +50,7 @@ import { profileFor } from '@/domain'
 import { typeMap } from '@/utils/typeMap'
 import { useLibraryStore } from '@/application/stores/library'
 import { notify } from '@/application/notify'
+import { isSectionHidden } from '@/domain/visibility'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 
 const ACTION_LABEL: Record<string, string> = {
@@ -65,11 +66,22 @@ const overviewData = ref<Overview | null>(null)
 const router = useRouter()
 const activeWork = computed(() => overviewData.value?.activeWork ?? [])
 const recentConsumption = computed(() => overviewData.value?.recentConsumption ?? [])
+const visibleStats = computed(() =>
+  Object.entries(overviewData.value?.stats.byType ?? {})
+    .filter(([type]) => {
+      const path = profileFor(type as ResourceType)?.routePath
+      return !path || !isSectionHidden(path)
+    })
+    .map(([type, count]) => ({ type, count })),
+)
 const hasOverviewData = computed(() => {
   const data = overviewData.value
   if (!data) return false
-  const counts = Object.values(data.stats.byType ?? {})
-  return counts.some((count) => count > 0) || activeWork.value.length > 0 || recentConsumption.value.length > 0
+  return (
+    visibleStats.value.some((item) => item.count > 0) ||
+    activeWork.value.length > 0 ||
+    recentConsumption.value.length > 0
+  )
 })
 
 function actionLabel(action: string): string {
