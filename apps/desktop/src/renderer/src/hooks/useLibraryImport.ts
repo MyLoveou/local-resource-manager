@@ -68,7 +68,7 @@ export function useLibraryImport() {
       picking.value = false
       return
     }
-    let paths: string[] = []
+    let paths: string[]
     try {
       const pickers: Record<SourceKind, () => Promise<string[]>> = {
         [SourceKind.FILE]: async () => (await window.electron.selectFiles([filter])) ?? [],

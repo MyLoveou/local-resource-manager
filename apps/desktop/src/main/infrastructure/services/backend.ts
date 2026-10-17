@@ -7,7 +7,6 @@ import { randomBytes } from 'crypto'
 import http from 'http'
 import type { BackendConfig } from './config'
 import { getFreePort } from './port'
-import { log } from '../../log'
 
 /** 后端实例句柄 */
 export interface BackendInstance {

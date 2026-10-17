@@ -27,11 +27,6 @@ export const useVideoPlayerStore = defineStore('videoPlayer', () => {
     playlistIds.value = []
   }
 
-  function show(id: number): void {
-    currentId.value = id
-    selection.select(id)
-  }
-
 
   return { visible, playlistIds, currentId, currentFileId, open, close }
 })
