@@ -62,6 +62,7 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       afterKey: query.afterKey,
       q: query.q,
       tagIds: query.tagIds,
+      categoryId: query.categoryId,
       sort: query.sort,
       order: query.order,
     },
@@ -148,9 +149,12 @@ export interface ResourceBatchResult {
 
 export async function batchResources(
   action: ResourceBatchAction,
-  ids: number[]
+  ids: number[],
 ): Promise<ResourceBatchResult> {
-  const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', { action, ids })
+  const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', {
+    action,
+    ids,
+  })
   for (const id of ids) invalidateResourceCache(id)
   return data
 }

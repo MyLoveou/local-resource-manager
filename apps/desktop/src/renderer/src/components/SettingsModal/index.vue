@@ -213,18 +213,59 @@
           保存
         </n-button>
       </n-tab-pane>
+      <n-tab-pane
+        name="parse"
+        tab="命名解析"
+      >
+        <p class="set-modal__hint">
+          每行一条正则，命名组：title / author / bv / ep / date。用户规则优先于内置 bilidown 规则；不匹配时按文件名原样导入。文件名带 BV 的视频会自动获取元数据。
+        </p>
+        <n-input
+          type="textarea"
+          :autosize="{ minRows: 4, maxRows: 12 }"
+          :value="parseRulesText"
+          placeholder="^(?P<ep>\d+)-UP (?P<author>.+?)-(?P<bv>BV1[0-9A-Za-z]{9})-(?P<date>\d{4}-\d{1,2}-\d{1,2})-(?P<title>.+)$"
+          :disabled="busy"
+          @update:value="parseRulesText = $event"
+        />
+        <div class="set-modal__parse-switches">
+          <n-switch
+            :value="parseTitleWithEp"
+            :disabled="busy"
+            @update:value="parseTitleWithEp = $event"
+          />
+          <span>标题带 EP 前缀（43. 标题）</span>
+        </div>
+        <div class="set-modal__parse-switches">
+          <n-switch
+            :value="parseAutoCollection"
+            :disabled="busy"
+            @update:value="parseAutoCollection = $event"
+          />
+          <span>监视视频自动归集合集（按目录名）</span>
+        </div>
+        <n-button
+          size="small"
+          type="primary"
+          :loading="busy"
+          @click="saveParse"
+        >
+          保存
+        </n-button>
+      </n-tab-pane>
     </n-tabs>
   </n-modal>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NFormItem, NInput, NModal, NSelect, NTabPane, NTabs, NTag } from 'naive-ui'
+import { NButton, NFormItem, NInput, NModal, NSelect, NSwitch, NTabPane, NTabs, NTag } from 'naive-ui'
 import { notify } from '@/application/notify'
 import {
   backupLibrary,
   getSettings,
   patchConsumeSettings,
+  patchParseSettings,
   patchScrapeSettings,
   patchWatchSettings,
   type ChannelMode,
@@ -247,6 +288,9 @@ const bangumiToken = ref('')
 const mikanUrl = ref('')
 const channels = ref<Record<string, ChannelSetting>>({})
 const watchDirs = ref<Record<string, string[]>>({})
+const parseRulesText = ref('')
+const parseTitleWithEp = ref(false)
+const parseAutoCollection = ref(false)
 
 const MODE_LABEL: Record<ChannelMode, string> = {
   embedded: '内嵌预览',
@@ -310,6 +354,9 @@ async function load(): Promise<void> {
     mikanUrl.value = view.value.scrape.mikan.baseUrl
     channels.value = { ...(view.value.consume?.channels ?? {}) }
     watchDirs.value = { ...(view.value.watch?.dirs ?? {}) }
+    parseRulesText.value = (view.value.parse?.rules ?? []).join('\n')
+    parseTitleWithEp.value = view.value.parse?.titleWithEp ?? false
+    parseAutoCollection.value = view.value.parse?.autoCollection ?? false
   } catch (error) {
     notify.fromError(error, { context: '读取设置' })
   }
@@ -397,6 +444,27 @@ async function saveWatch(): Promise<void> {
     notify.toast.success('已保存，监视已生效')
   } catch (error) {
     notify.fromError(error, { context: '保存监视目录' })
+  } finally {
+    busy.value = false
+  }
+}
+
+async function saveParse(): Promise<void> {
+  const rules = parseRulesText.value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+  busy.value = true
+  try {
+    view.value = await patchParseSettings({
+      rules,
+      titleWithEp: parseTitleWithEp.value,
+      autoCollection: parseAutoCollection.value,
+    })
+    parseRulesText.value = (view.value.parse?.rules ?? []).join('\n')
+    notify.toast.success('已保存')
+  } catch (error) {
+    notify.fromError(error, { context: '保存命名解析规则' })
   } finally {
     busy.value = false
   }
@@ -539,5 +607,13 @@ watch(
 .set-modal__watch-empty {
   font-size: 12px;
   color: var(--sm-color-text-muted);
+}
+
+.set-modal__parse-switches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  font-size: 13px;
 }
 </style>

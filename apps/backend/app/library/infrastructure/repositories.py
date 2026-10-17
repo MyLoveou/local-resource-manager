@@ -6,11 +6,13 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import and_, asc, desc, exists, func, or_, select
+from sqlalchemy import and_, asc, desc, exists, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.infrastructure.orm import (
     CategoryRow,
+    CollectionItemRow,
+    CollectionRow,
     EpisodeRow,
     ExtraRow,
     FileRow,
@@ -29,6 +31,7 @@ from app.library.domain.media_types import (
 from app.shared.utils.time import db_now, db_ts
 from app.library.domain.models import (
     Category,
+    Collection,
     Resource,
     WorkCatalog,
     ResourceFile,
@@ -480,11 +483,14 @@ class ResourceRepository:
         status: ResourceStatus | None,
         q: str | None = None,
         tag_ids: list[int] | None = None,
+        category_id: int | None = None,
     ):
         if type_ is not None:
             stmt = stmt.where(ResourceRow.type == type_.value)
         if status is not None:
             stmt = stmt.where(ResourceRow.status == status.value)
+        if category_id is not None:
+            stmt = stmt.where(ResourceRow.category_id == category_id)
         return self._search_filter(stmt, q, tag_ids)
 
     async def count(
@@ -493,9 +499,12 @@ class ResourceRepository:
         status: ResourceStatus | None = None,
         q: str | None = None,
         tag_ids: list[int] | None = None,
+        category_id: int | None = None,
     ) -> int:
         """与 list 相同过滤条件下的总数。"""
-        stmt = self._filter(select(func.count()).select_from(ResourceRow), type_, status, q, tag_ids)
+        stmt = self._filter(
+            select(func.count()).select_from(ResourceRow), type_, status, q, tag_ids, category_id
+        )
         total = await self._session.scalar(stmt)
         return int(total or 0)
 
@@ -510,6 +519,7 @@ class ResourceRepository:
         sort: str = "createdAt",
         q: str | None = None,
         tag_ids: list[int] | None = None,
+        category_id: int | None = None,
         after_key: str | None = None,
         after_created_at: str | None = None,
         after_id: int | None = None,
@@ -523,6 +533,7 @@ class ResourceRepository:
             sort=sort,
             q=q,
             tag_ids=tag_ids,
+            category_id=category_id,
             after_key=after_key,
             after_created_at=after_created_at,
             after_id=after_id,
@@ -540,6 +551,7 @@ class ResourceRepository:
         sort: str = "createdAt",
         q: str | None = None,
         tag_ids: list[int] | None = None,
+        category_id: int | None = None,
         after_key: str | None = None,
         after_created_at: str | None = None,
         after_id: int | None = None,
@@ -547,7 +559,10 @@ class ResourceRepository:
         from app.library.application.list_query import serialize_sort_value
 
         sort_expr = self._sort_expr(sort)
-        stmt = self._filter(select(ResourceRow, sort_expr.label("sort_value")), type_, status, q, tag_ids)
+        stmt = self._filter(
+            select(ResourceRow, sort_expr.label("sort_value")),
+            type_, status, q, tag_ids, category_id,
+        )
         cursor_key = after_key
         if cursor_key is None and after_created_at is not None and sort == "createdAt":
             cursor_key = after_created_at
@@ -1107,6 +1122,78 @@ class ResourceRepository:
         }
 
 
+    async def list_mixed(self, limit: int, offset: int) -> tuple[list[object], int]:
+        """全库混排（无过滤时）：active 资源 + 合集按时间倒序，offset 分页。
+
+        返回条目：Resource（领域模型）或合集卡 dict（cardType=collection）。
+        """
+        union = (
+            select(
+                literal("resource").label("kind"),
+                ResourceRow.id.label("rid"),
+                ResourceRow.created_at.label("ts"),
+            )
+            .where(ResourceRow.status == ResourceStatus.ACTIVE.value)
+            .union_all(
+                select(
+                    literal("collection").label("kind"),
+                    CollectionRow.id.label("rid"),
+                    CollectionRow.updated_at.label("ts"),
+                )
+            )
+            .subquery()
+        )
+        total = int(await self._session.scalar(select(func.count()).select_from(union)) or 0)
+        rows = (await self._session.execute(
+            select(union.c.kind, union.c.rid)
+            .order_by(union.c.ts.desc(), union.c.rid.desc())
+            .limit(limit)
+            .offset(offset)
+        )).all()
+        items: list[object] = []
+        for kind, rid in rows:
+            if kind == "resource":
+                row = await self._session.get(ResourceRow, rid)
+                if row is not None and row.status == ResourceStatus.ACTIVE.value:
+                    items.append(_orm_to_resource(row))
+            else:
+                col_row = await self._session.get(CollectionRow, rid)
+                if col_row is None:
+                    continue
+                count = await self._session.scalar(
+                    select(func.count())
+                    .select_from(CollectionItemRow)
+                    .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
+                    .where(
+                        CollectionItemRow.collection_id == rid,
+                        ResourceRow.status == ResourceStatus.ACTIVE.value,
+                    )
+                )
+                thumb = (await self._session.execute(
+                    select(FileRow)
+                    .join(CollectionItemRow, CollectionItemRow.resource_id == FileRow.resource_id)
+                    .join(ResourceRow, ResourceRow.id == FileRow.resource_id)
+                    .where(
+                        CollectionItemRow.collection_id == rid,
+                        FileRow.role == FILE_ROLE_THUMBNAIL,
+                        ResourceRow.status == ResourceStatus.ACTIVE.value,
+                    )
+                    .order_by(CollectionItemRow.position)
+                    .limit(1)
+                )).scalars().first()
+                items.append({
+                    "cardType": "collection",
+                    "id": rid,
+                    "title": col_row.title,
+                    "memberCount": int(count or 0),
+                    "updatedAt": col_row.updated_at,
+                    "thumbnailPath": (
+                        _file_content_url(thumb.resource_id, thumb.id) if thumb is not None else None
+                    ),
+                })
+        return items, total
+
+
 class TaskSummaryRepository:
     """进行中任务计数（跨 scrape/download 表，只读）。"""
 
@@ -1130,3 +1217,173 @@ class TaskSummaryRepository:
             "failed_scrape_jobs": int(failed_scrape_jobs or 0),
             "active_downloads": 0,
         }
+
+
+class CollectionRepository:
+    """合集仓储：CRUD + 成员增删排序。"""
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def create(self, title: str, description: str | None = None) -> Collection:
+        row = CollectionRow(title=title.strip(), description=description)
+        self._session.add(row)
+        await self._session.commit()
+        await self._session.refresh(row)
+        return Collection(id=row.id, title=row.title, description=row.description,
+                          created_at=row.created_at, updated_at=row.updated_at)
+
+    async def list(self) -> list[Collection]:
+        rows = (await self._session.execute(
+            select(CollectionRow).order_by(CollectionRow.updated_at.desc())
+        )).scalars().all()
+        out: list[Collection] = []
+        for row in rows:
+            count = await self._active_member_count(row.id)
+            out.append(Collection(id=row.id, title=row.title, description=row.description,
+                                  member_count=count, created_at=row.created_at,
+                                  updated_at=row.updated_at))
+        return out
+
+    async def get(self, collection_id: int) -> Collection | None:
+        row = await self._session.get(CollectionRow, collection_id)
+        if row is None:
+            return None
+        count = await self._active_member_count(row.id)
+        return Collection(id=row.id, title=row.title, description=row.description,
+                          member_count=count, created_at=row.created_at,
+                          updated_at=row.updated_at)
+
+    async def find_by_title(self, title: str) -> Collection | None:
+        row = (await self._session.execute(
+            select(CollectionRow).where(CollectionRow.title == title.strip()).limit(1)
+        )).scalars().first()
+        if row is None:
+            return None
+        return await self.get(row.id)
+
+    async def rename(self, collection_id: int, title: str, description: str | None) -> Collection | None:
+        row = await self._session.get(CollectionRow, collection_id)
+        if row is None:
+            return None
+        row.title = title.strip()
+        row.description = description
+        row.updated_at = db_now()
+        await self._session.commit()
+        await self._session.refresh(row)
+        return await self.get(row.id)
+
+    async def delete(self, collection_id: int) -> bool:
+        row = await self._session.get(CollectionRow, collection_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
+    async def add_item(self, collection_id: int, resource_id: int) -> bool:
+        """加入成员；已存在则原位置保留（幂等成功）。"""
+        existing = await self._session.get(CollectionItemRow, (collection_id, resource_id))
+        if existing is not None:
+            return True
+        max_pos = await self._session.scalar(
+            select(func.max(CollectionItemRow.position))
+            .where(CollectionItemRow.collection_id == collection_id)
+        )
+        self._session.add(CollectionItemRow(
+            collection_id=collection_id, resource_id=resource_id,
+            position=int(max_pos or -1) + 1,
+        ))
+        await self._touch_collection(collection_id)
+        await self._session.commit()
+        return True
+
+    async def remove_item(self, collection_id: int, resource_id: int) -> bool:
+        row = await self._session.get(CollectionItemRow, (collection_id, resource_id))
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        await self._compact_positions(collection_id)
+        await self._touch_collection(collection_id)
+        await self._session.commit()
+        return True
+
+    async def members(self, collection_id: int) -> list[Resource]:
+        rows = (await self._session.execute(
+            select(ResourceRow)
+            .join(CollectionItemRow, CollectionItemRow.resource_id == ResourceRow.id)
+            .where(CollectionItemRow.collection_id == collection_id,
+                   ResourceRow.status == ResourceStatus.ACTIVE.value)
+            .order_by(CollectionItemRow.position)
+        )).scalars().all()
+        resources = [_orm_to_resource(row) for row in rows]
+        return await self._attach_thumbnails(resources)
+
+    async def member_ids(self, collection_id: int) -> list[int]:
+        rows = (await self._session.execute(
+            select(CollectionItemRow.resource_id)
+            .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
+            .where(CollectionItemRow.collection_id == collection_id,
+                   ResourceRow.status == ResourceStatus.ACTIVE.value)
+            .order_by(CollectionItemRow.position)
+        )).all()
+        return [int(row[0]) for row in rows]
+
+    async def move_item(self, collection_id: int, resource_id: int, direction: str) -> bool:
+        """上移/下移一位。"""
+        ids = await self.member_ids(collection_id)
+        if resource_id not in ids or len(ids) < 2:
+            return False
+        index = ids.index(resource_id)
+        target = index - 1 if direction == "up" else index + 1
+        if target < 0 or target >= len(ids):
+            return False
+        ids[index], ids[target] = ids[target], ids[index]
+        for position, rid in enumerate(ids):
+            row = await self._session.get(CollectionItemRow, (collection_id, rid))
+            if row is not None:
+                row.position = position
+        await self._touch_collection(collection_id)
+        await self._session.commit()
+        return True
+
+    async def collections_of(self, resource_id: int) -> list[Collection]:
+        rows = (await self._session.execute(
+            select(CollectionRow)
+            .join(CollectionItemRow, CollectionItemRow.collection_id == CollectionRow.id)
+            .where(CollectionItemRow.resource_id == resource_id)
+            .order_by(CollectionRow.updated_at.desc())
+        )).scalars().all()
+        return [Collection(id=row.id, title=row.title, description=row.description,
+                           created_at=row.created_at, updated_at=row.updated_at)
+                for row in rows]
+
+    async def _active_member_count(self, collection_id: int) -> int:
+        value = await self._session.scalar(
+            select(func.count())
+            .select_from(CollectionItemRow)
+            .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
+            .where(CollectionItemRow.collection_id == collection_id,
+                   ResourceRow.status == ResourceStatus.ACTIVE.value)
+        )
+        return int(value or 0)
+
+    async def _compact_positions(self, collection_id: int) -> None:
+        ids = [int(row[0]) for row in (await self._session.execute(
+            select(CollectionItemRow.resource_id)
+            .where(CollectionItemRow.collection_id == collection_id)
+            .order_by(CollectionItemRow.position)
+        )).all()]
+        for position, rid in enumerate(ids):
+            row = await self._session.get(CollectionItemRow, (collection_id, rid))
+            if row is not None:
+                row.position = position
+
+    async def _touch_collection(self, collection_id: int) -> None:
+        row = await self._session.get(CollectionRow, collection_id)
+        if row is not None:
+            row.updated_at = db_now()
+
+    async def _attach_thumbnails(self, resources: list[Resource]) -> list[Resource]:
+        return await ResourceRepository(self._session).attach_listed(resources)

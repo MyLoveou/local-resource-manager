@@ -19,10 +19,11 @@ from app.library.application.importers import importer_for
 from app.library.application.packages.layouts import layout_for
 from app.library.application.packages.resource_package import ResourcePackage, default_library_store
 from app.library.application.series_plan import classify_single_video
+from app.library.application.video_naming import load_parse_settings
 from app.library.domain.media_types import FILE_ROLE_EPISODE, FILE_ROLE_EXTRA
 from app.library.domain.models import Resource, ResourceType, SourceKind
 from app.library.infrastructure.import_job_store import ImportJobState
-from app.library.infrastructure.repositories import ResourceRepository
+from app.library.infrastructure.repositories import CollectionRepository, ResourceRepository
 from app.shared.config import settings
 from app.shared.db.db import get_session_factory
 from app.shared.fs.file_ops import FileOps
@@ -61,10 +62,39 @@ async def _import_files(events: list[FileEvent], type_: ResourceType) -> None:
     if job.imported > 0:
         logger.info("监视批量导入完成: %s 个 → %s", job.imported, type_.value)
         watch_events.record(type_.value)
+        await _auto_collect(events, factory)
     if job.skipped_duplicate:
         logger.info("监视导入跳过（重复）: %s 个", job.skipped_duplicate)
     if job.skipped_error:
         logger.warning("监视导入跳过（错误）: %s 个", job.skipped_error)
+
+
+async def _auto_collect(events: list[FileEvent], factory) -> None:
+    """自动归集合集（开关打开时）：按目录名定位/新建合集，把导入的资源加入。"""
+    try:
+        async with factory() as session:
+            parse_settings = await load_parse_settings(session)
+            if not parse_settings.auto_collection:
+                return
+            resources = ResourceRepository(session)
+            collections = CollectionRepository(session)
+            by_dir: dict[str, list[int]] = {}
+            for event in events:
+                resource = await resources.find_by_import_source(event.path)
+                if resource is None or resource.id is None:
+                    continue
+                parent = str(Path(event.path).resolve().parent)
+                by_dir.setdefault(parent, []).append(resource.id)
+            for dir_path, resource_ids in by_dir.items():
+                name = Path(dir_path).name
+                collection = await collections.find_by_title(name)
+                if collection is None:
+                    collection = await collections.create(name)
+                for resource_id in resource_ids:
+                    await collections.add_item(collection.id, resource_id)
+                logger.info("监视导入已归集合集「%s」: %s 个", name, len(resource_ids))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("自动归集合集失败: %s", exc)
 
 
 async def _import_series(events: list[FileEvent], type_: ResourceType) -> None:

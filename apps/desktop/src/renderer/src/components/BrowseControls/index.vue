@@ -32,13 +32,23 @@
       :value="session.tagIds"
       @update:value="(value: number[]) => patch({ tagIds: value ?? [] })"
     />
+    <n-select
+      size="small"
+      class="browse-controls__category"
+      filterable
+      clearable
+      placeholder="分类"
+      :options="categoryOptions"
+      :value="session.categoryId"
+      @update:value="(value: number | null) => patch({ categoryId: value ?? null })"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NInput, NSelect } from 'naive-ui'
-import { getTags } from '@/infrastructure/http'
+import { getCategories, getTags } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 
@@ -52,6 +62,7 @@ const browse = useBrowseQueryStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const localQ = ref(session.value.q)
 const tagOptions = ref<{ label: string; value: number }[]>([])
+const categoryOptions = ref<{ label: string; value: number }[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined
 
 const sortOptions = computed(() =>
@@ -70,6 +81,11 @@ watch(
 
 onMounted(() => {
   void loadTags()
+  void getCategories().then((categories) => {
+    categoryOptions.value = categories.flatMap((category) =>
+      category.id === undefined ? [] : [{ label: category.name, value: category.id }]
+    )
+  })
 })
 
 watch(
@@ -91,7 +107,13 @@ onUnmounted(() => {
   if (timer) clearTimeout(timer)
 })
 
-function patch(partial: { q?: string; sort?: string; order?: 'asc' | 'desc'; tagIds?: number[] }): void {
+function patch(partial: {
+  q?: string
+  sort?: string
+  order?: 'asc' | 'desc'
+  tagIds?: number[]
+  categoryId?: number | null
+}): void {
   browse.patch(props.type, props.status, partial)
 }
 
@@ -130,5 +152,9 @@ function toggleOrder(): void {
 .browse-controls__tags {
   min-width: 160px;
   flex: 1;
+}
+
+.browse-controls__category {
+  width: 140px;
 }
 </style>

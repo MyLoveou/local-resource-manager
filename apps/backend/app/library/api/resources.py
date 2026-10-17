@@ -68,11 +68,12 @@ async def list_resources(
     after_key: str | None = Query(default=None, alias="afterKey"),
     q: str | None = Query(default=None, max_length=200),
     tag_ids: list[int] | None = Query(default=None, alias="tagIds"),
+    category_id: int | None = Query(default=None, alias="categoryId"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourcePage:
-    """资源分页列表（可按类型/状态/关键词/标签过滤）。"""
+    """资源分页列表（可按类型/状态/关键词/标签/分类过滤）。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order,
@@ -81,6 +82,7 @@ async def list_resources(
         after_key=after_key,
         q=q,
         tag_ids=tag_ids,
+        category_id=category_id,
     )
 
 

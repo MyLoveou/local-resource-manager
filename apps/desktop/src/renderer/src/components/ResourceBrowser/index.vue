@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import BrowseControls from '@/components/BrowseControls/index.vue'
@@ -74,7 +74,7 @@ import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
 import { consumeResource } from '@/infrastructure/consume/consumeResource'
 import { storeToRefs } from 'pinia'
-import type { ResourceStatus, ResourceType } from '@/domain'
+import { isCollectionCard, type ResourceStatus, type ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
@@ -108,10 +108,12 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   sort: () => session.value.sort,
   order: () => session.value.order,
   tagIds: () => session.value.tagIds,
+  categoryId: () => session.value.categoryId,
 })
 const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
 const route = useRoute()
+const router = useRouter()
 
 function pagerFor(resourceType: ResourceType) {
   return {
@@ -146,11 +148,16 @@ const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []
 
 function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
+  const item = items.value.find((row) => row.id === itemId)
+  // 合集卡：点击进入成员页
+  if (item && isCollectionCard(item)) {
+    void router.push(`/collections/${item.id}`)
+    return
+  }
   if (batchMode.value) {
     selection.toggle(itemId)
     return
   }
-  const item = items.value.find((row) => row.id === itemId)
   if (selection.selectedId === itemId) {
     if (!item) return
     void consumeResource(item, ids(item.type))
@@ -171,7 +178,7 @@ watch(
 
 function ids(type: ResourceType): number[] {
   return items.value.flatMap((item) =>
-    item.id !== undefined && item.type === type ? [item.id] : []
+    item.id !== undefined && !isCollectionCard(item) && item.type === type ? [item.id] : []
   )
 }
 
@@ -311,18 +318,27 @@ onUnmounted(() => {
 })
 
 const gridItems = computed(() =>
-  items.value.flatMap((item) =>
-    item.id === undefined
-      ? []
-      : [
+  items.value.flatMap((item) => {
+    if (item.id === undefined) return []
+    if (isCollectionCard(item)) {
+      return [
         {
           id: item.id,
           title: item.title,
           coverUrl: resolveCardImageUrl(item),
-          badge: item.scrapePending ? '候选' : undefined,
+          badge: `合集 · ${item.memberCount}`,
         },
       ]
-  )
+    }
+    return [
+      {
+        id: item.id,
+        title: item.title,
+        coverUrl: resolveCardImageUrl(item),
+        badge: item.scrapePending ? '候选' : undefined,
+      },
+    ]
+  })
 )
 </script>
 

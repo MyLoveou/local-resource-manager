@@ -133,3 +133,24 @@ class ConsumptionEventRow(Base):
     action: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str | None] = mapped_column(String)
 
+
+class CollectionRow(Base):
+    __tablename__ = 'collections'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
+class CollectionItemRow(Base):
+    __tablename__ = 'collection_items'
+
+    collection_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('collections.id', ondelete='CASCADE'), primary_key=True
+    )
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('resources.id', ondelete='CASCADE'), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

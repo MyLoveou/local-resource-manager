@@ -8,10 +8,11 @@ export type BrowseSession = {
   sort: string
   order: 'asc' | 'desc'
   tagIds: number[]
+  categoryId: number | null
 }
 
 function defaultSession(): BrowseSession {
-  return { q: '', sort: 'createdAt', order: 'desc', tagIds: [] }
+  return { q: '', sort: 'createdAt', order: 'desc', tagIds: [], categoryId: null }
 }
 
 export function browseScopeKey(type?: ResourceType, status?: ResourceStatus): string {

@@ -42,6 +42,11 @@ export interface SettingsView {
     dirs: Record<string, string[]>
     envLocked: boolean
   }
+  parse: {
+    rules: string[]
+    titleWithEp: boolean
+    autoCollection: boolean
+  }
 }
 
 export interface ScrapeSettingsPatch {
@@ -128,5 +133,19 @@ export async function patchWatchSettings(body: {
   dirs: Record<string, string[]>
 }): Promise<SettingsView> {
   const { data } = await client.patch<SettingsView>('/settings/watch', body)
+  return data
+}
+
+/**
+ * 更新视频文件名解析规则（每行一条正则，命名组 title/author/bv/ep/date）
+ * @param body 规则列表
+ * @returns SettingsView
+ */
+export async function patchParseSettings(body: {
+  rules?: string[]
+  titleWithEp?: boolean
+  autoCollection?: boolean
+}): Promise<SettingsView> {
+  const { data } = await client.patch<SettingsView>('/settings/parse', body)
   return data
 }

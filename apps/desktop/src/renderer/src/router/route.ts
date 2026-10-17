@@ -35,6 +35,24 @@ export const routes: RouteRecordRaw[] = [
   },
   ...typeRoutes,
   {
+    path: '/collections',
+    name: 'Collections',
+    component: () => import('@/views/Collections/index.vue'),
+    meta: {
+      title: '合集',
+      icon: 'collections',
+    },
+  },
+  {
+    path: '/collections/:id',
+    name: 'CollectionDetail',
+    component: () => import('@/views/CollectionDetail/index.vue'),
+    meta: {
+      title: '合集',
+      hideMenu: true,
+    },
+  },
+  {
     path: '/trash',
     name: 'Trash',
     component: () => import('@/views/Trash/index.vue'),

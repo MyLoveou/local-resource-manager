@@ -4,7 +4,7 @@
 import { computed, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { getResources, invalidateResourceCache } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
-import type { Resource, ResourceStatus, ResourceType } from '@/domain'
+import type { CollectionCardData, Resource, ResourceStatus, ResourceType } from '@/domain'
 
 const DEFAULT_LIMIT = 80
 
@@ -15,9 +15,10 @@ export function useResourcePage(options: {
   sort?: MaybeRefOrGetter<string>
   order?: MaybeRefOrGetter<'asc' | 'desc'>
   tagIds?: MaybeRefOrGetter<number[]>
+  categoryId?: MaybeRefOrGetter<number | null>
   limit?: number
 }) {
-  const items = ref<Resource[]>([])
+  const items = ref<(Resource | CollectionCardData)[]>([])
   const total = ref(0)
   const hasMore = ref(true)
   const loading = ref(false)
@@ -36,6 +37,7 @@ export function useResourcePage(options: {
   const sort = computed(() => toValue(options.sort) ?? 'createdAt')
   const order = computed(() => toValue(options.order) ?? 'desc')
   const tagIds = computed(() => toValue(options.tagIds) ?? [])
+  const categoryId = computed(() => toValue(options.categoryId) ?? null)
 
   async function fetchPage(append: boolean): Promise<void> {
     const run = runFetch(append)
@@ -65,6 +67,7 @@ export function useResourcePage(options: {
         order: order.value,
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
+        categoryId: categoryId.value,
         afterKey: append ? cursorKey : undefined,
         afterId: append ? cursorId : undefined,
       })
@@ -120,6 +123,7 @@ export function useResourcePage(options: {
         order: order.value,
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
+        categoryId: categoryId.value,
       })
       if (id !== requestId) return
       total.value = page.total
@@ -181,7 +185,7 @@ export function useResourcePage(options: {
     }
   )
 
-  watch([type, q, sort, order, tagIds], () => {
+  watch([type, q, sort, order, tagIds, categoryId], () => {
     void reset()
   })
 

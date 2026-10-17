@@ -215,6 +215,25 @@ class Category(ApiModel):
     name: str
 
 
+class Collection(ApiModel):
+    """合集：用户给已有资源起的一组（跨类型、手动排序）。"""
+
+    id: int | None = None
+    title: str
+    description: str | None = None
+    member_count: int = 0  # active 成员数（列表展示用）
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class CollectionItem(ApiModel):
+    """合集成员（resourceId 引用 + 手动顺序）。"""
+
+    collection_id: int
+    resource_id: int
+    position: int = 0
+
+
 class SourceKind(str, Enum):
     """导入来源：文件或多文件 / 一次选目录。"""
 

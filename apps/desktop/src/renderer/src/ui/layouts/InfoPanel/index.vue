@@ -213,6 +213,7 @@
             {{ revealLabel }}
           </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
+          <n-button size="small" @click="openCollections">加入合集</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
             <n-button size="small">更多</n-button>
           </n-dropdown>
@@ -242,6 +243,42 @@
       <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
         :saving="saving" :allow-cover="canChangeCover" :show-taken-at="isImage" @update:show="onModalShow"
         @save="saveModal" @cancel="cancelModal" @pick-cover="pickCoverForModal" />
+      <n-modal
+        :show="collectionOpen"
+        preset="card"
+        title="加入合集"
+        style="width: 360px"
+        @update:show="onCollectionShow"
+      >
+        <div
+          v-for="collection in collectionList"
+          :key="collection.id"
+          class="info-panel-collection-row"
+        >
+          <n-checkbox
+            :checked="collectionMemberIds.has(collection.id)"
+            @update:checked="(checked: boolean) => toggleCollection(collection.id, checked)"
+          >
+            {{ collection.title }}（{{ collection.memberCount }}）
+          </n-checkbox>
+        </div>
+        <div class="info-panel-collection-add">
+          <n-input
+            v-model:value="newCollectionTitle"
+            size="small"
+            placeholder="新合集名称"
+            @keydown.enter.prevent="createAndAdd"
+          />
+          <n-button
+            size="small"
+            type="primary"
+            :disabled="!newCollectionTitle.trim() || collectionBusy"
+            @click="createAndAdd"
+          >
+            新建并加入
+          </n-button>
+        </div>
+      </n-modal>
       <ScrapeConfirmQueue
         v-model:show="scrapeOpen"
         :resource-ids="scrapeIds"
@@ -260,12 +297,19 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { NButton, NCheckbox, NDropdown, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
+import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { getResource, getCategories, invalidateCategories, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
+import {
+  addCollectionItem,
+  createCollection,
+  listCollections,
+  removeCollectionItem,
+  resourceCollections,
+} from '@/infrastructure/http/collections'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
@@ -279,8 +323,9 @@ import {
   revealablePath,
 } from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
+import { notify } from '@/application/notify'
 import { storeToRefs } from 'pinia'
-import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
+import type { Category, Collection, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
   FILE_ROLE,
@@ -940,6 +985,65 @@ async function removeNote(noteId: string): Promise<void> {
   }
 }
 
+const collectionOpen = ref(false)
+const collectionList = ref<Collection[]>([])
+const collectionMemberIds = ref(new Set<number>())
+const newCollectionTitle = ref('')
+const collectionBusy = ref(false)
+
+async function openCollections(): Promise<void> {
+  const id = resource.value?.id
+  if (id == null) return
+  collectionOpen.value = true
+  try {
+    const [all, mine] = await Promise.all([listCollections(), resourceCollections(id)])
+    collectionList.value = all
+    collectionMemberIds.value = new Set(mine.map((collection) => collection.id))
+  } catch (error) {
+    notify.fromError(error, { context: '读取合集' })
+  }
+}
+
+function onCollectionShow(value: boolean): void {
+  collectionOpen.value = value
+}
+
+async function toggleCollection(collectionId: number, checked: boolean): Promise<void> {
+  const id = resource.value?.id
+  if (id == null) return
+  collectionBusy.value = true
+  try {
+    if (checked) {
+      await addCollectionItem(collectionId, id)
+      collectionMemberIds.value.add(collectionId)
+    } else {
+      await removeCollectionItem(collectionId, id)
+      collectionMemberIds.value.delete(collectionId)
+    }
+  } catch (error) {
+    notify.fromError(error, { context: '更新合集' })
+  } finally {
+    collectionBusy.value = false
+  }
+}
+
+async function createAndAdd(): Promise<void> {
+  const id = resource.value?.id
+  const title = newCollectionTitle.value.trim()
+  if (id == null || !title) return
+  collectionBusy.value = true
+  try {
+    const created = await createCollection({ title })
+    await addCollectionItem(created.id, id)
+    newCollectionTitle.value = ''
+    await openCollections()
+  } catch (error) {
+    notify.fromError(error, { context: '新建合集' })
+  } finally {
+    collectionBusy.value = false
+  }
+}
+
 function onMoreSelect(key: string | number): void {
   if (key === 'cover') {
     void pickCoverImmediate()
@@ -1226,5 +1330,15 @@ async function handlePurge(): Promise<void> {
   grid-column: 1;
   color: var(--sm-color-text-muted);
   font-size: 12px;
+}
+
+.info-panel-collection-row {
+  margin-bottom: 6px;
+}
+
+.info-panel-collection-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 </style>

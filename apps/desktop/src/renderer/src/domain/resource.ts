@@ -185,6 +185,7 @@ export interface ResourcePageQuery {
   afterKey?: string | null
   q?: string
   tagIds?: number[]
+  categoryId?: number | null
   sort?: string
   order?: 'asc' | 'desc'
 }

@@ -1,6 +1,6 @@
 """资源库应用 DTO（API 契约，继承 ApiModel 以输出 camelCase）。"""
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -74,9 +74,9 @@ class ResourceSortField(str, Enum):
 
 
 class ResourcePage(ApiModel):
-    """资源列表分页信封。"""
+    """资源列表分页信封。全库混排时 items 含 Resource 与 CollectionCard。"""
 
-    items: list[Resource]
+    items: list[Any]
     total: int
     limit: int
     offset: int
@@ -84,6 +84,47 @@ class ResourcePage(ApiModel):
     next_created_at: str | None = None
     next_id: int | None = None
     next_key: str | None = None
+
+
+class CollectionCard(ApiModel):
+    """全库混排里的合集卡。"""
+
+    card_type: Literal["collection"] = "collection"
+    id: int
+    title: str
+    member_count: int = 0
+    updated_at: str | None = None
+
+
+class CollectionCreate(ApiModel):
+    title: str
+    description: str | None = None
+
+
+class CollectionPatch(ApiModel):
+    title: str | None = None
+    description: str | None = None
+
+
+class CollectionOut(ApiModel):
+    id: int
+    title: str
+    description: str | None = None
+    member_count: int = 0
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class CollectionList(ApiModel):
+    items: list[CollectionOut]
+
+
+class CollectionAddItem(ApiModel):
+    resource_id: int
+
+
+class CollectionMove(ApiModel):
+    direction: Literal["up", "down"]
 
 
 class ResourcePatch(ApiModel):

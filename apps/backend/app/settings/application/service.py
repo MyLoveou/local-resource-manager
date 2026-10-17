@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -14,12 +15,15 @@ from app.library.application.packages.resource_package import default_library_st
 from app.settings.application.errors import SettingsError
 from app.settings.application.watch_dirs import normalize_watch_dirs, validate_watch_dirs
 from app.library.application.workbench import load_channels, save_channels, save_system_settings
+from app.library.application.video_naming import invalidate_user_rules
 from app.library.domain.models import ResourceType
 from app.settings.application.schemas import (
     BackupResult,
     ConsumeSettingsOut,
     ConsumeSettingsPatch,
     MikanState,
+    ParseRulesOut,
+    ParseRulesPatch,
     ScrapeSettingsOut,
     ScrapeSettingsPatch,
     SecretState,
@@ -40,7 +44,7 @@ from app.settings.application.secrets import (
     tmdb_api_key,
 )
 from app.shared.config import resolve_log_dir
-from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB, KEY_WATCH, KEY_SYSTEM
+from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_PARSE, KEY_TMDB, KEY_WATCH, KEY_SYSTEM
 from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.shared.log import logger
 from app.shared.utils.watch_manager import watch_manager
@@ -104,6 +108,17 @@ def env_watch_dirs() -> bool:
     return bool(os.environ.get("BACKEND_WATCH_DIRS"))
 
 
+async def load_parse_rules_raw(session: AsyncSession) -> list[str]:
+    raw = await SettingsRepository(session).get_json(KEY_PARSE)
+    rules = raw.get("rules")
+    return [str(item) for item in rules] if isinstance(rules, list) else []
+
+
+async def load_parse_flags(session: AsyncSession) -> tuple[bool, bool]:
+    raw = await SettingsRepository(session).get_json(KEY_PARSE)
+    return bool(raw.get("titleWithEp")), bool(raw.get("autoCollection"))
+
+
 async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -> SettingsView:
     invalidate_secret_cache()
     tmdb = tmdb_api_key()
@@ -112,6 +127,7 @@ async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -
     stored = await SettingsRepository(session).get_json(KEY_SYSTEM)
     channels = await load_channels(session)
     watch_dirs = await load_watch_dirs(session)
+    title_with_ep, auto_collection = await load_parse_flags(session)
     return SettingsView(
         scrape=ScrapeSettingsOut(
             tmdb=_secret_state(tmdb, bool(env_tmdb_key())),
@@ -121,6 +137,11 @@ async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -
         system=system_from_store(stored, db_path, backend_version),
         consume=ConsumeSettingsOut(channels=channels),
         watch=WatchSettingsOut(dirs=watch_dirs, env_locked=env_watch_dirs()),
+        parse=ParseRulesOut(
+            rules=await load_parse_rules_raw(session),
+            title_with_ep=title_with_ep,
+            auto_collection=auto_collection,
+        ),
     )
 
 
@@ -188,6 +209,36 @@ async def patch_watch(
     # 重配后补扫新目录，把后台未运行期间放入的文件补导入
     if applied:
         asyncio.create_task(watch_bridge.catch_up(applied))
+    return await get_view(session, db_path, backend_version)
+
+
+async def patch_parse(
+    session: AsyncSession,
+    body: ParseRulesPatch,
+    db_path: Path,
+    backend_version: str,
+) -> SettingsView:
+    """保存视频文件名解析规则与开关：正则逐条校验，无效 400；保存后失效缓存。"""
+    current = await SettingsRepository(session).get_json(KEY_PARSE)
+    merged = {
+        "rules": list(current.get("rules") or []),
+        "titleWithEp": bool(current.get("titleWithEp")),
+        "autoCollection": bool(current.get("autoCollection")),
+    }
+    if body.rules is not None:
+        rules = [str(item).strip() for item in body.rules if isinstance(item, str) and item.strip()]
+        for rule in rules:
+            try:
+                re.compile(rule)
+            except re.error as exc:
+                raise SettingsError(f"无效正则：{exc}", 400) from exc
+        merged["rules"] = rules
+    if body.title_with_ep is not None:
+        merged["titleWithEp"] = body.title_with_ep
+    if body.auto_collection is not None:
+        merged["autoCollection"] = body.auto_collection
+    await SettingsRepository(session).put_json(KEY_PARSE, merged)
+    invalidate_user_rules()
     return await get_view(session, db_path, backend_version)
 
 _SYSTEM_PATH_KEYS = ("db_path", "library_path", "log_dir", "download_dir", "backup_dir")

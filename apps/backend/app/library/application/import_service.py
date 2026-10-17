@@ -26,6 +26,7 @@ from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
@@ -266,12 +267,31 @@ class ImportService:
             job.skipped_duplicate += 1
             return
         extra = {"importSourcePath": str(source)}
+        # 视频文件名元数据解析：bilidown 内置规则 + 用户自定义规则
+        parsed_name: ParsedVideoName | None = None
+        title = source.stem
+        author: str | None = None
+        if type_ == ResourceType.VIDEO:
+            parse_settings = await load_parse_settings(resources.session)
+            parsed_name = parse_video_name(source.stem, list(parse_settings.rules))
+            if parsed_name is not None:
+                title = parsed_name.title or source.stem
+                # EP 前缀轻增强（开关）：43. 标题
+                if parse_settings.title_with_ep and parsed_name.ep is not None:
+                    title = f"{parsed_name.ep:02d}. {title}"
+                author = parsed_name.author
+                if parsed_name.bv:
+                    bili: dict[str, object] = {"bv": parsed_name.bv}
+                    if parsed_name.ep is not None:
+                        bili["ep"] = parsed_name.ep
+                    extra["bilibili"] = bili
         package: ResourcePackage | None = None
         try:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=source.stem,
+                    title=title,
+                    author=author,
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra=extra,
@@ -336,10 +356,17 @@ class ImportService:
             job.phase = "thumb"
             await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
             job.phase = "index"
-            if auto_scrape:
+            if parsed_name is not None and parsed_name.bv:
+                # 文件名带 BV：直接按 BV 获取元数据（监视与手动导入一致）
                 from app.scrape.application.enqueue import enqueue_search_after_import
 
-                await enqueue_search_after_import(resources._session, resource.id, type_)
+                await enqueue_search_after_import(
+                    resources.session, resource.id, type_, query=parsed_name.bv
+                )
+            elif auto_scrape:
+                from app.scrape.application.enqueue import enqueue_search_after_import
+
+                await enqueue_search_after_import(resources.session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:

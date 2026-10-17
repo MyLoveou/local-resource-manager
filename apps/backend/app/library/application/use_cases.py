@@ -27,7 +27,11 @@ from app.library.application.schemas import (
 from app.library.application.workbench import active_work, recent_consumption
 from app.library.application.subtitle_naming import original_stem_from_extra, subtitle_dest_name
 from app.library.domain.type_profile import allows_user_cover
-from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
+from app.library.infrastructure.repositories import (
+    CollectionRepository,
+    ResourceRepository,
+    TaskSummaryRepository,
+)
 from app.shared.config import settings
 from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
@@ -38,6 +42,7 @@ from app.library.domain.media_types import (
     SUBTITLE_EXTENSIONS,
 )
 from app.library.domain.models import (
+    Collection,
     Resource,
     ResourceStatus,
     ResourceType,
@@ -83,13 +88,34 @@ class LibraryQueryService:
         after_id: int | None = None,
         q: str | None = None,
         tag_ids: list[int] | None = None,
+        category_id: int | None = None,
         after_key: str | None = None,
     ) -> ResourcePage:
-        """分页列表。q/tagIds/sort 服务端过滤；非法 sort 422。"""
+        """分页列表。q/tagIds/categoryId/sort 服务端过滤；非法 sort 422。"""
         query = normalize_q(q)
         tags = tag_ids or []
         if sort.value not in allowed_sorts(type_):
             raise HTTPException(status_code=422, detail="sort not allowed")
+        # 全库混排：type 为空、无任何过滤、默认排序时，资源与合集按时间混排（offset 分页）
+        mixed_ok = (
+            type_ is None
+            and (status is None or status == ResourceStatus.ACTIVE)
+            and not query
+            and not tags
+            and category_id is None
+            and sort.value == "createdAt"
+            and order == "desc"
+            and after_key is None
+        )
+        if mixed_ok:
+            items, total = await self._resources.list_mixed(limit, offset)
+            return ResourcePage(
+                items=items,
+                total=total,
+                limit=limit,
+                offset=offset,
+                has_more=(offset + limit) < total,
+            )
         fetch = limit + 1
         cursor_key = after_key
         if cursor_key is None and after_created_at is not None and sort.value == "createdAt":
@@ -104,13 +130,16 @@ class LibraryQueryService:
             sort=sort.value,
             q=query,
             tag_ids=tags,
+            category_id=category_id,
             after_key=cursor_key if use_keyset else None,
             after_id=after_id if use_keyset else None,
         )
         has_more = len(items) > limit
         items = items[:limit]
         keys = keys[:limit]
-        total = await self._resources.count(type_, status, q=query, tag_ids=tags)
+        total = await self._resources.count(
+            type_, status, q=query, tag_ids=tags, category_id=category_id
+        )
         last = items[-1] if items else None
         next_key = keys[-1] if has_more and keys else None
         next_created = next_key if has_more and sort.value == "createdAt" else None
@@ -353,3 +382,64 @@ class LibraryQueryService:
                 logger.exception("批量操作失败 id=%s action=%s", rid, action)
                 failed.append(ResourceBatchFailedItem(id=rid, message="operation failed"))
         return ResourceBatchResult(ok=ok, failed=failed)
+
+
+"""合集用例：CRUD + 成员增删排序。标题空白 422；合集不存在 404；资源不存在 422。"""
+
+
+class CollectionService:
+    def __init__(self, collections: CollectionRepository, resources: ResourceRepository):
+        self._collections = collections
+        self._resources = resources
+
+    async def list(self) -> list[Collection]:
+        return await self._collections.list()
+
+    async def create(self, title: str, description: str | None) -> Collection:
+        if not (title or "").strip():
+            raise HTTPException(status_code=422, detail="title required")
+        return await self._collections.create(title, description)
+
+    async def get(self, collection_id: int) -> Collection:
+        collection = await self._collections.get(collection_id)
+        if collection is None:
+            raise HTTPException(status_code=404, detail="collection not found")
+        return collection
+
+    async def patch(self, collection_id: int, title: str | None, description: str | None) -> Collection:
+        existing = await self._collections.get(collection_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="collection not found")
+        next_title = title if title is not None else existing.title
+        if not next_title.strip():
+            raise HTTPException(status_code=422, detail="title required")
+        next_desc = description if description is not None else existing.description
+        updated = await self._collections.rename(collection_id, next_title, next_desc)
+        assert updated is not None
+        return updated
+
+    async def delete(self, collection_id: int) -> None:
+        if not await self._collections.delete(collection_id):
+            raise HTTPException(status_code=404, detail="collection not found")
+
+    async def members(self, collection_id: int) -> list[Resource]:
+        await self.get(collection_id)
+        return await self._collections.members(collection_id)
+
+    async def add_item(self, collection_id: int, resource_id: int) -> None:
+        await self.get(collection_id)
+        if await self._resources.get(resource_id) is None:
+            raise HTTPException(status_code=422, detail="resource not found")
+        await self._collections.add_item(collection_id, resource_id)
+
+    async def remove_item(self, collection_id: int, resource_id: int) -> None:
+        await self.get(collection_id)
+        await self._collections.remove_item(collection_id, resource_id)
+
+    async def move_item(self, collection_id: int, resource_id: int, direction: str) -> None:
+        await self.get(collection_id)
+        await self._collections.move_item(collection_id, resource_id, direction)
+
+    async def collections_of(self, resource_id: int) -> list[Collection]:
+        return await self._collections.collections_of(resource_id)
+
