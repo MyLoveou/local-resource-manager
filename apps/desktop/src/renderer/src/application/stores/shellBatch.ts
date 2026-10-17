@@ -7,7 +7,7 @@ export type ShellBatchContext = 'browse' | 'trash'
 
 type ShellBatchBindings = {
   emptyTrash: () => Promise<void>
-  runBatch: (action: ResourceBatchAction) => Promise<void>
+  runBatch: (action: ResourceBatchAction, tagNames?: string[]) => Promise<void>
 }
 
 export const useShellBatchStore = defineStore('shellBatch', () => {
@@ -68,8 +68,8 @@ export const useShellBatchStore = defineStore('shellBatch', () => {
     await bindings?.emptyTrash()
   }
 
-  async function runBatch(action: ResourceBatchAction): Promise<void> {
-    await bindings?.runBatch(action)
+  async function runBatch(action: ResourceBatchAction, tagNames?: string[]): Promise<void> {
+    await bindings?.runBatch(action, tagNames)
   }
 
   return {

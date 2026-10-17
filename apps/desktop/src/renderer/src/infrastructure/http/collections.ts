@@ -61,3 +61,13 @@ export async function resourceCollections(resourceId: number): Promise<Collectio
   )
   return data.items
 }
+
+export async function exportCollection(
+  id: number,
+  targetDir: string,
+): Promise<{ exported: number; skipped: number; targetDir: string }> {
+  const { data } = await client.post(`/library/collections/${id}/export`, {
+    targetDir,
+  })
+  return data
+}

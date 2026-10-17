@@ -25,7 +25,7 @@
         <n-button v-if="isTrash" size="tiny" :disabled="busy" @click="enter">
           批量选择
         </n-button>
-        <n-button v-else size="tiny" :disabled="busy" @click="enter">批量删除</n-button>
+        <n-button v-else size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
         <n-button v-if="!isTrash" size="tiny" :disabled="busy" @click="enterScrape">获取元数据</n-button>
       </template>
       <template v-else>
@@ -60,6 +60,25 @@
         <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="startScrape">
           获取元数据
         </n-button>
+        <template v-if="!isTrash">
+          <n-input
+            class="tool-bar__tag-input"
+            size="tiny"
+            placeholder="打标：输入标签回车"
+            :value="tagDraft"
+            :disabled="busy || selectedCount === 0"
+            @update:value="(value: string) => (tagDraft = value)"
+            @keydown.enter.prevent="addTagDraft"
+          />
+          <span v-if="tagNames.length > 0" class="tool-bar__tag-chips">{{ tagNames.join(' / ') }}</span>
+          <n-button
+            size="tiny"
+            :disabled="busy || selectedCount === 0 || tagNames.length === 0"
+            @click="commitBatchTag"
+          >
+            打标
+          </n-button>
+        </template>
         <n-button size="tiny" :disabled="busy" @click="exit">取消</n-button>
       </template>
     </div>
@@ -129,6 +148,33 @@ async function addWorkDirectory(): Promise<void> {
 function enterScrape(): void {
   enter()
 }
+
+const tagNames = ref<string[]>([])
+const tagDraft = ref('')
+
+function addTagDraft(): void {
+  const name = tagDraft.value.trim()
+  if (!name) return
+  if (!tagNames.value.includes(name)) tagNames.value.push(name)
+  tagDraft.value = ''
+}
+
+async function commitBatchTag(): Promise<void> {
+  if (tagNames.value.length === 0) return
+  const names = [...tagNames.value]
+  await runBatch('add_tags', names)
+  tagNames.value = []
+}
+
+watch(
+  () => batchMode.value,
+  (value) => {
+    if (!value) {
+      tagNames.value = []
+      tagDraft.value = ''
+    }
+  }
+)
 
 async function startScrape(): Promise<void> {
   const ids = [...selection.selectedIds]
@@ -253,5 +299,18 @@ async function onThemeSelect(key: string): Promise<void> {
   flex-shrink: 0;
   font-size: 13px;
   color: var(--sm-color-text);
+}
+
+.tool-bar__tag-input {
+  width: 160px;
+}
+
+.tool-bar__tag-chips {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: 0.8;
 }
 </style>

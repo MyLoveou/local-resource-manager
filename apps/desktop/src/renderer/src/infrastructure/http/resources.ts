@@ -135,7 +135,7 @@ export async function purgeResource(resourceId: number): Promise<{ ok: boolean }
   return data
 }
 
-export type ResourceBatchAction = 'trash' | 'restore' | 'purge'
+export type ResourceBatchAction = 'trash' | 'restore' | 'purge' | 'add_tags'
 
 export interface ResourceBatchFailedItem {
   id: number
@@ -150,10 +150,12 @@ export interface ResourceBatchResult {
 export async function batchResources(
   action: ResourceBatchAction,
   ids: number[],
+  tagNames?: string[],
 ): Promise<ResourceBatchResult> {
   const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', {
     action,
     ids,
+    ...(tagNames ? { tagNames } : {}),
   })
   for (const id of ids) invalidateResourceCache(id)
   return data

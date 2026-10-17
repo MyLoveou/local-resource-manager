@@ -29,6 +29,14 @@
       </n-button>
       <n-button
         size="small"
+        :disabled="members.length === 0"
+        :loading="exporting"
+        @click="exportToFolder"
+      >
+        导出
+      </n-button>
+      <n-button
+        size="small"
         @click="goBack"
       >
         返回
@@ -58,6 +66,7 @@ import { notify } from '@/application/notify'
 import { resolveCardImageUrl } from '@/infrastructure/http'
 import {
   collectionMembers,
+  exportCollection,
   getCollection,
   moveCollectionItem,
   removeCollectionItem,
@@ -127,6 +136,28 @@ async function moveSelected(direction: 'up' | 'down'): Promise<void> {
 
 function goBack(): void {
   void router.push('/collections')
+}
+
+const exporting = ref(false)
+
+async function exportToFolder(): Promise<void> {
+  const id = Number(route.params.id)
+  if (!Number.isFinite(id)) return
+  const dir = await window.electron?.selectDirectory()
+  if (!dir) return
+  exporting.value = true
+  try {
+    const result = await exportCollection(id, dir)
+    if (result.skipped > 0) {
+      notify.toast.warning(`已导出 ${result.exported} 个文件，跳过 ${result.skipped} 个（文件缺失）`)
+    } else {
+      notify.toast.success(`已导出 ${result.exported} 个文件`)
+    }
+  } catch (error) {
+    notify.fromError(error, { context: '导出合集' })
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(() => {

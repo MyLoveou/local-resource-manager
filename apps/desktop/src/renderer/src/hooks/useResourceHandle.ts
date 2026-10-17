@@ -50,8 +50,12 @@ export function useResourceHandle() {
     return purgeResourceApi(resourceId)
   }
 
-  const batchResources = (action: ResourceBatchAction, ids: number[]): Promise<ResourceBatchResult> => {
-    return batchResourcesApi(action, ids)
+  const batchResources = (
+    action: ResourceBatchAction,
+    ids: number[],
+    tagNames?: string[],
+  ): Promise<ResourceBatchResult> => {
+    return batchResourcesApi(action, ids, tagNames)
   }
 
   return {

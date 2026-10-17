@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.library.application.schemas import (
     CollectionAddItem,
     CollectionCreate,
+    CollectionExportRequest,
+    CollectionExportResult,
     CollectionList,
     CollectionMove,
     CollectionOut,
@@ -101,6 +103,16 @@ async def move_collection_item(
     service: CollectionService = Depends(_service),
 ) -> None:
     await service.move_item(collection_id, resource_id, body.direction)
+
+
+@router.post("/{collection_id}/export", response_model=CollectionExportResult)
+async def export_collection(
+    collection_id: int,
+    body: CollectionExportRequest,
+    service: CollectionService = Depends(_service),
+) -> CollectionExportResult:
+    """把合集成员主文件按顺序复制到目标目录（返图用）。"""
+    return await service.export(collection_id, body.target_dir)
 
 
 resource_collections_router = APIRouter(prefix="/resources", tags=["library-collections"])

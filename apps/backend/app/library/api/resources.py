@@ -91,9 +91,9 @@ async def batch_resources(
     body: ResourceBatchRequest,
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourceBatchResult:
-    """批量 trash / restore / purge；部分失败仍返回 200。"""
+    """批量 trash / restore / purge / add_tags；逐条处理，失败项返回明细。"""
     resources, tasks = repos
-    return await LibraryQueryService(resources, tasks).batch(body.action, body.ids)
+    return await LibraryQueryService(resources, tasks).batch(body.action, body.ids, body.tag_names)
 
 
 @router.get("/{resource_id}/content")

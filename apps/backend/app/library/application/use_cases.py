@@ -5,12 +5,16 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+import shutil
+
 from app.library.application.covers import CoverNotAllowedError, attach_cover_image
+from app.library.application.export_naming import export_name
 from app.library.application.list_query import allowed_sorts, normalize_q
 from app.library.application.media_probe import normalize_taken_at
 from app.library.application.packages.layouts import layout_for
 from app.library.application.packages.resource_package import ResourcePackage, default_library_store
 from app.library.application.schemas import (
+    CollectionExportResult,
     CoverReplace,
     Overview,
     ResourceBatchFailedItem,
@@ -33,9 +37,9 @@ from app.library.infrastructure.repositories import (
     TaskSummaryRepository,
 )
 from app.shared.config import settings
+from app.shared.log import logger
 from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
-from app.shared.log import logger
 from app.library.domain.media_types import (
     COVER_EXTENSIONS,
     FILE_ROLE_PRIMARY,
@@ -342,7 +346,9 @@ class LibraryQueryService:
             raise RuntimeError("failed to delete package")
         return await self._resources.delete_row(existing.id)
 
-    async def batch(self, action: str, ids: list[int]) -> ResourceBatchResult:
+    async def batch(
+        self, action: str, ids: list[int], tag_names: list[str] | None = None
+    ) -> ResourceBatchResult:
         """逐条独立提交；部分失败不影响已成功项。"""
         unique: list[int] = []
         seen: set[int] = set()
@@ -353,6 +359,7 @@ class LibraryQueryService:
             unique.append(rid)
         ok: list[int] = []
         failed: list[ResourceBatchFailedItem] = []
+        names = [name.strip() for name in (tag_names or []) if name.strip()]
         for rid in unique:
             try:
                 if action == "trash":
@@ -373,6 +380,12 @@ class LibraryQueryService:
                         ok.append(rid)
                     else:
                         failed.append(ResourceBatchFailedItem(id=rid, message="resource not found"))
+                elif action == "add_tags":
+                    if not names:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="empty tags"))
+                    else:
+                        await self._resources.add_tags_union(rid, names)
+                        ok.append(rid)
                 else:
                     failed.append(ResourceBatchFailedItem(id=rid, message="invalid action"))
             except InvalidStateError:
@@ -442,4 +455,36 @@ class CollectionService:
 
     async def collections_of(self, resource_id: int) -> list[Collection]:
         return await self._collections.collections_of(resource_id)
+
+    async def export(self, collection_id: int, target_dir: str) -> CollectionExportResult:
+        """导出合集成员主文件到目标目录（按合集顺序编号命名；缺失文件跳过）。"""
+        await self.get(collection_id)
+        members = await self._collections.members(collection_id)
+        if not members:
+            raise HTTPException(status_code=422, detail="collection has no members")
+        target = Path(target_dir).resolve()
+        if not target.is_dir():
+            raise HTTPException(status_code=400, detail="target directory not found")
+        exported = 0
+        skipped = 0
+        for index, resource in enumerate(members, start=1):
+            file_row = await self._resources.get_file_by_role(
+                resource.id, FILE_ROLE_PRIMARY
+            ) if resource.id is not None else None
+            if file_row is None or not file_row.path:
+                skipped += 1
+                continue
+            source = Path(file_row.path)
+            if not source.is_file():
+                skipped += 1
+                continue
+            name = export_name(index, resource.title, source.suffix)
+            try:
+                shutil.copy2(source, target / name)
+                exported += 1
+            except OSError:
+                skipped += 1
+        return CollectionExportResult(
+            exported=exported, skipped=skipped, target_dir=str(target)
+        )
 

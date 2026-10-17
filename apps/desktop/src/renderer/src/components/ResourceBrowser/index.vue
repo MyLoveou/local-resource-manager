@@ -182,19 +182,24 @@ function ids(type: ResourceType): number[] {
   )
 }
 
-async function runBatch(action: ResourceBatchAction): Promise<void> {
+async function runBatch(action: ResourceBatchAction, tagNames?: string[]): Promise<void> {
   const ids = [...selectedIds.value]
   if (ids.length === 0) return
   const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
   try {
-    const result = await batchResources(action, ids)
+    const result = await batchResources(action, ids, tagNames)
     library.bump(null)
     if (!shellBatch.isLive(live)) return
-    shellBatch.exit()
-    if (result.failed.length > 0) {
-      batchMessage.value = `完成 ${result.ok.length} 项，失败 ${result.failed.length} 项`
+    if (action === 'add_tags') {
+      batchMessage.value = `已为 ${result.ok.length} 项添加标签`
+      selection.clear()
+    } else {
+      shellBatch.exit()
+      if (result.failed.length > 0) {
+        batchMessage.value = `完成 ${result.ok.length} 项，失败 ${result.failed.length} 项`
+      }
     }
   } catch (err) {
     if (!shellBatch.isLive(live)) return

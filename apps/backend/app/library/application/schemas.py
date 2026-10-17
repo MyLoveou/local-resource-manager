@@ -193,10 +193,21 @@ class ImportJobCreated(ApiModel):
 
 
 class ResourceBatchRequest(ApiModel):
-    """批量移入/恢复/彻底删除。ids 去重后仍受 200 上限约束。"""
+    """批量操作（移回收站/恢复/彻底删除/批量打标）；ids 去重后逐条处理，200 返回每项结果。"""
 
-    action: Literal["trash", "restore", "purge"]
+    action: Literal["trash", "restore", "purge", "add_tags"]
     ids: list[int] = Field(min_length=1, max_length=200)
+    tag_names: list[str] | None = None
+
+
+class CollectionExportRequest(ApiModel):
+    target_dir: str
+
+
+class CollectionExportResult(ApiModel):
+    exported: int
+    skipped: int
+    target_dir: str
 
 
 class ResourceBatchFailedItem(ApiModel):

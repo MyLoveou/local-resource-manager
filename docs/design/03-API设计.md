@@ -58,7 +58,8 @@
 | DELETE | `/library/resources/{id}` | — | `Resource`（**软删** → `trashed`） |
 | POST | `/library/resources/{id}/restore` | — | `Resource`（非 trashed → 409） |
 | POST | `/library/resources/{id}/purge` | — | `{ok: true}`（先删库内包再 DROP 行） |
-| POST | `/library/resources/batch` | `{action, ids[1..200]}` | `{ok: int[], failed: [{id,message}]}`，部分失败仍 200 |
+| POST | `/library/resources/batch` | `{action, ids[1..200], tagNames?}` | `{ok: int[], failed: [{id,message}]}`，部分失败仍 200；`action` ∈ `trash` `restore` `purge` `add_tags`（批量打标只加不删、幂等；空标签项 `empty tags`） |
+| POST | `/library/collections/{id}/export` | `{targetDir}` | `{exported, skipped, targetDir}`；按成员顺序复制主文件，命名 `{序号3位}_{安全标题}{后缀}`；空合集 422、目标目录不存在 400、缺失文件跳过计入 skipped |
 
 `GET /library/resources` 查询参数：
 
