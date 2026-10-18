@@ -113,6 +113,29 @@ def orm_to_resource(row: ResourceRow) -> Resource:
     return _orm_to_resource(row)
 
 
+def _file_to_domain(f: FileRow) -> ResourceFile:
+    """FileRow → 领域文件（详情与列表 primary 共用）。"""
+    return ResourceFile(
+        id=f.id,
+        resource_id=f.resource_id,
+        path=f.path,
+        sha256=f.sha256,
+        size=f.size,
+        format=f.format,
+        role=f.role,
+        duration=f.duration,
+        width=f.width,
+        height=f.height,
+        codec=f.codec,
+        fps=f.fps,
+        bitrate=f.bitrate,
+        exif_taken_at=f.exif_taken_at,
+        exif_lat=f.exif_lat,
+        exif_lng=f.exif_lng,
+        created_at=f.created_at,
+    )
+
+
 class ResourceRepository:
     """资源仓储：创建/查询/统计。"""
 
@@ -245,28 +268,7 @@ class ResourceRepository:
         if cat is not None:
             resource.category = Category(id=cat.id, name=cat.name)
         resource.tags = [Tag(id=t.id, name=t.name) for t in tags]
-        resource.files = [
-            ResourceFile(
-                id=f.id,
-                resource_id=f.resource_id,
-                path=f.path,
-                sha256=f.sha256,
-                size=f.size,
-                format=f.format,
-                role=f.role,
-                duration=f.duration,
-                width=f.width,
-                height=f.height,
-                codec=f.codec,
-                fps=f.fps,
-                bitrate=f.bitrate,
-                exif_taken_at=f.exif_taken_at,
-                exif_lat=f.exif_lat,
-                exif_lng=f.exif_lng,
-                created_at=f.created_at,
-            )
-            for f in files
-        ]
+        resource.files = [_file_to_domain(f) for f in files]
         resource.todos = [
             ResourceTodo(
                 id=t.id,
@@ -356,6 +358,23 @@ class ResourceRepository:
             resource.thumbnail_path = None
             return
         resource.thumbnail_path = _file_content_url(resource.id, thumb.id)
+
+    async def attach_primary_files(self, resources: list[Resource]) -> list[Resource]:
+        """列表轻量补 primary 文件（宽高/时长/拍摄时间），供 Justified 布局使用。"""
+        ids = [r.id for r in resources if r.id is not None]
+        if not ids:
+            return resources
+        stmt = select(FileRow).where(
+            FileRow.resource_id.in_(ids), FileRow.role == FILE_ROLE_PRIMARY
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        by_rid = {row.resource_id: row for row in rows}
+        for resource in resources:
+            if resource.id is None:
+                continue
+            file_row = by_rid.get(resource.id)
+            resource.files = [_file_to_domain(file_row)] if file_row is not None else []
+        return resources
 
     async def _attach_thumbnail_paths(self, resources: list[Resource]) -> list[Resource]:
         ids = [r.id for r in resources if r.id is not None]
@@ -660,6 +679,7 @@ class ResourceRepository:
         rows = (await self._session.execute(stmt)).all()
         resources = await self._attach_thumbnail_paths([_orm_to_resource(row[0]) for row in rows])
         await self.attach_scrape_pending(resources)
+        await self.attach_primary_files(resources)
         keys = [serialize_sort_value(row[1]) for row in rows]
         return resources, keys
 

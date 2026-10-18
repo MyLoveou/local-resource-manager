@@ -211,6 +211,25 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(tile.duration, 12.5)
             self.assertEqual(tile.width, 1920)
 
+    async def test_import_can_exclude_from_timeline(self) -> None:
+        async with self.factory() as session:
+            repo = ResourceRepository(session)
+            job = ImportJobState(id="j-no-timeline")
+            await ImportService(repo, store_root=self.store, file_ops=self.ops).run(
+                job,
+                ResourceType.IMAGE,
+                "file",
+                [str(self._png("not-in-timeline.png", 7))],
+                timeline_visible=False,
+            )
+            self.assertEqual(job.imported, 1)
+            items = await repo.list(ResourceType.IMAGE, None, 10, 0, "desc")
+            self.assertFalse(items[0].timeline_visible)
+            photos = await self._photos(session).timeline(
+                include_all=False, year=None, month=None, category_id=None, tag_ids=None
+            )
+            self.assertEqual(photos.total, 0)
+
     async def test_backfill_reads_exif_and_keeps_visibility(self) -> None:
         async with self.factory() as session:
             path = self._jpeg_with_taken_at("shot.jpg", "2026:10:17 12:34:56")

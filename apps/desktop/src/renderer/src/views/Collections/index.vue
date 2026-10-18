@@ -19,6 +19,14 @@
       >
         新建
       </n-button>
+      <span class="collections__spacer" />
+      <n-checkbox
+        size="small"
+        :checked="viewOptions.includeCollected"
+        @update:checked="(checked: boolean) => viewOptions.setIncludeCollected(checked)"
+      >
+        主库显示合集内资源
+      </n-checkbox>
     </div>
     <div
       v-if="!collections.length && !loading"
@@ -47,13 +55,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NInput } from 'naive-ui'
+import { NButton, NCheckbox, NInput } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { createCollection, listCollections } from '@/infrastructure/http/collections'
 import type { Collection } from '@/domain'
+import { useViewOptionsStore } from '@/application/stores/viewOptions'
 
 const router = useRouter()
 const collections = ref<Collection[]>([])
+const viewOptions = useViewOptionsStore()
 const newTitle = ref('')
 const loading = ref(false)
 const busy = ref(false)
@@ -117,6 +127,10 @@ onMounted(() => {
 
 .collections__input {
   width: 240px;
+}
+
+.collections__spacer {
+  flex: 1;
 }
 
 .collections__empty {

@@ -30,6 +30,7 @@ export function useLibraryImport() {
   const resourceType = ref<ResourceType>('image')
   const sourceKind = ref<ImportSourceKind>(SourceKind.FILE)
   const storageKind = ref<StorageKind>('owned')
+  const timelineVisible = ref(true)
   const job = ref<ImportJob | null>(null)
   const busy = ref(false)
   const picking = ref(false)
@@ -94,6 +95,11 @@ export function useLibraryImport() {
         type: resourceType.value,
         sourceKind: sourceKind.value,
         storageKind: storageKind.value,
+        timelineVisible:
+          (resourceType.value === 'image' || resourceType.value === 'video') &&
+          !timelineVisible.value
+            ? false
+            : undefined,
         paths,
       })
       let current = await getImportJob(created.jobId)
@@ -126,6 +132,7 @@ export function useLibraryImport() {
     resourceType,
     sourceKind,
     storageKind,
+    timelineVisible,
     job,
     busy,
     errorMessage,

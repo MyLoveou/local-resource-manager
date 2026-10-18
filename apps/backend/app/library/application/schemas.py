@@ -217,6 +217,7 @@ class ImportCreate(ApiModel):
     source_kind: SourceKind
     paths: list[str] = Field(min_length=1)
     storage_kind: StorageKind | None = None
+    timeline_visible: bool | None = None
 
 
 class ImportJobCreated(ApiModel):

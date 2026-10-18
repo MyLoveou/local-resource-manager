@@ -37,7 +37,9 @@ apps/backend/.venv/Scripts/python -m pytest -q apps/backend/tests
 | T9 | PASS | CDP：224 瓦片、月/日标题、首图 163×217、单击选中、双击查看器 | 2026-10-18 |
 | T10 | PASS | 后端视频瓦片 kind/duration/taken_at；188 passed | 2026-10-18 |
 | T11 | PASS | CDP：225 瓦片、视频时长 0:02、双击播放、日网格混排、信息栏开关 | 2026-10-18 |
-| R1 | PASS | 后端 188 passed；前端三查全绿 | 2026-10-18 |
+| T12 | PASS | CDP：图片页 Justified 80 瓦片、选中；时间线取消计入后滚动 600 保持、总数 -1 | 2026-10-18 |
+| T13 | PASS | 导入 timeline_visible=false 单测；合集删除 CDP；全局开关显示 | 2026-10-18 |
+| R1 | PASS | 后端 189 passed；前端三查全绿 | 2026-10-18 |
 
 ## 未覆盖
 

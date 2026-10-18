@@ -35,6 +35,18 @@
       >
         导出
       </n-button>
+      <n-popconfirm
+        positive-text="删除"
+        negative-text="取消"
+        @positive-click="removeCollection"
+      >
+        <template #trigger>
+          <n-button size="small" type="error" ghost>
+            删除合集
+          </n-button>
+        </template>
+        删除合集不会删除资源本身，确定？
+      </n-popconfirm>
       <n-button
         size="small"
         @click="goBack"
@@ -91,11 +103,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NSelect } from 'naive-ui'
+import { NButton, NPopconfirm, NSelect } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { getCategories, getTags, resolveCardImageUrl } from '@/infrastructure/http'
 import {
   collectionMembers,
+  deleteCollection as deleteCollectionApi,
   exportCollection,
   getCollection,
   moveCollectionItem,
@@ -178,6 +191,18 @@ async function moveSelected(direction: 'up' | 'down'): Promise<void> {
     await load()
   } catch (error) {
     notify.fromError(error, { context: '调整顺序' })
+  }
+}
+
+async function removeCollection(): Promise<void> {
+  const id = Number(route.params.id)
+  if (!Number.isFinite(id)) return
+  try {
+    await deleteCollectionApi(id)
+    notify.toast.success('已删除合集')
+    void router.push('/collections')
+  } catch (error) {
+    notify.fromError(error, { context: '删除合集' })
   }
 }
 

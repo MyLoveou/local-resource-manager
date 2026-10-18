@@ -98,6 +98,7 @@ class ImportService:
         *,
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
     ) -> None:
         """执行导入。prehashed: 路径→sha256（监视导入复用事件预计算值，避免二次全量哈希）；
         auto_scrape=False 时导入后不入刮削队列（监视导入默认关）。"""
@@ -122,7 +123,9 @@ class ImportService:
         job.total = len(candidates)
         job.phase = "hash"
         if self._session_factory is not None:
-            await self._run_pooled(job, type_, layout, candidates, prehashed, auto_scrape)
+            await self._run_pooled(
+                job, type_, layout, candidates, prehashed, auto_scrape, timeline_visible
+            )
             return
         if self._resources is None:
             raise RuntimeError("ImportService needs resources or session_factory")
@@ -131,6 +134,7 @@ class ImportService:
             await self._ingest_one(
                 self._resources, job, type_, layout, candidate,
                 digest=digest, auto_scrape=auto_scrape,
+                timeline_visible=timeline_visible,
             )
             job.done += 1
             await asyncio.sleep(0)
@@ -143,6 +147,7 @@ class ImportService:
         candidates: list[Path],
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
     ) -> None:
         factory = self._session_factory
         assert factory is not None
@@ -159,6 +164,7 @@ class ImportService:
                             await self._ingest_one(
                                 repo, job, type_, layout, source,
                                 digest=digest, auto_scrape=auto_scrape,
+                                timeline_visible=timeline_visible,
                             )
                         last_error = None
                         break
@@ -252,6 +258,7 @@ class ImportService:
         *,
         digest: str | None = None,
         auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
     ) -> None:
         try:
             if digest is not None:
@@ -295,6 +302,9 @@ class ImportService:
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra=extra,
+                    timeline_visible=(
+                        None if timeline_visible is None else bool(timeline_visible)
+                    ),
                 ),
                 commit=False,
             )

@@ -36,6 +36,15 @@
       :hint="resolvedEmptyHint"
     />
     <!-- 根据类型判断显示什么资源 --->
+    <JustifiedMediaGrid
+      v-else-if="useJustified"
+      class="resource-browser__grid"
+      :tiles="justifiedTiles"
+      :selected-ids="gridSelectedIds"
+      interactive="grid"
+      @near-end="loadMore"
+      @card-click="handleCardClick"
+    />
     <VirtualGrid
       v-else
       class="resource-browser__grid"
@@ -64,9 +73,11 @@
 import { computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
+import JustifiedMediaGrid from '@/components/JustifiedMediaGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import BrowseControls from '@/components/BrowseControls/index.vue'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
+import { useViewOptionsStore } from '@/application/stores/viewOptions'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
@@ -75,7 +86,7 @@ import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
 import { consumeResource } from '@/infrastructure/consume/consumeResource'
 import { storeToRefs } from 'pinia'
-import { isCollectionCard, type ResourceStatus, type ResourceType } from '@/domain'
+import { isCollectionCard, type PhotoTile, type ResourceStatus, type ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
@@ -102,6 +113,7 @@ const selection = useSelectionStore()
 const library = useLibraryStore()
 const shellBatch = useShellBatchStore()
 const browse = useBrowseQueryStore()
+const viewOptions = useViewOptionsStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const searchPlaceholder = computed(() => (props.type ? '在本类中搜索' : isTrash.value ? '在回收站中搜索' : '在结果中筛选'))
 const resolvedEmptyHint = computed(() =>
@@ -120,10 +132,11 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
   categoryId: () =>
     props.categoryIdOverride !== undefined ? props.categoryIdOverride : session.value.categoryId,
-  includeCollected: () => props.includeCollectedOverride ?? session.value.includeCollected,
+  includeCollected: () =>
+    props.includeCollectedOverride === true ? true : viewOptions.includeCollected,
   takenDate: () => props.takenDate,
   untimed: () => props.untimed ?? false,
-  timelineVisible: () => props.timelineVisible,
+  timelineVisible: () => (props.timelineVisible === true ? true : undefined),
   timelineMedia: () => props.timelineMedia ?? false,
 })
 const { batchResources } = useResourceHandle()
@@ -159,6 +172,8 @@ function unbindPagers(): void {
 }
 
 bindPagers()
+
+const useJustified = computed(() => props.type === 'image' || props.timelineMedia === true)
 
 const gridSelectedIds = computed(() => {
   if (batchMode.value) return selectedIds.value
@@ -340,6 +355,25 @@ onUnmounted(() => {
   const kind = props.type ? consumeKindOf(props.type) : undefined
   if (kind) PlayerByConsume[kind].close()
 })
+
+const justifiedTiles = computed<PhotoTile[]>(() =>
+  items.value.flatMap((item) => {
+    if (item.id === undefined || isCollectionCard(item)) return []
+    const primary = item.files?.find((file) => file.role === 'primary')
+    return [
+      {
+        id: item.id,
+        title: item.title,
+        kind: item.type === 'video' ? 'video' : 'image',
+        width: primary?.width ?? null,
+        height: primary?.height ?? null,
+        duration: primary?.duration ?? null,
+        thumbnailPath: item.thumbnailPath ?? null,
+        takenAt: primary?.exifTakenAt ?? null,
+      },
+    ]
+  })
+)
 
 const gridItems = computed(() =>
   items.value.flatMap((item) => {

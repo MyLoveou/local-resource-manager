@@ -5,11 +5,11 @@
       :key="photo.id"
       type="button"
       class="photo-tile"
-      :class="{ 'photo-tile--selected': photo.id === selectedId }"
+      :class="{ 'photo-tile--selected': selectedIds.includes(photo.id) }"
       :style="boxStyle(layout.boxes[index])"
       :aria-label="photo.title || '照片'"
-      @click="$emit('select', photo.id)"
-      @dblclick="$emit('open', photo.id)"
+      @click="onClick($event, photo.id)"
+      @dblclick="onDblClick($event, photo.id)"
     >
       <img
         v-if="photo.thumbnailPath"
@@ -37,19 +37,37 @@
 import { resolveCardImageUrl } from '@/infrastructure/http'
 import type { PhotoTile } from '@/domain'
 
-defineProps<{
-  photos: PhotoTile[]
-  layout: {
-    containerHeight: number
-    boxes: { left: number; top: number; width: number; height: number }[]
+const props = withDefaults(
+  defineProps<{
+    photos: PhotoTile[]
+    layout: {
+      containerHeight: number
+      boxes: { left: number; top: number; width: number; height: number }[]
+    }
+    selectedIds?: number[]
+    interactive?: 'viewer' | 'grid'
+  }>(),
+  {
+    selectedIds: () => [],
+    interactive: 'viewer',
   }
-  selectedId: number | null
-}>()
+)
 
-defineEmits<{
+const emit = defineEmits<{
   select: [id: number]
   open: [id: number]
+  cardClick: [event: MouseEvent, id: number]
 }>()
+
+function onClick(event: MouseEvent, id: number): void {
+  if (props.interactive === 'grid') emit('cardClick', event, id)
+  else emit('select', id)
+}
+
+function onDblClick(event: MouseEvent, id: number): void {
+  if (props.interactive === 'grid') return
+  emit('open', id)
+}
 
 function boxStyle(box: { left: number; top: number; width: number; height: number }): Record<string, string> {
   return {

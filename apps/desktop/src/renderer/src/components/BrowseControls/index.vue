@@ -45,8 +45,8 @@
     <n-checkbox
       v-if="props.status !== 'trashed' && !session.q"
       size="small"
-      :checked="session.includeCollected"
-      @update:checked="(checked: boolean) => patch({ includeCollected: checked })"
+      :checked="viewOptions.includeCollected"
+      @update:checked="(checked: boolean) => viewOptions.setIncludeCollected(checked)"
     >
       显示合集内资源
     </n-checkbox>
@@ -59,6 +59,7 @@ import { NButton, NCheckbox, NInput, NSelect } from 'naive-ui'
 import { getCategories, getTags } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
+import { useViewOptionsStore } from '@/application/stores/viewOptions'
 
 const props = defineProps<{
   type?: ResourceType
@@ -67,6 +68,7 @@ const props = defineProps<{
 }>()
 
 const browse = useBrowseQueryStore()
+const viewOptions = useViewOptionsStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const localQ = ref(session.value.q)
 const tagOptions = ref<{ label: string; value: number }[]>([])

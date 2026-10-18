@@ -74,6 +74,7 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
         await service.run(
             job, body.type, body.source_kind.value, body.paths,
             storage_kind=body.storage_kind.value if body.storage_kind else None,
+            timeline_visible=body.timeline_visible,
         )
         await job_store.finish(job)
     except asyncio.CancelledError:

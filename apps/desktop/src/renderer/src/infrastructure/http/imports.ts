@@ -11,6 +11,7 @@ export interface ImportCreate {
   type: ResourceType
   sourceKind: ImportSourceKind
   storageKind?: StorageKind
+  timelineVisible?: boolean
   paths: string[]
 }
 

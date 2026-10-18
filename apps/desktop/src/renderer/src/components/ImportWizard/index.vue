@@ -39,6 +39,15 @@
           </n-space>
         </n-radio-group>
       </template>
+      <div v-if="isTimelineMedia" class="timeline-toggle">
+        <n-checkbox
+          :checked="timelineVisible"
+          :disabled="busy"
+          @update:checked="(checked: boolean) => (timelineVisible = checked)"
+        >
+          计入时间线（默认按拍摄时间）
+        </n-checkbox>
+      </div>
       <div class="actions">
         <n-button :disabled="busy" @click="step = 'type'">上一步</n-button>
         <n-button type="primary" :disabled="busy" @click="pickAndImport">选择并导入</n-button>
@@ -73,7 +82,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NModal, NButton, NRadio, NRadioGroup, NSpace, NProgress } from 'naive-ui'
+import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSpace, NProgress } from 'naive-ui'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
 import { SourceKind } from '@/domain'
 
@@ -83,6 +92,7 @@ const {
   resourceType,
   sourceKind,
   storageKind,
+  timelineVisible,
   job,
   busy,
   errorMessage,
@@ -93,6 +103,10 @@ const {
   goSource,
   pickAndImport,
 } = useLibraryImport()
+
+const isTimelineMedia = computed(
+  () => resourceType.value === 'image' || resourceType.value === 'video'
+)
 
 const percent = computed(() => {
   if (!job.value || job.value.total <= 0) return busy.value ? 10 : 0

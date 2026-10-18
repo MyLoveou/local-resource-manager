@@ -80,7 +80,7 @@
               <PhotoRow
                 :photos="day.photos"
                 :layout="layoutForDay(day.date)"
-                :selected-id="selectedId"
+                :selected-ids="selectedId !== null ? [selectedId] : []"
                 @select="selectPhoto"
                 @open="openPhoto"
               />
@@ -99,7 +99,7 @@
               <PhotoRow
                 :photos="timeline.unknownPhotos"
                 :layout="unknownLayout"
-                :selected-id="selectedId"
+                :selected-ids="selectedId !== null ? [selectedId] : []"
                 @select="selectPhoto"
                 @open="openPhoto"
               />
@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { NButton, NCheckbox, NSelect } from 'naive-ui'
 import { useElementSize } from '@vueuse/core'
@@ -123,6 +123,7 @@ import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import PhotoRow from './PhotoRow.vue'
 import { notify } from '@/application/notify'
 import { useSelectionStore } from '@/application/stores/selection'
+import { useLibraryStore } from '@/application/stores/library'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
@@ -139,6 +140,7 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const selection = useSelectionStore()
+const library = useLibraryStore()
 const imageViewer = useImageViewerStore()
 const videoPlayer = useVideoPlayerStore()
 const timeline = ref<PhotoTimeline | null>(null)
@@ -317,6 +319,16 @@ function openDay(date: string | null): void {
 watch([includeAll, year, month, categoryId, tagIds], () => {
   void load()
 })
+
+watch(
+  () => library.revision,
+  async () => {
+    const top = scrollRef.value?.scrollTop ?? 0
+    await load()
+    await nextTick()
+    if (scrollRef.value) scrollRef.value.scrollTop = top
+  }
+)
 
 onMounted(() => {
   readQuery()
