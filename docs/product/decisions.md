@@ -545,6 +545,135 @@
 
 ---
 
+### D-20261007-04 · Windows 生产包：NSIS + 绿色版 zip，PyInstaller 冻结后端，一键校验
+
+- 日期：2026-10-07
+- 场景：需要可在无 Python/Node 的 Windows 机器安装运行的生产包与打包/校验流水线
+- **决定**：
+  1. 产物 = NSIS 安装包（per-user、可选目录、开始菜单、卸载保留数据）+ 绿色版 zip；同一次构建
+  2. 后端 PyInstaller onedir 随包（`resources/backend`），migrations 随包；用户机器无需 Python
+  3. 生产态以 `app.isPackaged` 切换：DB/库包/日志落 `%APPDATA%/local-resource-manager`；开发态不变
+  4. 版本单一来源 `apps/desktop/package.json`（0.1.0），主进程注入 `BACKEND_VERSION`
+  5. `pnpm release:win`：门禁 → 构建 → 冻结 → electron-builder → verify（产物/版本/冻结后端 `/health`/SHA256），失败阻断；GitHub Actions 复用同一入口上传 artifact
+  6. 不签名、不自动更新、v1 默认图标；渲染层依赖归 devDependencies（Vite 已打包），asar 197.9MB → 9.8MB
+- **为何**：一条命令可重复；冒烟验证真正分发的后端；安装目录只读由 userData 解决
+- **不选**：内嵌 Python 源码、Nuitka、安装/卸载自动冒烟、签名/更新框架
+- **落点**：`facts.md` §一、`docs/requirements/features/production-packaging/`、`openspec/changes/production-packaging/`
+- 状态：有效
+
+---
+
+### D-20261007-05 · 安装包反馈三项收口：番剧默认隐藏、应用图标、安装目录用软件名
+
+- 日期：2026-10-07
+- 场景：安装包实测反馈（`section-visibility` / `production-packaging`）
+- **决定**：
+  1. `/anime` 加入默认隐藏清单（番剧第二刀未做）；菜单/路由/导入/首页四处一致
+  2. 设计应用图标（渐变圆角 + 媒体文件夹/播放符号），产物 `build/icon.ico`，生成脚本 `build/generate-icon.py`；安装器与 exe 使用同一图标
+  3. NSIS 安装目录默认用软件显示名「资源管理器」（`build/installer.nsh` 覆盖 `APP_FILENAME`）；可执行文件与产物名保持 ASCII
+  4. 修复菜单图标缺失：番剧 `television-classic`、合集 `folder-multiple`、AV `movie-open`（隐藏项仍修正）
+- **为何**：未完成能力不应占位；安装目录与开始菜单/卸载项命名一致；图标缺失会显得未完成
+- **不选**：把可执行文件改中文名（ASCII 更利于脚本/杀软/日志）
+- **落点**：`facts.md` §一、`section-visibility` 与 `production-packaging` 文档
+- 状态：有效
+
+---
+
+### D-20261018-01 · 合集=默认归集：主列表隐藏成员、可切换；加入合集需确认；合集内可筛选
+
+- 日期：2026-10-18
+- 场景：安装包反馈收口（ISSUE-20261007-01/02/03）
+- **决定**：
+  1. 资源加入合集后，主列表（类型页/全库混排/首页 by_type）默认不显示；类型页工具栏「显示合集内资源」可切换；搜索与回收站不受影响
+  2. 「加入合集」弹窗改为勾选暂存 + 取消/确定，确定后统一提交
+  3. 合集详情支持按分类/标签（AND）筛选成员，客户端过滤
+  4. 普通浏览也显示选中描边；合集卡不可选中（避免集合 id 与资源 id 撞车误高亮）
+- **为何**：合集承担归类语义，主库保持干净；可切换避免「资源消失」；确认按钮避免误操作
+- **不选**：完全隐藏不可切换；搜索也隐藏；服务端成员筛选（成员已全量加载，v1 客户端足够）
+- **落点**：`facts.md` §一、`docs/requirements/features/library-collections/设计.md`、`docs/requirements/issues/2026-10-07-安装包反馈.md`
+- 状态：有效
+
+---
+
+### D-20261018-02 · 安装器提供「创建桌面快捷方式」复选框
+
+- 日期：2026-10-18
+- 场景：安装包实测反馈
+- **决定**：NSIS 安装目录页之后增加「创建桌面快捷方式」复选框（默认勾选）；取消则安装完成后删除桌面快捷方式；静默安装不弹页，保持创建
+- **为何**：用户需要可控；默认行为不变，兼容既有安装/升级
+- **不选**：永远创建 / 永远不创建；独立的组件页
+- **落点**：`apps/desktop/build/installer.nsh`、`facts.md` §一、`production-packaging` 文档
+- 状态：有效
+
+---
+
+### D-20261018-03 · 照片时间线 v1：独立照片页 + 三态可见性 + 旧图回填（含 GPS）
+
+- 日期：2026-10-18
+- 场景：旅游/漫展照片需要按时间线组织；`photo-timeline-map`
+- **决定**：
+  1. v1 只做时间线；独立「照片」页（时间线/网格），与「图片」入口并存；地图下一刀（MapLibre+OSM）
+  2. 每图「计入时间线」三态：NULL=按 EXIF 自动、1=强制计入、0=强制排除；时间线提供「显示全部照片」
+  3. 无拍摄时间进「未知时间」组；时间线包含合集成员；支持年/月/分类/标签筛选
+  4. 旧图回填：重读 EXIF 写回拍摄时间与 GPS，不复制/不改原图、不清空已有值、不覆盖手动可见性
+  5. 导入时解析 GPS（WGS84）落库，为地图刀准备
+- **为何**：网图与自拍需可控区分；三态保留自动与手动；GPS 一次回填避免地图刀重扫
+- **不选**：来源枚举字段；只按 EXIF 不可覆盖；地图与时间线同刀
+- **落点**：`facts.md` §一、`docs/requirements/features/photo-timeline-map/`、`openspec/changes/photo-timeline-map/`
+- 状态：有效
+
+---
+
+### D-20261018-04 · 照片时间线改为 Justified 照片流
+
+- 日期：2026-10-18
+- 场景：时间线实测「按天小行列表」不够现代，照片不成主角
+- **决定**：
+  1. 视觉：粘性年/月 + 日段 + 逐行 Justified 照片流（Google Photos/Immich 式）；不做 Apple 年/月三层
+  2. 库：`justified-layout`（ISC）+ 现有 TanStack 虚拟化/选中；不引入 `@egjs/vue3-infinitegrid`
+  3. 数据：时间线接口直接返回每日照片瓦片（id/宽高/缩略图/拍摄时间）；v1 全量，>2000 再按月懒加载
+  4. 交互：单击选中、双击打开查看器，与网格一致；日标题保留「查看当天」
+- **为何**：现代照片流、滚动直达；纯布局库不接管滚动，改造成本最低
+- **不选**：Apple 三层大拼贴；EGJS 整套布局抽象；瀑布流（无 Justified/虚拟化）
+- **落点**：`docs/requirements/features/photo-timeline-map/界面方向.md`、`设计.md` §11
+- 状态：有效（v2 待实现）
+
+---
+
+### D-20261018-05 · 应用内更新：electron-updater + GitHub Releases
+
+- 日期：2026-10-18
+- 场景：每次改动都要手动重装安装包；更新功能未实现
+- **决定**：
+  1. Windows 安装版接入 `electron-updater`；GitHub Releases 为更新源（`latest.yml` + NSIS + blockmap）
+  2. 启动 8s 静默检查 + 设置页手动检查；发现新版本展示公告，用户确认后下载，完成后重启安装
+  3. 版本单一来源 `apps/desktop/package.json`；本次 **0.1.1** 为首个 updater 版本（0.1.0 无 updater，需手动装一次）；之后 tag `v*` 由 CI 发布 Release
+  4. 不做签名/公证、灰度、强制更新、差分、macOS/Linux；绿色 zip 不自动更新
+  5. 未签名：接受 SmartScreen；后续可补签名
+- **为何**：不再每次手动重装；公告与用户确认分离，可控；GitHub 仓库已有
+- **不选**：自建更新服务器；静默强制更新；Squirrel
+- **落点**：`facts.md` §一、`docs/requirements/features/app-update/`、`openspec/changes/app-update/`
+- 状态：有效（完整更新待 0.1.2 发布手验）
+
+---
+
+### D-20261018-06 · 时间线纳入本机拍摄视频；入口改名「时间线」；内嵌 ffprobe
+
+- 日期：2026-10-18
+- 场景：时间线只有照片；录制的视频也应进入同一条时间线
+- **决定**：
+  1. 时间线媒体类型 = `image + video`（排除 anime/av/audio）；入口由「照片」改名「时间线」
+  2. 视频拍摄时间取 ffprobe `format.tags.creation_time` 并转本地时间；无则未知时间/手动计入
+  3. **内嵌 ffprobe**（`@ffprobe-installer/win32-x64`，GPL-3.0，随包附 LICENSE）；主进程注入 `FFPROBE_BIN`
+  4. 视频瓦片显示时长，双击进播放器；日网格照片/视频混排（`timelineMedia` 过滤）
+  5. 回填扩到 image+video；视频只补时间，不解析 GPS
+- **为何**：旅游/漫展既有照片也有录像；内嵌 ffprobe 保证安装机可读 creation_time
+- **不选**：仅照片；依赖用户机器 ffprobe；解析视频 GPS/轨迹
+- **落点**：`facts.md` §一、`docs/requirements/features/photo-timeline-map/`、`openspec/changes/photo-timeline-map/`
+- 状态：有效（安装包体积增加约 77MB）
+
+---
+
 ## 已撤销 / 被取代
 
 ### D-20260830-mount · 子应用用 FastAPI.mount
