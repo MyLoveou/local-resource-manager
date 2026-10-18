@@ -4,9 +4,14 @@
 - 按文件名 `NNNN_描述.sql` 顺序执行未应用的迁移
 """
 import sqlite3
+import sys
 from pathlib import Path
 
-MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+# 冻结态（PyInstaller onedir）：migrations 作为数据文件打进 sys._MEIPASS
+if getattr(sys, "frozen", False):
+    MIGRATIONS_DIR = Path(sys._MEIPASS) / "app" / "shared" / "db" / "migrations"
+else:
+    MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
 def migrate(conn: sqlite3.Connection) -> int:

@@ -5,6 +5,8 @@ import { spawn } from 'child_process'
 import type { ChildProcess } from 'child_process'
 import { randomBytes } from 'crypto'
 import http from 'http'
+import { dirname, join } from 'path'
+import { app } from 'electron'
 import type { BackendConfig } from './config'
 import { getFreePort } from './port'
 
@@ -75,26 +77,54 @@ function killProcess(child: ChildProcess): Promise<void> {
   })
 }
 
-/** 启动后端：找空闲端口 → spawn uvicorn → 健康检查 → 返回实例 */
+/** 启动后端：找空闲端口 → spawn（dev: uvicorn / frozen: 随包 exe）→ 健康检查 → 返回实例 */
 export async function startBackend(cfg: BackendConfig): Promise<BackendInstance> {
   const port = await getFreePort()
   const token = randomBytes(16).toString('hex')
-  // 启动后端
-  const child = spawn(
-    cfg.pythonPath,
-    ['-m', 'uvicorn', cfg.module, '--host', cfg.host, '--no-access-log', '--port', String(port)],
-    {
-      cwd: cfg.backendDir,
-      env: {
-        ...process.env,
-        BACKEND_TOKEN: token,
-        PYTHONIOENCODING: 'utf-8',
-        PYTHONUTF8: '1',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
+  const baseEnv = {
+    ...process.env,
+    BACKEND_TOKEN: token,
+    BACKEND_VERSION: app.getVersion(),
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1',
+  }
+
+  let command: string
+  let args: string[]
+  let cwd: string | undefined
+  const env: NodeJS.ProcessEnv = { ...baseEnv }
+  if (cfg.mode === 'frozen') {
+    if (!cfg.backendExe) throw new Error('后端 exe 路径未配置')
+    command = cfg.backendExe
+    cwd = dirname(cfg.backendExe)
+    args = ['--host', cfg.host, '--no-access-log', '--port', String(port)]
+    env.BACKEND_DB_PATH = join(app.getPath('userData'), 'library.db')
+    env.FFPROBE_BIN = join(process.resourcesPath, 'ffprobe', 'ffprobe.exe')
+  } else {
+    if (!cfg.pythonPath || !cfg.backendDir || !cfg.module) {
+      throw new Error('开发态后端配置不完整')
     }
-  )
+    command = cfg.pythonPath
+    cwd = cfg.backendDir
+    args = [
+      '-m',
+      'uvicorn',
+      cfg.module,
+      '--host',
+      cfg.host,
+      '--no-access-log',
+      '--port',
+      String(port),
+    ]
+  }
+
+  // 启动后端
+  const child = spawn(command, args, {
+    cwd,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  })
   // 管道转发：后端 stdout/stderr → electron-log（否则当前终端看不到）
   child.stdout?.on('data', (d) => {
     const line = d.toString().trimEnd()

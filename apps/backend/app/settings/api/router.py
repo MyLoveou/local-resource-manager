@@ -1,5 +1,7 @@
 """设置路由。"""
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +12,7 @@ from app.shared.config import settings
 from app.shared.db.db import get_session
 from app.shared.log import logger
 router = APIRouter()
-_VERSION = "0.0.0"
+_VERSION = os.environ.get("BACKEND_VERSION", "0.0.0")
 
 
 def _err(exc: SettingsError) -> HTTPException:

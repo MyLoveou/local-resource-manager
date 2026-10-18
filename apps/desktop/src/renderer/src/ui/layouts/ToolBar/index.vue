@@ -241,7 +241,7 @@ function openSettings(name = 'scrape'): void {
 
 function onOpenSettings(event: Event): void {
   const name = (event as CustomEvent<string>).detail
-  openSettings(name === 'consume' ? 'consume' : 'scrape')
+  openSettings(name === 'consume' || name === 'update' ? name : 'scrape')
 }
 
 onMounted(() => {

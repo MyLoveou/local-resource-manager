@@ -1,0 +1,80 @@
+name: Release Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: |
+            apps/backend/requirements.txt
+            apps/backend/requirements-packaging.txt
+
+      - name: Backend venv
+        run: |
+          python -m venv apps/backend/.venv
+          apps/backend/.venv/Scripts/python -m pip install --upgrade pip
+          apps/backend/.venv/Scripts/pip install -r apps/backend/requirements.txt -r apps/backend/requirements-packaging.txt
+
+      - name: Install node deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache electron-builder
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Release
+        run: pnpm release:win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-resource-manager-windows-x64
+          path: |
+            release/local-resource-manager-*-setup.exe
+            release/local-resource-manager-*.blockmap
+            release/local-resource-manager-*.zip
+            release/latest.yml
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            release/local-resource-manager-*-setup.exe \
+            release/local-resource-manager-*-setup.exe.blockmap \
+            release/local-resource-manager-*.zip \
+            release/latest.yml \
+            release/SHA256SUMS.txt \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Windows x64 build ${GITHUB_REF_NAME}"

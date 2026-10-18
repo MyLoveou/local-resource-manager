@@ -21,6 +21,23 @@ type AppNotifyPayload = {
   duration?: number
 }
 
+type UpdateStatus = {
+  phase:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'up-to-date'
+    | 'error'
+    | 'unsupported'
+  currentVersion: string
+  version?: string
+  releaseNotes?: string
+  percent?: number
+  message?: string
+}
+
 let pendingNotify: AppNotifyPayload | null = null
 let handlerRef: ((payload: AppNotifyPayload) => void) | null = null
 
@@ -68,6 +85,19 @@ const api = {
   ): void => {
     handlerRef = handler
     if (pendingNotify) handler(pendingNotify)
+  },
+  update: {
+    getState: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:get-state'),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:check'),
+    download: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:download'),
+    install: (): void => {
+      void ipcRenderer.invoke('update:install')
+    },
+    onStatus: (handler: (status: UpdateStatus) => void): (() => void) => {
+      const listener = (_event: unknown, status: UpdateStatus): void => handler(status)
+      ipcRenderer.on('update:status', listener)
+      return () => ipcRenderer.removeListener('update:status', listener)
+    },
   },
 }
 

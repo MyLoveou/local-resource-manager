@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
+import UpdateBanner from '@/components/UpdateBanner/index.vue'
 import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
 import ImageViewerOverlay from '@/components/ImageViewerOverlay/index.vue'
 import VideoPlayerOverlay from '@/components/VideoPlayerOverlay/index.vue'
@@ -33,6 +34,7 @@ useWatchAutoRefresh()
     <n-message-provider>
       <div class="container">
         <ToolBar />
+        <UpdateBanner />
         <div class="app-container">
           <MenuBar :items="menuItems" />
           <main class="main-content">

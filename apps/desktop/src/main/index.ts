@@ -3,7 +3,13 @@ import { join } from 'path'
 import { startServices, stopServices } from './infrastructure/services/index'
 import { registerShellOpenIpc } from './infrastructure/shellOpen'
 import { registerThemeCssIpc } from './infrastructure/themeCss'
+import { initUpdater, registerUpdateIpc } from './infrastructure/services/update'
 import { initMainLog, log } from './log'
+
+/** 打包态固定 userData 为 ASCII 目录（不随中文 productName 漂移，便于备份与脚本） */
+if (app.isPackaged) {
+  app.setPath('userData', join(app.getPath('appData'), 'local-resource-manager'))
+}
 
 /** 尽早初始化，否则启动失败写不进日志，渲染进程也无法用 electron-log */
 initMainLog()
@@ -101,6 +107,7 @@ app.whenReady().then(async () => {
   registerDialogIpc()
   registerShellOpenIpc()
   registerThemeCssIpc()
+  registerUpdateIpc()
   try {
     log.info('[main] starting backend…')
     const backend = await startServices()
@@ -112,9 +119,11 @@ app.whenReady().then(async () => {
       broadcastNotify(BACKEND_STOPPED)
     })
     createWindow()
+    initUpdater()
   } catch (err) {
     log.error('[main] failed to start', err)
     createWindow()
+    initUpdater()
     broadcastNotify(BACKEND_FAILED)
   }
 

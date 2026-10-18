@@ -253,13 +253,59 @@
           保存
         </n-button>
       </n-tab-pane>
+      <n-tab-pane
+        name="update"
+        tab="更新"
+      >
+        <p class="set-modal__hint">
+          当前版本：{{ update.status.currentVersion || '—' }}
+        </p>
+        <p class="set-modal__hint">
+          状态：{{ updatePhaseLabel }}
+        </p>
+        <n-progress
+          v-if="update.status.phase === 'downloading'"
+          type="line"
+          :percentage="update.status.percent ?? 0"
+          :height="6"
+        />
+        <pre
+          v-if="update.status.releaseNotes"
+          class="set-modal__notes"
+        >{{ update.status.releaseNotes }}</pre>
+        <div class="set-modal__parse-switches">
+          <n-button
+            size="small"
+            :loading="update.status.phase === 'checking'"
+            @click="update.check()"
+          >
+            检查更新
+          </n-button>
+          <n-button
+            v-if="update.status.phase === 'available'"
+            size="small"
+            type="primary"
+            @click="update.download()"
+          >
+            下载更新
+          </n-button>
+          <n-button
+            v-if="update.status.phase === 'downloaded'"
+            size="small"
+            type="primary"
+            @click="update.install()"
+          >
+            重启安装
+          </n-button>
+        </div>
+      </n-tab-pane>
     </n-tabs>
   </n-modal>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NFormItem, NInput, NModal, NSelect, NSwitch, NTabPane, NTabs, NTag } from 'naive-ui'
+import { NButton, NFormItem, NInput, NModal, NProgress, NSelect, NSwitch, NTabPane, NTabs, NTag } from 'naive-ui'
 import { notify } from '@/application/notify'
 import {
   backupLibrary,
@@ -275,8 +321,35 @@ import {
 import { TYPE_PROFILES } from '@/domain'
 import { patchSystemSettings } from '@/infrastructure/http/settings'
 import logger from '@/infrastructure/logging/logger'
+import { useUpdateStore } from '@/application/stores/update'
 import { SYSTEM_SETTING_PATH_MAP } from '@/static'
 const props = defineProps<{ show: boolean; tab?: string }>()
+const update = useUpdateStore()
+const updatePhaseLabel = computed(() => {
+  const status = update.status
+  switch (status.phase) {
+    case 'idle':
+      return '未检查'
+    case 'checking':
+      return '检查中…'
+    case 'available':
+      return `发现新版本 ${status.version ?? ''}`
+    case 'downloading':
+      return `下载中 ${status.percent ?? 0}%`
+    case 'downloaded':
+      return '已下载，待重启安装'
+    case 'up-to-date':
+      return '已是最新版本'
+    case 'error':
+      return status.message || '更新失败'
+    case 'unsupported':
+      return status.message || '仅安装版支持自动更新'
+    default:
+      return status.phase
+  }
+})
+
+void update.init()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
 
 const activeTab = ref('scrape')
@@ -538,6 +611,19 @@ watch(
   font-size: 12px;
   color: var(--sm-color-text-muted);
   margin: 0 0 8px;
+}
+
+.set-modal__notes {
+  max-height: 220px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--sm-color-text-muted);
+  background: var(--sm-color-bg-surface);
+  border-radius: var(--sm-radius-control);
 }
 
 .set-modal__about {
