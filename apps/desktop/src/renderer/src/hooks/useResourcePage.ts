@@ -16,6 +16,11 @@ export function useResourcePage(options: {
   order?: MaybeRefOrGetter<'asc' | 'desc'>
   tagIds?: MaybeRefOrGetter<number[]>
   categoryId?: MaybeRefOrGetter<number | null>
+  includeCollected?: MaybeRefOrGetter<boolean>
+  takenDate?: MaybeRefOrGetter<string | undefined>
+  untimed?: MaybeRefOrGetter<boolean>
+  timelineVisible?: MaybeRefOrGetter<boolean | undefined>
+  timelineMedia?: MaybeRefOrGetter<boolean>
   limit?: number
 }) {
   const items = ref<(Resource | CollectionCardData)[]>([])
@@ -38,6 +43,11 @@ export function useResourcePage(options: {
   const order = computed(() => toValue(options.order) ?? 'desc')
   const tagIds = computed(() => toValue(options.tagIds) ?? [])
   const categoryId = computed(() => toValue(options.categoryId) ?? null)
+  const includeCollected = computed(() => toValue(options.includeCollected) ?? false)
+  const takenDate = computed(() => toValue(options.takenDate))
+  const untimed = computed(() => toValue(options.untimed) ?? false)
+  const timelineVisible = computed(() => toValue(options.timelineVisible))
+  const timelineMedia = computed(() => toValue(options.timelineMedia) ?? false)
 
   async function fetchPage(append: boolean): Promise<void> {
     const run = runFetch(append)
@@ -68,6 +78,11 @@ export function useResourcePage(options: {
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
         categoryId: categoryId.value,
+        includeCollected: includeCollected.value,
+        takenDate: takenDate.value,
+        untimed: untimed.value,
+        timelineVisible: timelineVisible.value,
+        timelineMedia: timelineMedia.value,
         afterKey: append ? cursorKey : undefined,
         afterId: append ? cursorId : undefined,
       })
@@ -124,6 +139,11 @@ export function useResourcePage(options: {
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
         categoryId: categoryId.value,
+        includeCollected: includeCollected.value,
+        takenDate: takenDate.value,
+        untimed: untimed.value,
+        timelineVisible: timelineVisible.value,
+        timelineMedia: timelineMedia.value,
       })
       if (id !== requestId) return
       total.value = page.total
@@ -185,7 +205,7 @@ export function useResourcePage(options: {
     }
   )
 
-  watch([type, q, sort, order, tagIds, categoryId], () => {
+  watch([type, q, sort, order, tagIds, categoryId, includeCollected, takenDate, untimed, timelineVisible, timelineMedia], () => {
     void reset()
   })
 

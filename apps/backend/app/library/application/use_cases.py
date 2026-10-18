@@ -94,12 +94,25 @@ class LibraryQueryService:
         tag_ids: list[int] | None = None,
         category_id: int | None = None,
         after_key: str | None = None,
+        include_collected: bool = False,
+        taken_date: str | None = None,
+        untimed: bool = False,
+        timeline_visible: bool | None = None,
+        timeline_media: bool = False,
     ) -> ResourcePage:
-        """分页列表。q/tagIds/categoryId/sort 服务端过滤；非法 sort 422。"""
+        """分页列表。q/tagIds/categoryId/sort 服务端过滤；非法 sort 422。
+
+        默认不显示已归集到合集的资源（include_collected=True 或有关键词时显示）。
+        """
         query = normalize_q(q)
         tags = tag_ids or []
         if sort.value not in allowed_sorts(type_):
             raise HTTPException(status_code=422, detail="sort not allowed")
+        exclude_collected = (
+            not include_collected
+            and not query
+            and (status is None or status == ResourceStatus.ACTIVE)
+        )
         # 全库混排：type 为空、无任何过滤、默认排序时，资源与合集按时间混排（offset 分页）
         mixed_ok = (
             type_ is None
@@ -110,9 +123,15 @@ class LibraryQueryService:
             and sort.value == "createdAt"
             and order == "desc"
             and after_key is None
+            and taken_date is None
+            and not untimed
+            and timeline_visible is None
+            and not timeline_media
         )
         if mixed_ok:
-            items, total = await self._resources.list_mixed(limit, offset)
+            items, total = await self._resources.list_mixed(
+                limit, offset, exclude_collected=exclude_collected
+            )
             return ResourcePage(
                 items=items,
                 total=total,
@@ -137,12 +156,26 @@ class LibraryQueryService:
             category_id=category_id,
             after_key=cursor_key if use_keyset else None,
             after_id=after_id if use_keyset else None,
+            exclude_collected=exclude_collected,
+            taken_date=taken_date,
+            untimed=untimed,
+            timeline_visible=timeline_visible,
+            timeline_media=timeline_media,
         )
         has_more = len(items) > limit
         items = items[:limit]
         keys = keys[:limit]
         total = await self._resources.count(
-            type_, status, q=query, tag_ids=tags, category_id=category_id
+            type_,
+            status,
+            q=query,
+            tag_ids=tags,
+            category_id=category_id,
+            exclude_collected=exclude_collected,
+            taken_date=taken_date,
+            untimed=untimed,
+            timeline_visible=timeline_visible,
+            timeline_media=timeline_media,
         )
         last = items[-1] if items else None
         next_key = keys[-1] if has_more and keys else None

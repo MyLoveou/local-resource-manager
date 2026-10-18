@@ -138,6 +138,39 @@ class ResourcePatch(ApiModel):
     category_name: str | None = None
     tag_names: list[str] | None = None
     exif_taken_at: str | None = None
+    timeline_visible: bool | None = None
+
+
+class PhotoTile(ApiModel):
+    id: int
+    title: str = ""
+    kind: Literal["image", "video"] = "image"
+    width: int | None = None
+    height: int | None = None
+    duration: float | None = None
+    thumbnail_path: str | None = None
+    taken_at: str | None = None
+
+
+class PhotoTimelineDay(ApiModel):
+    date: str
+    count: int
+    photos: list[PhotoTile] = Field(default_factory=list)
+
+
+class PhotoTimeline(ApiModel):
+    days: list[PhotoTimelineDay] = Field(default_factory=list)
+    unknown_count: int = 0
+    unknown_photos: list[PhotoTile] = Field(default_factory=list)
+    total: int = 0
+
+
+class PhotoBackfillResult(ApiModel):
+    scanned: int = 0
+    taken_at_updated: int = 0
+    gps_updated: int = 0
+    skipped: int = 0
+    failed: int = 0
 
 
 class CoverReplace(ApiModel):

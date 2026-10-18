@@ -332,6 +332,8 @@ class ImportService:
                     fps=probed.fps,
                     bitrate=probed.bitrate,
                     exif_taken_at=probed.exif_taken_at,
+                    exif_lat=probed.exif_lat,
+                    exif_lng=probed.exif_lng,
                     commit=False,
                 )
             cover = package.resolve_cover(role_paths)

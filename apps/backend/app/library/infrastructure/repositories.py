@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import and_, asc, desc, exists, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.library.infrastructure.orm import (
     CategoryRow,
@@ -25,6 +26,7 @@ from app.library.infrastructure.orm import (
 from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
 from app.library.domain.media_types import (
     FILE_ROLE_PAGE,
+    FILE_ROLE_PRIMARY,
     FILE_ROLE_THUMBNAIL,
     is_series_type,
 )
@@ -99,6 +101,9 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
         last_scraped_at=row.last_scraped_at,
         scraped_source=row.scraped_source,
         extra=rest,
+        timeline_visible=(
+            None if row.timeline_visible is None else bool(row.timeline_visible)
+        ),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -135,6 +140,9 @@ class ResourceRepository:
             cover_path=resource.cover_path,
             status=resource.status.value,
             extra=_dump_extra(resource),
+            timeline_visible=(
+                None if resource.timeline_visible is None else int(resource.timeline_visible)
+            ),
             created_at=ts,
             updated_at=ts,
         )
@@ -160,6 +168,9 @@ class ResourceRepository:
         row.last_scraped_at = db_ts(resource.last_scraped_at)
         row.scraped_source = resource.scraped_source
         row.extra = _dump_extra(resource)
+        row.timeline_visible = (
+            None if resource.timeline_visible is None else int(resource.timeline_visible)
+        )
         row.updated_at = db_now()
 
     async def update(self, resource_id: int, resource: Resource, *, commit: bool = True) -> Resource | None:
@@ -250,6 +261,8 @@ class ResourceRepository:
                 fps=f.fps,
                 bitrate=f.bitrate,
                 exif_taken_at=f.exif_taken_at,
+                exif_lat=f.exif_lat,
+                exif_lng=f.exif_lng,
                 created_at=f.created_at,
             )
             for f in files
@@ -476,6 +489,29 @@ class ResourceRepository:
             return or_(and_(sort_expr.is_not(None), or_(value_cmp, same)), sort_expr.is_(None))
         return or_(and_(sort_expr.is_not(None), or_(value_cmp, same)), sort_expr.is_(None))
 
+    def _taken_date_exists(self, date_value: str | None):
+        conditions = [
+            FileRow.resource_id == ResourceRow.id,
+            FileRow.role == FILE_ROLE_PRIMARY,
+        ]
+        if date_value is None:
+            conditions.append(FileRow.exif_taken_at.is_not(None))
+        else:
+            conditions.append(func.substr(FileRow.exif_taken_at, 1, 10) == date_value)
+        return exists(select(FileRow.id).where(*conditions))
+
+    def _timeline_visible_clause(self, visible: bool):
+        has_taken = self._taken_date_exists(None)
+        if visible:
+            return or_(
+                ResourceRow.timeline_visible == 1,
+                and_(ResourceRow.timeline_visible.is_(None), has_taken),
+            )
+        return or_(
+            ResourceRow.timeline_visible == 0,
+            and_(ResourceRow.timeline_visible.is_(None), ~has_taken),
+        )
+
     def _filter(
         self,
         stmt,
@@ -484,13 +520,32 @@ class ResourceRepository:
         q: str | None = None,
         tag_ids: list[int] | None = None,
         category_id: int | None = None,
+        exclude_collected: bool = False,
+        taken_date: str | None = None,
+        untimed: bool = False,
+        timeline_visible: bool | None = None,
+        timeline_media: bool = False,
     ):
         if type_ is not None:
             stmt = stmt.where(ResourceRow.type == type_.value)
+        if timeline_media:
+            stmt = stmt.where(
+                ResourceRow.type.in_((ResourceType.IMAGE.value, ResourceType.VIDEO.value))
+            )
         if status is not None:
             stmt = stmt.where(ResourceRow.status == status.value)
         if category_id is not None:
             stmt = stmt.where(ResourceRow.category_id == category_id)
+        if exclude_collected:
+            stmt = stmt.where(
+                ResourceRow.id.not_in(select(CollectionItemRow.resource_id))
+            )
+        if taken_date is not None:
+            stmt = stmt.where(self._taken_date_exists(taken_date))
+        if untimed:
+            stmt = stmt.where(~self._taken_date_exists(None))
+        if timeline_visible is not None:
+            stmt = stmt.where(self._timeline_visible_clause(timeline_visible))
         return self._search_filter(stmt, q, tag_ids)
 
     async def count(
@@ -500,10 +555,25 @@ class ResourceRepository:
         q: str | None = None,
         tag_ids: list[int] | None = None,
         category_id: int | None = None,
+        exclude_collected: bool = False,
+        taken_date: str | None = None,
+        untimed: bool = False,
+        timeline_visible: bool | None = None,
+        timeline_media: bool = False,
     ) -> int:
         """与 list 相同过滤条件下的总数。"""
         stmt = self._filter(
-            select(func.count()).select_from(ResourceRow), type_, status, q, tag_ids, category_id
+            select(func.count()).select_from(ResourceRow),
+            type_,
+            status,
+            q,
+            tag_ids,
+            category_id,
+            exclude_collected,
+            taken_date,
+            untimed,
+            timeline_visible,
+            timeline_media,
         )
         total = await self._session.scalar(stmt)
         return int(total or 0)
@@ -523,6 +593,11 @@ class ResourceRepository:
         after_key: str | None = None,
         after_created_at: str | None = None,
         after_id: int | None = None,
+        exclude_collected: bool = False,
+        taken_date: str | None = None,
+        untimed: bool = False,
+        timeline_visible: bool | None = None,
+        timeline_media: bool = False,
     ) -> list[Resource]:
         resources, _keys = await self.list_with_sort_keys(
             type_,
@@ -537,6 +612,11 @@ class ResourceRepository:
             after_key=after_key,
             after_created_at=after_created_at,
             after_id=after_id,
+            exclude_collected=exclude_collected,
+            taken_date=taken_date,
+            untimed=untimed,
+            timeline_visible=timeline_visible,
+            timeline_media=timeline_media,
         )
         return resources
 
@@ -555,13 +635,19 @@ class ResourceRepository:
         after_key: str | None = None,
         after_created_at: str | None = None,
         after_id: int | None = None,
+        exclude_collected: bool = False,
+        taken_date: str | None = None,
+        untimed: bool = False,
+        timeline_visible: bool | None = None,
+        timeline_media: bool = False,
     ) -> tuple[list[Resource], list[str]]:
         from app.library.application.list_query import serialize_sort_value
 
         sort_expr = self._sort_expr(sort)
         stmt = self._filter(
             select(ResourceRow, sort_expr.label("sort_value")),
-            type_, status, q, tag_ids, category_id,
+            type_, status, q, tag_ids, category_id, exclude_collected,
+            taken_date, untimed, timeline_visible, timeline_media,
         )
         cursor_key = after_key
         if cursor_key is None and after_created_at is not None and sort == "createdAt":
@@ -689,6 +775,8 @@ class ResourceRepository:
         fps: float | None = None,
         bitrate: int | None = None,
         exif_taken_at: str | None = None,
+        exif_lat: float | None = None,
+        exif_lng: float | None = None,
         commit: bool = True,
     ) -> FileRow:
         """写入库内文件行。"""
@@ -707,6 +795,8 @@ class ResourceRepository:
             fps=fps,
             bitrate=bitrate,
             exif_taken_at=exif_taken_at,
+            exif_lat=exif_lat,
+            exif_lng=exif_lng,
             created_at=ts,
         )
         self._session.add(row)
@@ -833,6 +923,23 @@ class ResourceRepository:
             await self._session.flush()
         await self._session.refresh(row)
         return row
+
+    async def update_file_exif(
+        self,
+        file_id: int,
+        *,
+        taken_at: str | None,
+        lat: float | None,
+        lng: float | None,
+    ) -> bool:
+        """回填：更新拍摄时间与 GPS（只写库，不改原图）。"""
+        row = await self._session.get(FileRow, file_id)
+        if row is None:
+            return False
+        row.exif_taken_at = taken_at
+        row.exif_lat = lat
+        row.exif_lng = lng
+        return True
 
     async def delete_file_row(self, file_id: int, *, commit: bool = True) -> None:
         row = await self._session.get(FileRow, file_id)
@@ -1091,11 +1198,22 @@ class ResourceRepository:
         return resources
 
     async def stats(self) -> dict[str, Any]:
-        """资源统计：一次 GROUP BY status+type，再 SUM 体积。"""
+        """资源统计：一次 GROUP BY status+type，再 SUM 体积。
+
+        by_type 不包含已在合集内的 active 资源（与主列表默认隐藏一致）；
+        回收站/丢失计数与总体积按全库统计。
+        """
+        collected_ids = select(CollectionItemRow.resource_id)
         grouped = (
             await self._session.execute(
                 select(ResourceRow.status, ResourceRow.type, func.count())
                 .select_from(ResourceRow)
+                .where(
+                    or_(
+                        ResourceRow.status != ResourceStatus.ACTIVE.value,
+                        ResourceRow.id.not_in(collected_ids),
+                    )
+                )
                 .group_by(ResourceRow.status, ResourceRow.type)
             )
         ).all()
@@ -1122,18 +1240,144 @@ class ResourceRepository:
         }
 
 
-    async def list_mixed(self, limit: int, offset: int) -> tuple[list[object], int]:
+    async def media_primary_files(self) -> list[tuple[FileRow, str]]:
+        """回填用：active 图片/视频的 primary 文件行与资源类型。"""
+        rows = (
+            await self._session.execute(
+                select(FileRow, ResourceRow.type)
+                .join(ResourceRow, ResourceRow.id == FileRow.resource_id)
+                .where(
+                    ResourceRow.type.in_(
+                        (ResourceType.IMAGE.value, ResourceType.VIDEO.value)
+                    ),
+                    ResourceRow.status == ResourceStatus.ACTIVE.value,
+                    FileRow.role == FILE_ROLE_PRIMARY,
+                )
+            )
+        ).all()
+        return [(row[0], str(row[1])) for row in rows]
+
+    async def timeline_photos(
+        self,
+        *,
+        include_all: bool,
+        year: int | None,
+        month: int | None,
+        category_id: int | None,
+        tag_ids: list[int] | None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+        """时间线瓦片：active 图片/视频按天返回（含宽高/时长/缩略图），未知时间单独返回。"""
+        primary = aliased(FileRow)
+        thumb = aliased(FileRow)
+        base = self._filter(
+            select(ResourceRow.id),
+            None,
+            ResourceStatus.ACTIVE,
+            category_id=category_id,
+            tag_ids=tag_ids,
+            timeline_visible=None if include_all else True,
+        ).where(ResourceRow.type.in_((ResourceType.IMAGE.value, ResourceType.VIDEO.value)))
+        join = (
+            select(
+                ResourceRow.id,
+                ResourceRow.title,
+                ResourceRow.type,
+                primary.id.label("file_id"),
+                primary.exif_taken_at,
+                primary.width,
+                primary.height,
+                primary.duration,
+                thumb.id.label("thumb_id"),
+            )
+            .select_from(ResourceRow)
+            .join(
+                primary,
+                and_(
+                    primary.resource_id == ResourceRow.id,
+                    primary.role == FILE_ROLE_PRIMARY,
+                ),
+            )
+            .outerjoin(
+                thumb,
+                and_(
+                    thumb.resource_id == ResourceRow.id,
+                    thumb.role == FILE_ROLE_THUMBNAIL,
+                ),
+            )
+            .where(ResourceRow.id.in_(base))
+        )
+
+        def to_tile(row) -> dict[str, Any]:
+            rid, title, type_, file_id, taken_at, width, height, duration, thumb_id = row
+            content_id = thumb_id if thumb_id is not None else file_id
+            return {
+                "id": int(rid),
+                "title": title or "",
+                "kind": "video" if type_ == ResourceType.VIDEO.value else "image",
+                "width": int(width) if width is not None else None,
+                "height": int(height) if height is not None else None,
+                "duration": float(duration) if duration is not None else None,
+                "taken_at": taken_at,
+                "thumbnail_path": _file_content_url(int(rid), int(content_id)),
+            }
+
+        dated_stmt = (
+            join.where(primary.exif_taken_at.is_not(None))
+            .order_by(desc(primary.exif_taken_at), desc(ResourceRow.id))
+        )
+        if year is not None:
+            dated_stmt = dated_stmt.where(
+                func.substr(primary.exif_taken_at, 1, 4) == f"{year:04d}"
+            )
+        if month is not None:
+            if year is not None:
+                dated_stmt = dated_stmt.where(
+                    func.substr(primary.exif_taken_at, 1, 7) == f"{year:04d}-{month:02d}"
+                )
+            else:
+                dated_stmt = dated_stmt.where(
+                    func.substr(primary.exif_taken_at, 6, 2) == f"{month:02d}"
+                )
+        dated_rows = (await self._session.execute(dated_stmt)).all()
+
+        days_map: dict[str, list[dict[str, Any]]] = {}
+        for row in dated_rows:
+            date = str(row[4])[:10]
+            days_map.setdefault(date, []).append(to_tile(row))
+        days = [
+            {"date": date, "count": len(photos), "photos": photos}
+            for date, photos in sorted(days_map.items(), reverse=True)
+        ]
+
+        has_taken = self._taken_date_exists(None)
+        unknown_rows = (
+            await self._session.execute(
+                join.where(~has_taken).order_by(desc(ResourceRow.id))
+            )
+        ).all()
+        unknown = [to_tile(row) for row in unknown_rows]
+        total = sum(day["count"] for day in days) + len(unknown)
+        return days, unknown, total
+
+    async def list_mixed(
+        self, limit: int, offset: int, exclude_collected: bool = False
+    ) -> tuple[list[object], int]:
         """全库混排（无过滤时）：active 资源 + 合集按时间倒序，offset 分页。
 
         返回条目：Resource（领域模型）或合集卡 dict（cardType=collection）。
+        exclude_collected=True 时资源部分不含已归集到合集的成员。
         """
-        union = (
-            select(
-                literal("resource").label("kind"),
-                ResourceRow.id.label("rid"),
-                ResourceRow.created_at.label("ts"),
+        resource_rows = select(
+            literal("resource").label("kind"),
+            ResourceRow.id.label("rid"),
+            ResourceRow.created_at.label("ts"),
+        ).where(ResourceRow.status == ResourceStatus.ACTIVE.value)
+        if exclude_collected:
+            resource_rows = resource_rows.where(
+                ResourceRow.id.not_in(select(CollectionItemRow.resource_id))
             )
-            .where(ResourceRow.status == ResourceStatus.ACTIVE.value)
+        union = (
+            resource_rows
             .union_all(
                 select(
                     literal("collection").label("kind"),

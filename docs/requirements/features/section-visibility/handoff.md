@@ -9,17 +9,17 @@
 
 ## 已完成
 
-- L1 `需求.md` 已定稿（四项范围确认）
+- L1 `需求.md` 已定稿（范围确认；2026-10-07 追加 `/anime`）
 - L2 `设计.md` 已确认
 - L3 `实现方案.md` 已定稿
 - 代码已按清单实现（6 个文件）
-- R1/R2 PASS
+- 安装包反馈：默认清单加 `/anime`；菜单图标修正（番剧/合集/AV）
+- 证据：安装包 CDP 实测 T1/T2/T3 PASS；R1/R2 PASS
 
 ## 下一步
 
-1. Electron 手验 T1–T5
-2. 勾选 tasks 5.1–5.2 → verification-gate
-3. 用户要求时 archive
+1. 如需空配置/边界回归：改 `HIDDEN_SECTIONS` 重建验证 T4/T5
+2. 用户要求时 archive
 
 ## 阻塞
 

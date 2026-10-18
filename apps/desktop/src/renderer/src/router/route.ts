@@ -14,6 +14,27 @@ const typeRoutes: RouteRecordRaw[] = TYPE_PROFILES.map((profile) => ({
   },
 }))
 
+const photoRoutes: RouteRecordRaw[] = [
+  {
+    path: '/photos',
+    name: 'Photos',
+    component: () => import('@/views/Photos/index.vue'),
+    meta: {
+      title: '时间线',
+      icon: 'image-multiple',
+    },
+  },
+  {
+    path: '/photos/day/:date',
+    name: 'PhotoDay',
+    component: () => import('@/views/PhotoDay/index.vue'),
+    meta: {
+      title: '时间线',
+      hideMenu: true,
+    },
+  },
+]
+
 export const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -33,14 +54,16 @@ export const routes: RouteRecordRaw[] = [
       hideMenu: true,
     },
   },
-  ...typeRoutes,
+  ...typeRoutes.slice(0, 1),
+  ...photoRoutes,
+  ...typeRoutes.slice(1),
   {
     path: '/collections',
     name: 'Collections',
     component: () => import('@/views/Collections/index.vue'),
     meta: {
       title: '合集',
-      icon: 'collections',
+      icon: 'folder-multiple',
     },
   },
   {

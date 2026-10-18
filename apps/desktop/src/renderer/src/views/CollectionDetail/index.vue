@@ -42,11 +42,41 @@
         返回
       </n-button>
     </div>
+    <div class="collection-detail__filters">
+      <n-select
+        v-model:value="categoryId"
+        size="small"
+        clearable
+        filterable
+        placeholder="按分类筛选"
+        :options="categoryOptions"
+        class="collection-detail__filter"
+      />
+      <n-select
+        v-model:value="tagIds"
+        size="small"
+        multiple
+        clearable
+        filterable
+        placeholder="按标签筛选（AND）"
+        :options="tagOptions"
+        class="collection-detail__filter-tags"
+      />
+      <span class="collection-detail__count">
+        {{ filteredMembers.length }} / {{ members.length }}
+      </span>
+    </div>
     <div
       v-if="!members.length && !loading"
       class="collection-detail__empty"
     >
       合集还没有成员。在资源的右侧信息栏里「加入合集」。
+    </div>
+    <div
+      v-else-if="!filteredMembers.length && !loading"
+      class="collection-detail__empty"
+    >
+      没有匹配当前分类/标签的成员。
     </div>
     <VirtualGrid
       v-else
@@ -59,11 +89,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton } from 'naive-ui'
+import { NButton, NSelect } from 'naive-ui'
 import { notify } from '@/application/notify'
-import { resolveCardImageUrl } from '@/infrastructure/http'
+import { getCategories, getTags, resolveCardImageUrl } from '@/infrastructure/http'
 import {
   collectionMembers,
   exportCollection,
@@ -82,9 +112,26 @@ const collection = ref<Collection | null>(null)
 const members = ref<Resource[]>([])
 const loading = ref(false)
 const selectedId = computed(() => selection.selectedId)
+const categoryId = ref<number | null>(null)
+const tagIds = ref<number[]>([])
+const categoryOptions = ref<{ label: string; value: number }[]>([])
+const tagOptions = ref<{ label: string; value: number }[]>([])
+
+const filteredMembers = computed(() =>
+  members.value.filter((item) => {
+    if (categoryId.value !== null && item.category?.id !== categoryId.value) return false
+    if (tagIds.value.length > 0) {
+      const ids = new Set(
+        (item.tags ?? []).flatMap((tag) => (tag.id === undefined ? [] : [tag.id]))
+      )
+      if (!tagIds.value.every((id) => ids.has(id))) return false
+    }
+    return true
+  })
+)
 
 const gridItems = computed(() =>
-  members.value.flatMap((item) =>
+  filteredMembers.value.flatMap((item) =>
     item.id === undefined
       ? []
       : [{ id: item.id, title: item.title, coverUrl: resolveCardImageUrl(item) }],
@@ -163,6 +210,20 @@ async function exportToFolder(): Promise<void> {
 onMounted(() => {
   selection.clear()
   void load()
+  void getCategories().then((categories) => {
+    categoryOptions.value = categories.flatMap((category) =>
+      category.id === undefined ? [] : [{ label: category.name, value: category.id }]
+    )
+  })
+  void getTags().then((tags) => {
+    tagOptions.value = tags.flatMap((tag) =>
+      tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+    )
+  })
+})
+
+watch([categoryId, tagIds], () => {
+  selection.clear()
 })
 </script>
 
@@ -191,6 +252,27 @@ onMounted(() => {
 .collection-detail__grid {
   flex: 1;
   min-height: 0;
+}
+
+.collection-detail__filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sm-space-2);
+  flex-shrink: 0;
+  margin-bottom: var(--sm-space-2);
+}
+
+.collection-detail__filter {
+  width: 160px;
+}
+
+.collection-detail__filter-tags {
+  width: 260px;
+}
+
+.collection-detail__count {
+  font-size: 12px;
+  color: var(--sm-color-text-muted);
 }
 
 .collection-detail__empty {

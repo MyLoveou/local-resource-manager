@@ -20,6 +20,7 @@ export {
   batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
+export { getPhotoTimeline, backfillPhotos } from './photos'
 export { getCategories, invalidateCategories, getTags, invalidateTags } from './vocab'
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'

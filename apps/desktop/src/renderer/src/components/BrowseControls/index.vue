@@ -42,12 +42,20 @@
       :value="session.categoryId"
       @update:value="(value: number | null) => patch({ categoryId: value ?? null })"
     />
+    <n-checkbox
+      v-if="props.status !== 'trashed' && !session.q"
+      size="small"
+      :checked="session.includeCollected"
+      @update:checked="(checked: boolean) => patch({ includeCollected: checked })"
+    >
+      显示合集内资源
+    </n-checkbox>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NInput, NSelect } from 'naive-ui'
+import { NButton, NCheckbox, NInput, NSelect } from 'naive-ui'
 import { getCategories, getTags } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
@@ -113,6 +121,7 @@ function patch(partial: {
   order?: 'asc' | 'desc'
   tagIds?: number[]
   categoryId?: number | null
+  includeCollected?: boolean
 }): void {
   browse.patch(props.type, props.status, partial)
 }

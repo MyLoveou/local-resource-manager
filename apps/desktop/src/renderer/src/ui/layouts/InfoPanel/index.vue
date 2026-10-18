@@ -52,6 +52,15 @@
           <template v-if="isImage">
             <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
             <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div class="info-panel-meta">
+              <n-checkbox
+                :checked="timelineEffective"
+                :disabled="timelineBusy"
+                @update:checked="toggleTimeline"
+              >
+                计入时间线
+              </n-checkbox>
+            </div>
           </template>
           <template v-else-if="isVideo">
             <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
@@ -60,6 +69,16 @@
             <div v-if="shown(fpsLabel)" class="info-panel-meta">帧率 {{ fpsLabel }}</div>
             <div v-if="shown(bitrateLabel)" class="info-panel-meta">码率 {{ bitrateLabel }}</div>
             <div v-if="shown(qualityText)" class="info-panel-meta">画质 {{ qualityText }}</div>
+            <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div class="info-panel-meta">
+              <n-checkbox
+                :checked="timelineEffective"
+                :disabled="timelineBusy"
+                @update:checked="toggleTimeline"
+              >
+                计入时间线
+              </n-checkbox>
+            </div>
             <div v-if="subtitleNames.length" class="info-panel-meta">
               字幕 {{ subtitleNames.join('、') }}
             </div>
@@ -248,8 +267,13 @@
         preset="card"
         title="加入合集"
         style="width: 360px"
+        :mask-closable="!collectionBusy"
+        :close-on-esc="!collectionBusy"
         @update:show="onCollectionShow"
       >
+        <p class="info-panel-collection-hint">
+          勾选后点「确定」保存；取消不会改动。
+        </p>
         <div
           v-for="collection in collectionList"
           :key="collection.id"
@@ -257,6 +281,7 @@
         >
           <n-checkbox
             :checked="collectionMemberIds.has(collection.id)"
+            :disabled="collectionBusy"
             @update:checked="(checked: boolean) => toggleCollection(collection.id, checked)"
           >
             {{ collection.title }}（{{ collection.memberCount }}）
@@ -267,6 +292,7 @@
             v-model:value="newCollectionTitle"
             size="small"
             placeholder="新合集名称"
+            :disabled="collectionBusy"
             @keydown.enter.prevent="createAndAdd"
           />
           <n-button
@@ -278,6 +304,16 @@
             新建并加入
           </n-button>
         </div>
+        <template #footer>
+          <div class="info-panel-collection-actions">
+            <n-button size="small" :disabled="collectionBusy" @click="collectionOpen = false">
+              取消
+            </n-button>
+            <n-button size="small" type="primary" :loading="collectionBusy" @click="saveCollections">
+              确定
+            </n-button>
+          </div>
+        </template>
       </n-modal>
       <ScrapeConfirmQueue
         v-model:show="scrapeOpen"
@@ -365,6 +401,7 @@ let loadGen = 0
 const todoInput = ref('')
 const todoBusy = ref(false)
 const subtitleBusy = ref(false)
+const timelineBusy = ref(false)
 
 const draft = reactive<MetadataDraft>({
   title: '',
@@ -521,6 +558,30 @@ const moreOptions = computed((): DropdownOption[] => {
 function primaryTakenAt(row: Resource): string | null | undefined {
   const files = row.files ?? []
   return (files.find((f) => f.role === FILE_ROLE.PRIMARY) ?? files[0])?.exifTakenAt
+}
+
+const timelineEffective = computed(() => {
+  const row = resource.value
+  if (!row || (row.type !== 'image' && row.type !== 'video')) return false
+  if (row.timelineVisible === true) return true
+  if (row.timelineVisible === false) return false
+  return Boolean(primaryTakenAt(row))
+})
+
+async function toggleTimeline(checked: boolean): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  timelineBusy.value = true
+  try {
+    const patched = await patchResource(id, { timelineVisible: checked })
+    resource.value = patched
+    applyResourceToDraft(patched)
+    library.bump(null)
+  } catch (error) {
+    notify.fromError(error, { context: '?????' })
+  } finally {
+    timelineBusy.value = false
+  }
 }
 
 function onTakenAtInput(event: Event): void {
@@ -987,6 +1048,9 @@ async function removeNote(noteId: string): Promise<void> {
 
 const collectionOpen = ref(false)
 const collectionList = ref<Collection[]>([])
+/** 弹窗打开时的成员快照；确认时与勾选状态做差集 */
+const collectionOriginalIds = ref(new Set<number>())
+/** 勾选中的待提交状态（取消即丢弃） */
 const collectionMemberIds = ref(new Set<number>())
 const newCollectionTitle = ref('')
 const collectionBusy = ref(false)
@@ -998,7 +1062,9 @@ async function openCollections(): Promise<void> {
   try {
     const [all, mine] = await Promise.all([listCollections(), resourceCollections(id)])
     collectionList.value = all
-    collectionMemberIds.value = new Set(mine.map((collection) => collection.id))
+    const ids = mine.map((collection) => collection.id)
+    collectionOriginalIds.value = new Set(ids)
+    collectionMemberIds.value = new Set(ids)
   } catch (error) {
     notify.fromError(error, { context: '读取合集' })
   }
@@ -1008,18 +1074,34 @@ function onCollectionShow(value: boolean): void {
   collectionOpen.value = value
 }
 
-async function toggleCollection(collectionId: number, checked: boolean): Promise<void> {
+function toggleCollection(collectionId: number, checked: boolean): void {
+  if (collectionBusy.value) return
+  const next = new Set(collectionMemberIds.value)
+  if (checked) next.add(collectionId)
+  else next.delete(collectionId)
+  collectionMemberIds.value = next
+}
+
+async function saveCollections(): Promise<void> {
   const id = resource.value?.id
   if (id == null) return
+  const toAdd = [...collectionMemberIds.value].filter(
+    (collectionId) => !collectionOriginalIds.value.has(collectionId)
+  )
+  const toRemove = [...collectionOriginalIds.value].filter(
+    (collectionId) => !collectionMemberIds.value.has(collectionId)
+  )
+  if (toAdd.length === 0 && toRemove.length === 0) {
+    collectionOpen.value = false
+    return
+  }
   collectionBusy.value = true
   try {
-    if (checked) {
-      await addCollectionItem(collectionId, id)
-      collectionMemberIds.value.add(collectionId)
-    } else {
-      await removeCollectionItem(collectionId, id)
-      collectionMemberIds.value.delete(collectionId)
-    }
+    for (const collectionId of toAdd) await addCollectionItem(collectionId, id)
+    for (const collectionId of toRemove) await removeCollectionItem(collectionId, id)
+    collectionOpen.value = false
+    library.bump(null)
+    notify.toast.success('已更新合集')
   } catch (error) {
     notify.fromError(error, { context: '更新合集' })
   } finally {
@@ -1036,7 +1118,11 @@ async function createAndAdd(): Promise<void> {
     const created = await createCollection({ title })
     await addCollectionItem(created.id, id)
     newCollectionTitle.value = ''
-    await openCollections()
+    const all = await listCollections()
+    collectionList.value = all
+    collectionOriginalIds.value = new Set([...collectionOriginalIds.value, created.id])
+    collectionMemberIds.value = new Set([...collectionMemberIds.value, created.id])
+    library.bump(null)
   } catch (error) {
     notify.fromError(error, { context: '新建合集' })
   } finally {
@@ -1332,6 +1418,12 @@ async function handlePurge(): Promise<void> {
   font-size: 12px;
 }
 
+.info-panel-collection-hint {
+  margin: 0 0 10px;
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
+}
+
 .info-panel-collection-row {
   margin-bottom: 6px;
 }
@@ -1340,5 +1432,11 @@ async function handlePurge(): Promise<void> {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+.info-panel-collection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

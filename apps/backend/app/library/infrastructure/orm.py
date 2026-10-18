@@ -28,6 +28,7 @@ class ResourceRow(Base):
     created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
+    timeline_visible: Mapped[int | None] = mapped_column(Integer)
 
 
 class CategoryRow(Base):
@@ -111,6 +112,8 @@ class FileRow(Base):
     fps: Mapped[float | None] = mapped_column(Float)
     bitrate: Mapped[int | None] = mapped_column(Integer)
     exif_taken_at: Mapped[str | None] = mapped_column(String)
+    exif_lat: Mapped[float | None] = mapped_column(Float)
+    exif_lng: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[str | None] = mapped_column(String)
 
 

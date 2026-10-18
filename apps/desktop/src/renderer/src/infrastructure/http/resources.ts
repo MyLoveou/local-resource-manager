@@ -47,6 +47,7 @@ export interface ResourcePatch {
   categoryName?: string | null
   tagNames?: string[]
   exifTakenAt?: string | null
+  timelineVisible?: boolean | null
 }
 
 /** 分页获取资源 */
@@ -63,6 +64,11 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       q: query.q,
       tagIds: query.tagIds,
       categoryId: query.categoryId,
+      includeCollected: query.includeCollected,
+      takenDate: query.takenDate,
+      untimed: query.untimed,
+      timelineVisible: query.timelineVisible,
+      timelineMedia: query.timelineMedia,
       sort: query.sort,
       order: query.order,
     },

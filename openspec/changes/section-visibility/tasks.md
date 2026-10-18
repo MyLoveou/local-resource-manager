@@ -18,7 +18,7 @@
 - [x] 3.1 算法：`domain/visibility.ts` — `HIDDEN_SECTIONS` + `isSectionHidden`（`/` false、未知 path false、子路径前缀命中）；验证：typecheck
 - [x] 3.2 功能：`router/index.ts` 守卫命中隐藏 → `/`；验证：手验 `#/av` 与 `#/collections/1`
 - [x] 3.3 UI：`domain/menu.ts` 谓词注入 + `App.vue` 组合；`domain/mediaTypes.ts` 导入过滤；`views/Home/index.vue` 卡片过滤；验证：手验三处入口
-- [x] 3.4 组合根：四入口同用一份配置，主路径验收（默认清单 5 项）
+- [x] 3.4 组合根：四入口同用一份配置，主路径验收（默认清单 6 项）
 - [x] 3.5 关键意图中文注释（可见性配置规则、谓词默认行为）
 
 ## 4. 契约与文档

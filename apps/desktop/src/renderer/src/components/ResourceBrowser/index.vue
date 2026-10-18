@@ -1,6 +1,7 @@
 <template>
   <div class="resource-browser">
     <BrowseControls
+      v-if="!hideControls"
       :type="type"
       :status="status"
       :placeholder="searchPlaceholder"
@@ -85,6 +86,15 @@ const props = defineProps<{
   type?: ResourceType
   status?: ResourceStatus
   emptyHint: string
+  /** ???????????????????? */
+  hideControls?: boolean
+  takenDate?: string
+  untimed?: boolean
+  timelineVisible?: boolean
+  timelineMedia?: boolean
+  includeCollectedOverride?: boolean
+  categoryIdOverride?: number | null
+  tagIdsOverride?: number[]
 }>()
 
 const isTrash = computed(() => props.status === 'trashed')
@@ -99,7 +109,7 @@ const resolvedEmptyHint = computed(() =>
     ? '无匹配 · 搜索范围：标题 / 作者 / 描述 / 分类 / 标签 / 文件名'
     : props.emptyHint
 )
-const { selectedIds } = storeToRefs(selection)
+const { selectedIds, selectedId } = storeToRefs(selection)
 const { batchMode, message: batchMessage, busy: batchBusy } = storeToRefs(shellBatch)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
   type: () => props.type,
@@ -107,8 +117,14 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   q: () => session.value.q,
   sort: () => session.value.sort,
   order: () => session.value.order,
-  tagIds: () => session.value.tagIds,
-  categoryId: () => session.value.categoryId,
+  tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
+  categoryId: () =>
+    props.categoryIdOverride !== undefined ? props.categoryIdOverride : session.value.categoryId,
+  includeCollected: () => props.includeCollectedOverride ?? session.value.includeCollected,
+  takenDate: () => props.takenDate,
+  untimed: () => props.untimed ?? false,
+  timelineVisible: () => props.timelineVisible,
+  timelineMedia: () => props.timelineMedia ?? false,
 })
 const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
@@ -144,7 +160,10 @@ function unbindPagers(): void {
 
 bindPagers()
 
-const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []))
+const gridSelectedIds = computed(() => {
+  if (batchMode.value) return selectedIds.value
+  return selectedId.value === null ? [] : [selectedId.value]
+})
 
 function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
@@ -332,6 +351,7 @@ const gridItems = computed(() =>
           title: item.title,
           coverUrl: resolveCardImageUrl(item),
           badge: `合集 · ${item.memberCount}`,
+          selectable: false,
         },
       ]
     }

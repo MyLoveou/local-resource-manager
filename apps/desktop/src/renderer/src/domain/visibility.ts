@@ -5,6 +5,7 @@
  */
 export const HIDDEN_SECTIONS: readonly string[] = [
   '/av',
+  '/anime',
   '/novel',
   '/comic',
   '/game',

@@ -48,6 +48,8 @@ export interface Resource {
   extra?: Record<string, unknown>
   /** 有未确认的刮削候选 */
   scrapePending?: boolean
+  /** 照片时间线：null/undefined=按 EXIF 自动；true/false=手动 */
+  timelineVisible?: boolean | null
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -122,6 +124,10 @@ export interface ResourceFile {
   bitrate?: number | null
   /** 图片拍摄时间（EXIF） */
   exifTakenAt?: string | null
+  /** WGS84 纬度 */
+  exifLat?: number | null
+  /** WGS84 经度 */
+  exifLng?: number | null
   createdAt?: string | null
 }
 
@@ -186,6 +192,12 @@ export interface ResourcePageQuery {
   q?: string
   tagIds?: number[]
   categoryId?: number | null
+  takenDate?: string
+  untimed?: boolean
+  timelineVisible?: boolean
+  timelineMedia?: boolean
+  /** 主库默认隐藏合集成员；true 时一并返回 */
+  includeCollected?: boolean
   sort?: string
   order?: 'asc' | 'desc'
 }

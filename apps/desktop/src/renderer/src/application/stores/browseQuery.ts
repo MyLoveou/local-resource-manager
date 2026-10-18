@@ -9,10 +9,19 @@ export type BrowseSession = {
   order: 'asc' | 'desc'
   tagIds: number[]
   categoryId: number | null
+  /** 主库默认隐藏合集成员；true 时显示 */
+  includeCollected: boolean
 }
 
 function defaultSession(): BrowseSession {
-  return { q: '', sort: 'createdAt', order: 'desc', tagIds: [], categoryId: null }
+  return {
+    q: '',
+    sort: 'createdAt',
+    order: 'desc',
+    tagIds: [],
+    categoryId: null,
+    includeCollected: false,
+  }
 }
 
 export function browseScopeKey(type?: ResourceType, status?: ResourceStatus): string {

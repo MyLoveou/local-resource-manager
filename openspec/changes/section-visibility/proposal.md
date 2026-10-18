@@ -1,4 +1,4 @@
-# 提案 · section-visibility
+﻿# 提案 · section-visibility
 
 > 对照：`docs/requirements/features/section-visibility/需求.md`（已定稿，同范围）
 
@@ -53,7 +53,7 @@
 
 ## 验收意图（详情在 tests.md）
 
-- 主路径：默认清单 5 项在菜单/路由/导入/首页一致隐藏
+- 主路径：默认清单 6 项在菜单/路由/导入/首页一致隐藏
 - 失败/边界：空配置=现状；未知 key 忽略；隐藏 `/collections` 时子路径一并拦截
 - 回归：不得破坏未隐藏分区的导航与导入
 

@@ -12,13 +12,13 @@
 
 - tasks：1.1–1.3、2.1–2.2、3.1–3.5、4.1–4.2、5.3
 - 代码：`domain/visibility.ts`（新）、`domain/menu.ts`、`App.vue`、`domain/mediaTypes.ts`、`router/index.ts`、`views/Home/index.vue`
-- 测试：R1 PASS / R2 PASS；T1–T5 未跑（需 Electron）
+- 安装包反馈（2026-10-07）：默认隐藏清单追加 `/anime`（番剧第二刀未做）；菜单图标修正（番剧/合集/AV，见 D-20261007-05）
+- 测试：T1/T2/T3 PASS（安装包 CDP 实测：菜单 7 项、`#/av`/`#/anime/xyz` 重定向、导入仅 3 类）；R1/R2 PASS；T4/T5 未跑
 
 ## 下一步（新会话按此执行）
 
-1. Electron 手验 T1–T5（菜单/路由/导入/首页/空配置/子路径）
-2. 通过后勾选 tasks 5.1–5.2，跑 verification-gate
-3. 用户要求时再 archive
+1. 如需空配置/边界回归：改 `HIDDEN_SECTIONS` 重建验证 T4/T5
+2. 用户要求时再 archive
 
 ## 阻塞
 

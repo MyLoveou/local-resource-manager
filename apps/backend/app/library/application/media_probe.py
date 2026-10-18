@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from app.library.domain.media_types import (
@@ -30,6 +32,8 @@ class ProbeFields:
     bitrate: int | None = None
     codec: str | None = None
     exif_taken_at: str | None = None
+    exif_lat: float | None = None
+    exif_lng: float | None = None
 
 
 def _parse_frame_rate(raw: str | None) -> float | None:
@@ -56,6 +60,7 @@ _EXIF_DT_ORIGINAL = 36867
 _EXIF_DT_DIGITIZED = 36868
 _EXIF_DT = 306
 _EXIF_IFD = 0x8769
+_EXIF_GPS_IFD = 0x8825
 _TAKEN_AT_RE = re.compile(r"^(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?")
 
 
@@ -106,8 +111,42 @@ def _exif_taken_at(image) -> str | None:
     return None
 
 
+def _gps_coord(values, ref) -> float | None:
+    """EXIF GPS 度分秒 → 十进制度；S/W 为负。"""
+    if not isinstance(values, (list, tuple)) or len(values) < 3:
+        return None
+    try:
+        deg, minute, sec = (float(values[0]), float(values[1]), float(values[2]))
+    except (TypeError, ValueError):
+        return None
+    if isinstance(ref, bytes):
+        ref = ref.decode("utf-8", errors="replace")
+    if not isinstance(ref, str):
+        return None
+    result = deg + minute / 60 + sec / 3600
+    if ref.strip().upper() in {"S", "W"}:
+        result = -result
+    return result
+
+
+def _exif_gps(image) -> tuple[float | None, float | None]:
+    try:
+        exif = image.getexif()
+        gps = exif.get_ifd(_EXIF_GPS_IFD) if exif else None
+    except Exception:
+        return None, None
+    if not gps:
+        return None, None
+    try:
+        lat = _gps_coord(gps.get(2), gps.get(1))
+        lng = _gps_coord(gps.get(4), gps.get(3))
+    except Exception:
+        return None, None
+    return lat, lng
+
+
 def probe_image(path: Path) -> ProbeFields:
-    """Pillow 读宽高与 EXIF 拍摄时间。"""
+    """Pillow 读宽高、EXIF 拍摄时间与 GPS。"""
     try:
         from PIL import Image
     except ImportError:
@@ -117,15 +156,32 @@ def probe_image(path: Path) -> ProbeFields:
         with Image.open(path) as image:
             width, height = image.size
             taken = _exif_taken_at(image)
-        return ProbeFields(width=width, height=height, exif_taken_at=taken)
+            lat, lng = _exif_gps(image)
+        return ProbeFields(
+            width=width, height=height, exif_taken_at=taken, exif_lat=lat, exif_lng=lng
+        )
     except Exception as exc:
         logger.warning("图片探测失败 %s: %s", path, exc)
         return ProbeFields()
 
 
+def _video_taken_at(raw: str | None) -> str | None:
+    """ffprobe creation_time（通常 UTC）→ 本地日历 YYYY-MM-DDTHH:MM:SS。"""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone()
+        return parsed.strftime("%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return normalize_taken_at(text)
+
+
 def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
     """调用 ffprobe；找不到命令或失败则空。"""
-    binary = ffprobe_bin or shutil.which(FFPROBE_BIN)
+    binary = ffprobe_bin or os.environ.get("FFPROBE_BIN") or shutil.which(FFPROBE_BIN)
     if not binary:
         logger.warning("未找到 ffprobe，跳过视频探测")
         return ProbeFields()
@@ -175,6 +231,8 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
     except (TypeError, ValueError):
         bitrate = None
     codec = video.get("codec_name")
+    tags = fmt.get("tags") if isinstance(fmt.get("tags"), dict) else {}
+    taken_at = _video_taken_at(tags.get("creation_time"))
     return ProbeFields(
         width=int(width) if isinstance(width, int) else None,
         height=int(height) if isinstance(height, int) else None,
@@ -182,6 +240,7 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
         fps=fps,
         bitrate=bitrate,
         codec=str(codec) if codec else None,
+        exif_taken_at=taken_at,
     )
 
 

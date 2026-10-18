@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from app.library.application.export_naming import export_name, safe_title
 from app.library.application.import_service import ImportService
 from app.library.application.packages.resource_package import ResourcePackage
-from app.library.application.schemas import ResourceBatchRequest
+from app.library.application.schemas import ResourceBatchRequest, ResourceSortField
 from app.library.application.use_cases import CollectionService, LibraryQueryService
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import (
@@ -26,7 +26,7 @@ from app.library.infrastructure.repositories import (
 )
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.library.domain.models import ResourceType
+from app.library.domain.models import ResourceStatus, ResourceType
 
 from app.main import app
 
@@ -212,6 +212,93 @@ class BatchTagExportTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as ctx:
                 await collections.export(created.id, str(self.root / "nope"))
             self.assertEqual(ctx.exception.status_code, 400)
+
+    async def test_list_hides_collection_members_by_default(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, "a.png", seed=1)
+            b = await self._import_image(session, "b.png", seed=2)
+            collections = self._collection_svc(session)
+            created = await collections.create("合集", None)
+            assert created.id is not None
+            await collections.add_item(created.id, a)
+            svc = self._svc(session)
+
+            page = await svc.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc",
+            )
+            ids = {item.id for item in page.items}
+            self.assertNotIn(a, ids)
+            self.assertIn(b, ids)
+            self.assertEqual(page.total, 1)
+
+            with_all = await svc.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc",
+                include_collected=True,
+            )
+            self.assertEqual({item.id for item in with_all.items}, {a, b})
+
+            search = await svc.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc", q="a",
+            )
+            self.assertIn(a, {item.id for item in search.items})
+
+    async def test_list_mixed_excludes_collected_resources(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, "a.png", seed=1)
+            b = await self._import_image(session, "b.png", seed=2)
+            collections = self._collection_svc(session)
+            created = await collections.create("合集", None)
+            assert created.id is not None
+            await collections.add_item(created.id, a)
+            svc = self._svc(session)
+
+            page = await svc.list_page(
+                None, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc",
+            )
+            resource_ids = {
+                item.id for item in page.items if not isinstance(item, dict)
+            }
+            self.assertNotIn(a, resource_ids)
+            self.assertIn(b, resource_ids)
+            self.assertTrue(any(isinstance(item, dict) for item in page.items))
+            self.assertEqual(page.total, 2)
+
+            with_all = await svc.list_page(
+                None, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc",
+                include_collected=True,
+            )
+            self.assertEqual(with_all.total, 3)
+
+    async def test_stats_excludes_collected_from_by_type(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, "a.png", seed=1)
+            await self._import_image(session, "b.png", seed=2)
+            collections = self._collection_svc(session)
+            created = await collections.create("合集", None)
+            assert created.id is not None
+            await collections.add_item(created.id, a)
+            stats = await ResourceRepository(session).stats()
+            self.assertEqual(stats["by_type"].get("image"), 1)
+
+    async def test_trash_list_still_shows_collection_members(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, "a.png", seed=1)
+            collections = self._collection_svc(session)
+            created = await collections.create("合集", None)
+            assert created.id is not None
+            await collections.add_item(created.id, a)
+            svc = self._svc(session)
+            await svc.trash(a)
+            page = await svc.list_page(
+                None, ResourceStatus.TRASHED, 50, 0,
+                ResourceSortField.CREATED_AT, "desc",
+            )
+            self.assertIn(a, {item.id for item in page.items})
 
     def test_export_endpoint_404_unknown_collection(self) -> None:
         client = TestClient(app)

@@ -69,11 +69,16 @@ async def list_resources(
     q: str | None = Query(default=None, max_length=200),
     tag_ids: list[int] | None = Query(default=None, alias="tagIds"),
     category_id: int | None = Query(default=None, alias="categoryId"),
+    include_collected: bool = Query(default=False, alias="includeCollected"),
+    taken_date: str | None = Query(default=None, alias="takenDate"),
+    untimed: bool = Query(default=False),
+    timeline_visible: bool | None = Query(default=None, alias="timelineVisible"),
+    timeline_media: bool = Query(default=False, alias="timelineMedia"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourcePage:
-    """资源分页列表（可按类型/状态/关键词/标签/分类过滤）。"""
+    """资源分页列表（可按类型/状态/关键词/标签/分类过滤；默认不含合集成员）。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order,
@@ -83,6 +88,11 @@ async def list_resources(
         q=q,
         tag_ids=tag_ids,
         category_id=category_id,
+        include_collected=include_collected,
+        taken_date=taken_date,
+        untimed=untimed,
+        timeline_visible=timeline_visible,
+        timeline_media=timeline_media,
     )
 
 

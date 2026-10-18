@@ -110,6 +110,7 @@ class Resource(ApiModel):
     scraped_source: str | None = None  # 抓取来源站点（审计）
     extra: dict[str, Any] = Field(default_factory=dict)  # 站点特有元数据兜底
     scrape_pending: bool = False  # 有未确认的 search 候选
+    timeline_visible: bool | None = None  # 照片时间线：None=按 EXIF 自动
     created_at: datetime | None = None
     updated_at: datetime | None = None
     category: "Category | None" = None
@@ -170,6 +171,8 @@ class ResourceFile(ApiModel):
     fps: float | None = None
     bitrate: int | None = None  # 比特/秒
     exif_taken_at: str | None = None  # 图片拍摄时间 ISO 本地日历
+    exif_lat: float | None = None  # WGS84 纬度
+    exif_lng: float | None = None  # WGS84 经度
     created_at: datetime | None = None
 
     @property
