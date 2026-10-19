@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "MyLoveou",
   "description": "本地资源管理器桌面端（UI 层）",
   "main": "out/main/index.js",
