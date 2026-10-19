@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -24,6 +25,7 @@ from app.library.infrastructure.repositories import (
     ResourceRepository,
     TaskSummaryRepository,
 )
+from app.shared.config import settings
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
 from app.library.domain.models import ResourceStatus, ResourceType
@@ -317,8 +319,9 @@ class BatchTagExportTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(a, {item.id for item in page.items})
 
     def test_export_endpoint_404_unknown_collection(self) -> None:
-        client = TestClient(app)
-        res = client.post("/library/collections/99999/export", json={"targetDir": "C:/x"})
+        with patch.object(settings, "db_path", self.db_path):
+            with TestClient(app) as client:
+                res = client.post("/library/collections/99999/export", json={"targetDir": "C:/x"})
         self.assertEqual(res.status_code, 404)
 
 
