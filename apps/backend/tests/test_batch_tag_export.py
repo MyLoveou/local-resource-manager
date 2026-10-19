@@ -6,13 +6,11 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from app.library.application.export_naming import export_name, safe_title
 from app.library.application.import_service import ImportService
@@ -25,7 +23,6 @@ from app.library.infrastructure.repositories import (
     ResourceRepository,
     TaskSummaryRepository,
 )
-from app.shared.config import settings
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
 from app.library.domain.models import ResourceStatus, ResourceType
@@ -318,11 +315,12 @@ class BatchTagExportTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn(a, {item.id for item in page.items})
 
-    def test_export_endpoint_404_unknown_collection(self) -> None:
-        with patch.object(settings, "db_path", self.db_path):
-            with TestClient(app) as client:
-                res = client.post("/library/collections/99999/export", json={"targetDir": "C:/x"})
-        self.assertEqual(res.status_code, 404)
+    async def test_export_missing_collection_404(self) -> None:
+        async with self.factory() as session:
+            collections = self._collection_svc(session)
+            with self.assertRaises(HTTPException) as ctx:
+                await collections.export(99999, str(self.root / "out"))
+            self.assertEqual(ctx.exception.status_code, 404)
 
 
 if __name__ == "__main__":
