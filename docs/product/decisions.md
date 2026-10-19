@@ -653,7 +653,7 @@
 - **为何**：不再每次手动重装；公告与用户确认分离，可控；GitHub 仓库已有
 - **不选**：自建更新服务器；静默强制更新；Squirrel
 - **落点**：`facts.md` §一、`docs/requirements/features/app-update/`、`openspec/changes/app-update/`
-- 状态：有效（完整更新待 0.1.2 发布手验）
+- 状态：有效（v0.1.2 已于 2026-10-19 发布；更新说明清洗、速度/剩余展示、手动下载已在工作区实现，待下个版本发布；仍未签名）
 
 ---
 
@@ -681,7 +681,7 @@
 - **决定**：
   1. 图片类型页/时间线网格改用 Justified 照片流（列表接口附带 primary 宽高），保留选中/批量/打开
   2. 导入向导新增「计入时间线（默认按拍摄时间）」；取消则写 `timeline_visible=0`，勾选保持自动
-  3. 时间线监听 `library.revision`，刷新前后保存/恢复滚动位置
+  3. 时间线监听 `library.resourceRevision`（2026-10-19 起为按 scope 失效总线），刷新前后保存/恢复滚动位置
   4. 合集详情新增「删除合集」+ 确认；只删关系、资源保留
   5. 「显示合集内资源」改为全局持久化开关（合集列表页头部 + 类型页工具栏）
   6. 图片页增加底部「加载更多」兜底；列表 ID 签名变化时重置 nearEnd 去重，批量选择中/退出后均可继续加载
@@ -744,6 +744,16 @@
 - **不选**：合并跨类型分类树；时间线成员表；把多时间线继续塞进资源库下拉。
 - **落点**：`saved_views` API/repo、`/library/photos/timeline`、`views/Timelines`、`views/TimelineDetail`、`TimelineEditorModal`
 - 状态：有效（198 tests；待发版手验）
+
+### D-20261019-03 · 数据变更统一按 scope 失效，不再手动刷新
+
+- 日期：2026-10-19
+- 场景：批量加分类后“未分类”列表与左侧计数不更新；各页面靠零散 `bump`/`load(..., true)` 刷新
+- **决定**：`library.invalidate` 按 `resources(type)/categories(type)/collections/savedViews/home/tags` 记录修订号；列表、分类树、首页、合集、时间线、标签筛选各自订阅；分类树 HTTP 层不再维护第二份缓存，缓存只归 Pinia store。
+- **为何**：写操作只声明“影响哪些查询”，避免遗漏与过度刷新；页面保持现有滚动/选择状态，不整页 reload。
+- **不选**：全局单一 revision（无法区分类型/页面）；每个 mutation 后页面手动刷新；引入完整查询库。
+- **落点**：`application/stores/library.ts`、`useResourcePage`、`LibraryWorkspace`、`InfoPanel`、`Home`、`CollectionDetail`、`Timelines`、`TimelineEditorModal`、`ResourceBrowser`
+- 状态：有效（2026-10-19；typecheck/build/lint 通过，批量分类回归测试通过）
 
 ---
 

@@ -13,6 +13,8 @@
 
 需求与决策：`docs/product/facts.md`（事实基线）、`docs/product/decisions.md`（决策记忆）、`docs/requirements/features/`（L1 需求）。
 
+学习与经验：`docs/经验总结/README.md`（架构、进程、SQLite、发布、自动更新、媒体领域、学习路线）。
+
 ## 目录结构（四层：基础设施 / 领域 / 业务 / UI）
 
 ```
@@ -41,7 +43,9 @@ apps/
 pnpm dev                  # 桌面端（自动拉起后端）
 pnpm backend:install      # 首次：建 venv + 装依赖
 pnpm backend:start        # 独立起后端 :8000
-pnpm typecheck / lint / build
+pnpm --filter desktop typecheck
+pnpm --filter desktop lint
+pnpm --filter desktop build
 ```
 
 ```bash

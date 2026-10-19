@@ -37,9 +37,9 @@
   - **批量打标 + 合集导出已实现**（`batch-tag-export`，2026-10-07）：批量端点扩展 `add_tags`（只加不删、幂等、多标签）；顶栏批量条「打标」输入框；合集成员页「导出」按钮，按成员顺序复制主文件到所选目录，命名 `{序号3位}_{安全标题}{后缀}`，缺失文件跳过计数；命名规则为纯函数算法切片；后端 14 个新单测，待 Electron 手验。漫展返图工作流：**按 coser 建分类**（分类词表既有能力，零开发）。
   - **合集交互收口**（2026-10-18）：加入合集改为「勾选暂存 + 取消/确定」；主列表默认隐藏合集成员（类型页/全库混排/首页 by_type），「显示合集内资源」为全局持久化开关（合集列表页头部/类型页工具栏），搜索与回收站不受影响；合集详情支持按分类/标签（AND）筛选成员；合集详情可删除（只删关系、资源保留）；**批量选中可加入合集**（弹窗选已有/新建，返回 added/skipped/missing，超过 200 项前端分批；只加关系）；普通浏览恢复选中描边、合集卡不可选中；后端 +4 单测（181 passed）。
   - **照片时间线已实现**（`photo-timeline-map`，2026-10-18）：独立「时间线」页（时间线/网格）；时间线为 **Justified 照片流**（粘性年/月 + 日段 + 逐行等高照片，`justified-layout`）；图片类型页/时间线网格同样 Justified（列表附 primary 宽高）；**包含本机拍摄的 video**（ffprobe `creation_time`，内嵌 ffprobe，时长角标，双击播放）；按拍摄日分组 + 未知时间组；每图「计入时间线」三态（默认按 EXIF/creation_time 自动）；年/月/分类/标签筛选；旧图回填（拍摄时间 + GPS，不改原图、不覆盖手动可见性）；导入解析 GPS；导入向导可选「计入时间线」；取消计入后时间线保留滚动位置；图片页批量选择后可继续加载（底部兜底按钮 + nearEnd 重置）；地图 UI 下一刀；后端 198 测试通过。
-  - **资源库工作区已实现**（`library-workspace`，2026-10-19）：资源库统一路由 `/library/:type`，类型 tabs + 可折叠分类树 + 网格/地图（地图首版入口/空态）；分类改为**每类型独立树**（`0018` 迁移、多对多 `resource_categories`、最多 4 层、单节点筛选含后代、`待整理分类` 系统根、多分类赋值）；保存时间线 `saved_views`（多分类并集、无成员表、默认排除未知时间）；首页 `/library/home` 聚合最近添加/合集/时间线；合集 D 叠图卡（`previewThumbnails≤3`）；批量 Ctrl/Shift/Esc；旧类型路由与 `/photos` 重定向；迁移在真实库副本对账通过；198 测试，打包已重出（0.1.2）。
+  - **资源库工作区已实现**（`library-workspace`，2026-10-19）：资源库统一路由 `/library/:type`，类型 tabs + 可折叠分类树 + 网格/地图（地图首版入口/空态）；分类改为**每类型独立树**（`0018` 迁移、多对多 `resource_categories`、最多 4 层、单节点筛选含后代、`待整理分类` 系统根、多分类赋值）；保存时间线 `saved_views`（多分类并集、无成员表、默认排除未知时间）；首页 `/library/home` 聚合最近添加/合集/时间线；合集 D 叠图卡（`previewThumbnails≤3`）；批量 Ctrl/Shift/Esc；旧类型路由与 `/photos` 重定向；迁移在真实库副本对账通过；198 测试，打包已重出（0.1.2）。数据变更统一走按 scope 的 `library.invalidate`：批量分类后资源列表/分类树/首页自动失效重取，分类树 HTTP 层不再保留第二份缓存。
   - **时间线中心已实现**（`timeline-hub`，2026-10-19）：一级「时间线」入口；保存时间线支持 scope（图片/视频/全部媒体）、图片/视频分类分别包含/排除、标签/日期/未知时间；`/timelines/all` 内置全部媒体；详情竖向 Justified；编辑/删除规则；`/photos` 重定向；首页时间线卡片跳详情；无成员表。
-  - **应用内更新已实现**（`app-update`，2026-10-18）：electron-updater + GitHub Releases；启动/设置页检查、更新公告、下载、重启安装；版本 0.1.1 为首个 updater 版本（需手动装一次），之后 `v*` tag 由 CI 发布 Release；未签名；完整更新待 0.1.2 Release 手验。
+  - **应用内更新已实现**（`app-update`，2026-10-18）：electron-updater + GitHub Releases；启动/设置页检查、更新公告、下载、重启安装；版本 0.1.1 为首个 updater 版本（需手动装一次），之后 `v*` tag 由 CI 发布 Release；**v0.1.2 Release 已于 2026-10-19 发布成功（5 个资产）**；更新说明清洗、下载速度/剩余时间、手动下载兜底已在工作区实现，**不在 0.1.2 包内，待下个版本发布**；仍未签名，自动更新慢受 GitHub 网络影响；完整更新链路待安装版手验。
   - **分区可见性已实现**（`section-visibility`，2026-10-07）：代码配置 `HIDDEN_SECTIONS`（`domain/visibility.ts`，默认 `/av /anime /novel /comic /game /model`）统一控制菜单、路由直达（重定向首页）、导入向导类型、首页概览卡；`/` 不可隐藏；搜索与合集混排不过滤；不改后端/DB，清空配置即恢复；`/anime` 于安装包反馈后追加；待 Electron 手验。
   - **Windows 生产包与校验流水线已实现**（`production-packaging`，2026-10-07）：`pnpm release:win` 一条命令产出 NSIS 安装包 + 绿色版 zip + SHA256；后端 PyInstaller onedir 随包（无需用户 Python）；生产态数据/日志落 `%APPDATA%/local-resource-manager`；verify 强制冻结后端 `/health` 冒烟；GitHub Actions `release-windows.yml` 复用同一入口；应用图标已设计（`build/icon.ico`，`build/generate-icon.py` 可复现）；安装目录默认 `%LOCALAPPDATA%\Programs\资源管理器`（可执行名保持 ASCII）；安装器提供「创建桌面快捷方式」复选框（默认勾选，静默安装仍创建）；安装与 dev 手工回归待跑。
 
@@ -68,7 +68,7 @@
 - 本仓负责：桌面壳、本机后端、SQLite 资源库、后续自建抓取与内置下载编排。
 - 本仓不负责：移动端、多用户账号、在线流媒体服务、资源分享。
 - 已知债（有路径）：
-  - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 已由 `library-trash` 用 `library.bump(null)` 让列表 reset（待手工验网格）。
+  - `useResourceHandle.refreshResourceList` 不更新 `useResourcePage.items` — 已由按 scope 的 `library.invalidate` 让资源列表 reset（待手工验网格）。
   - README 仍写「无业务代码 / mount 双应用」，与现状不符。
   - 路线图 `docs/design/00-路线图与里程碑.md` 进度表已按 2026-09-23 核对：MS2 主路径完成；MS3 与 MS7 仅第一刀；设置未做。
   - 导入 `phase=probe`：Pillow 宽高与 **EXIF 拍摄时间**；ffprobe 视频字段。图片拍摄可 PATCH 手改。缺列面板「—」。开发阶段以清库重导代替回填。
