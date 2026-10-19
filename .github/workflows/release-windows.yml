@@ -39,7 +39,7 @@ jobs:
         run: |
           python -m venv apps/backend/.venv
           apps/backend/.venv/Scripts/python -m pip install --upgrade pip
-          apps/backend/.venv/Scripts/pip install -r apps/backend/requirements.txt -r apps/backend/requirements-packaging.txt
+          apps/backend/.venv/Scripts/pip install -r apps/backend/requirements.txt -r apps/backend/requirements-dev.txt -r apps/backend/requirements-packaging.txt
 
       - name: Install node deps
         run: pnpm install --frozen-lockfile
