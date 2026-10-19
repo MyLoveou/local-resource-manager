@@ -69,6 +69,8 @@ async def list_resources(
     q: str | None = Query(default=None, max_length=200),
     tag_ids: list[int] | None = Query(default=None, alias="tagIds"),
     category_id: int | None = Query(default=None, alias="categoryId"),
+    category_ids: list[int] | None = Query(default=None, alias="categoryIds"),
+    uncategorized: bool = Query(default=False),
     include_collected: bool = Query(default=False, alias="includeCollected"),
     taken_date: str | None = Query(default=None, alias="takenDate"),
     untimed: bool = Query(default=False),
@@ -88,6 +90,8 @@ async def list_resources(
         q=q,
         tag_ids=tag_ids,
         category_id=category_id,
+        category_ids=category_ids,
+        uncategorized=uncategorized,
         include_collected=include_collected,
         taken_date=taken_date,
         untimed=untimed,
@@ -103,7 +107,9 @@ async def batch_resources(
 ) -> ResourceBatchResult:
     """批量 trash / restore / purge / add_tags；逐条处理，失败项返回明细。"""
     resources, tasks = repos
-    return await LibraryQueryService(resources, tasks).batch(body.action, body.ids, body.tag_names)
+    return await LibraryQueryService(resources, tasks).batch(
+        body.action, body.ids, body.tag_names, body.category_ids
+    )
 
 
 @router.get("/{resource_id}/content")

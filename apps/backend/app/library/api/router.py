@@ -1,7 +1,21 @@
 """Library 路由聚合（由根应用 include，prefix=/library）。"""
 from fastapi import APIRouter
 
-from app.library.api import categories, collections, health, imports, overview, photos, resources, tags, todos, watch, workbench
+from app.library.api import (
+    categories,
+    collections,
+    health,
+    home,
+    imports,
+    overview,
+    photos,
+    resources,
+    saved_views,
+    tags,
+    todos,
+    watch,
+    workbench,
+)
 
 router = APIRouter()
 router.include_router(health.router)
@@ -15,4 +29,6 @@ router.include_router(watch.router)
 router.include_router(workbench.router)
 router.include_router(todos.router)
 router.include_router(categories.router)
+router.include_router(saved_views.router)
+router.include_router(home.router)
 router.include_router(tags.router)

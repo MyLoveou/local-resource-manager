@@ -35,7 +35,24 @@ class CategoryRow(Base):
     __tablename__ = "categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("categories.id", ondelete="SET NULL")
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_system: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ResourceCategoryRow(Base):
+    __tablename__ = "resource_categories"
+
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    category_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("categories.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class TagRow(Base):
@@ -157,3 +174,16 @@ class CollectionItemRow(Base):
         Integer, ForeignKey('resources.id', ondelete='CASCADE'), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class SavedViewRow(Base):
+    __tablename__ = "saved_views"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    filters_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    sort: Mapped[str] = mapped_column(String, nullable=False, default="takenAt")
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)

@@ -12,29 +12,83 @@ from app.library.application.schemas import (
     PhotoTimeline,
     PhotoTimelineDay,
 )
-from app.library.domain.models import ResourceType
-from app.library.infrastructure.repositories import ResourceRepository
+from app.library.domain.models import CategoryRule, ResourceType
+from app.library.infrastructure.repositories import CategoryRepository, ResourceRepository
 
 
 class PhotoTimelineService:
-    def __init__(self, resources: ResourceRepository):
+    def __init__(self, resources: ResourceRepository, categories: CategoryRepository | None = None):
         self._resources = resources
+        self._categories = categories or CategoryRepository(resources.session)
 
     async def timeline(
         self,
         *,
         include_all: bool,
+        scope: str | None = None,
         year: int | None,
         month: int | None,
-        category_id: int | None,
-        tag_ids: list[int] | None,
+        image_rule: CategoryRule | None = None,
+        video_rule: CategoryRule | None = None,
+        tag_ids: list[int] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        include_untimed: bool = False,
+        type_: ResourceType | None = None,
+        category_ids: list[int] | None = None,
     ) -> PhotoTimeline:
-        days, unknown, total = await self._resources.timeline_photos(
-            include_all=include_all,
-            year=year,
-            month=month,
-            category_id=category_id,
-            tag_ids=tag_ids,
+        if scope is None:
+            scope = (type_ or ResourceType.IMAGE).value
+        if category_ids:
+            if scope == "image" and image_rule is None:
+                image_rule = CategoryRule(include=category_ids)
+            elif scope == "video" and video_rule is None:
+                video_rule = CategoryRule(include=category_ids)
+        image_rule = image_rule or CategoryRule()
+        video_rule = video_rule or CategoryRule()
+        result: list[tuple[list[dict], list[dict], int]] = []
+        for type_, rule in ((ResourceType.IMAGE, image_rule), (ResourceType.VIDEO, video_rule)):
+            if scope != "media" and scope != type_.value:
+                continue
+            include_ids = await self._categories.descendant_ids(rule.include)
+            exclude_ids = await self._categories.descendant_ids(rule.exclude)
+            result.append(await self._resources.timeline_photos(
+                include_all=include_all,
+                type_=type_,
+                year=year,
+                month=month,
+                category_ids=include_ids,
+                exclude_category_ids=exclude_ids,
+                tag_ids=tag_ids,
+                date_from=date_from,
+                date_to=date_to,
+                include_untimed=include_untimed,
+            ))
+
+        days_by_date: dict[str, list[dict]] = {}
+        unknown: list[dict] = []
+        total = 0
+        for days, unknown_rows, part_total in result:
+            total += part_total
+            for day in days:
+                days_by_date.setdefault(day["date"], []).extend(day["photos"])
+            unknown.extend(unknown_rows)
+        days = [
+            {
+                "date": date,
+                "count": len(photos),
+                "photos": sorted(
+                    photos,
+                    key=lambda photo: (photo.get("taken_at") or "", photo["id"]),
+                    reverse=True,
+                ),
+            }
+            for date, photos in sorted(days_by_date.items(), reverse=True)
+        ]
+        unknown = sorted(
+            unknown,
+            key=lambda photo: (photo.get("taken_at") or "", photo["id"]),
+            reverse=True,
         )
         return PhotoTimeline(
             days=[

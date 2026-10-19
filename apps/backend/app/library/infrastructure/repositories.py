@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from sqlalchemy import and_, asc, desc, exists, func, literal, or_, select
+from sqlalchemy import and_, asc, delete, desc, exists, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -17,9 +17,11 @@ from app.library.infrastructure.orm import (
     EpisodeRow,
     ExtraRow,
     FileRow,
+    ResourceCategoryRow,
     ResourceRow,
     ResourceTagRow,
     ResourceTodoRow,
+    SavedViewRow,
     SeasonRow,
     TagRow,
 )
@@ -33,8 +35,11 @@ from app.library.domain.media_types import (
 from app.shared.utils.time import db_now, db_ts
 from app.library.domain.models import (
     Category,
+    CategoryRule,
     Collection,
     Resource,
+    SavedView,
+    SavedViewFilters,
     WorkCatalog,
     ResourceFile,
     ResourceStatus,
@@ -113,6 +118,17 @@ def orm_to_resource(row: ResourceRow) -> Resource:
     return _orm_to_resource(row)
 
 
+def _category_to_domain(row: CategoryRow) -> Category:
+    return Category(
+        id=row.id,
+        name=row.name,
+        type=ResourceType(row.type),
+        parent_id=row.parent_id,
+        sort=row.sort,
+        is_system=bool(row.is_system),
+    )
+
+
 def _file_to_domain(f: FileRow) -> ResourceFile:
     """FileRow → 领域文件（详情与列表 primary 共用）。"""
     return ResourceFile(
@@ -147,7 +163,27 @@ class ResourceRepository:
         return self._session
 
     async def attach_listed(self, resources: list[Resource]) -> list[Resource]:
+        await self.attach_categories(resources)
         return await self._attach_thumbnail_paths(resources)
+
+    async def attach_categories(self, resources: list[Resource]) -> list[Resource]:
+        """批量附加分类，避免列表逐条查询。"""
+        ids = [resource.id for resource in resources if resource.id is not None]
+        if not ids:
+            return resources
+        rows = (await self._session.execute(
+            select(ResourceCategoryRow.resource_id, CategoryRow)
+            .join(CategoryRow, CategoryRow.id == ResourceCategoryRow.category_id)
+            .where(ResourceCategoryRow.resource_id.in_(ids))
+            .order_by(CategoryRow.type, CategoryRow.sort, CategoryRow.name)
+        )).all()
+        by_resource: dict[int, list[Category]] = {}
+        for resource_id, category in rows:
+            by_resource.setdefault(int(resource_id), []).append(_category_to_domain(category))
+        for resource in resources:
+            if resource.id is not None:
+                resource.categories = by_resource.get(resource.id, [])
+        return resources
 
     async def create(self, resource: Resource, *, commit: bool = True) -> Resource:
         """插入并返回带 id 的完整实体。"""
@@ -257,16 +293,10 @@ class ResourceRepository:
             .where(ResourceTodoRow.resource_id == row.id)
             .order_by(ResourceTodoRow.sort, ResourceTodoRow.id)
         )
-        cat = (
-            await self._session.get(CategoryRow, row.category_id)
-            if row.category_id is not None
-            else None
-        )
         tags = (await self._session.execute(tag_stmt)).scalars().all()
         files = (await self._session.execute(file_stmt)).scalars().all()
         todos = (await self._session.execute(todo_stmt)).scalars().all()
-        if cat is not None:
-            resource.category = Category(id=cat.id, name=cat.name)
+        await self.attach_categories([resource])
         resource.tags = [Tag(id=t.id, name=t.name) for t in tags]
         resource.files = [_file_to_domain(f) for f in files]
         resource.todos = [
@@ -468,8 +498,10 @@ class ResourceRepository:
                 )
             )
             cat_hit = exists(
-                select(CategoryRow.id).where(
-                    CategoryRow.id == ResourceRow.category_id,
+                select(ResourceCategoryRow.resource_id)
+                .join(CategoryRow, CategoryRow.id == ResourceCategoryRow.category_id)
+                .where(
+                    ResourceCategoryRow.resource_id == ResourceRow.id,
                     func.lower(CategoryRow.name).like(pattern, escape="\\"),
                 )
             )
@@ -544,6 +576,9 @@ class ResourceRepository:
         untimed: bool = False,
         timeline_visible: bool | None = None,
         timeline_media: bool = False,
+        category_ids: list[int] | None = None,
+        uncategorized: bool = False,
+        exclude_category_ids: list[int] | None = None,
     ):
         if type_ is not None:
             stmt = stmt.where(ResourceRow.type == type_.value)
@@ -554,7 +589,37 @@ class ResourceRepository:
         if status is not None:
             stmt = stmt.where(ResourceRow.status == status.value)
         if category_id is not None:
-            stmt = stmt.where(ResourceRow.category_id == category_id)
+            stmt = stmt.where(
+                ResourceRow.id.in_(
+                    select(ResourceCategoryRow.resource_id).where(
+                        ResourceCategoryRow.category_id == category_id
+                    )
+                )
+            )
+        if category_ids:
+            stmt = stmt.where(
+                ResourceRow.id.in_(
+                    select(ResourceCategoryRow.resource_id).where(
+                        ResourceCategoryRow.category_id.in_(category_ids)
+                    )
+                )
+            )
+        if exclude_category_ids:
+            stmt = stmt.where(
+                ResourceRow.id.not_in(
+                    select(ResourceCategoryRow.resource_id).where(
+                        ResourceCategoryRow.category_id.in_(exclude_category_ids)
+                    )
+                )
+            )
+        if uncategorized:
+            stmt = stmt.where(
+                ~exists(
+                    select(ResourceCategoryRow.resource_id).where(
+                        ResourceCategoryRow.resource_id == ResourceRow.id
+                    )
+                )
+            )
         if exclude_collected:
             stmt = stmt.where(
                 ResourceRow.id.not_in(select(CollectionItemRow.resource_id))
@@ -579,8 +644,10 @@ class ResourceRepository:
         untimed: bool = False,
         timeline_visible: bool | None = None,
         timeline_media: bool = False,
+        category_ids: list[int] | None = None,
+        uncategorized: bool = False,
     ) -> int:
-        """与 list 相同过滤条件下的总数。"""
+        """与 list 相同条件的数量。"""
         stmt = self._filter(
             select(func.count()).select_from(ResourceRow),
             type_,
@@ -593,6 +660,8 @@ class ResourceRepository:
             untimed,
             timeline_visible,
             timeline_media,
+            category_ids,
+            uncategorized,
         )
         total = await self._session.scalar(stmt)
         return int(total or 0)
@@ -617,6 +686,8 @@ class ResourceRepository:
         untimed: bool = False,
         timeline_visible: bool | None = None,
         timeline_media: bool = False,
+        category_ids: list[int] | None = None,
+        uncategorized: bool = False,
     ) -> list[Resource]:
         resources, _keys = await self.list_with_sort_keys(
             type_,
@@ -636,6 +707,8 @@ class ResourceRepository:
             untimed=untimed,
             timeline_visible=timeline_visible,
             timeline_media=timeline_media,
+            category_ids=category_ids,
+            uncategorized=uncategorized,
         )
         return resources
 
@@ -659,6 +732,8 @@ class ResourceRepository:
         untimed: bool = False,
         timeline_visible: bool | None = None,
         timeline_media: bool = False,
+        category_ids: list[int] | None = None,
+        uncategorized: bool = False,
     ) -> tuple[list[Resource], list[str]]:
         from app.library.application.list_query import serialize_sort_value
 
@@ -667,6 +742,7 @@ class ResourceRepository:
             select(ResourceRow, sort_expr.label("sort_value")),
             type_, status, q, tag_ids, category_id, exclude_collected,
             taken_date, untimed, timeline_visible, timeline_media,
+            category_ids, uncategorized,
         )
         cursor_key = after_key
         if cursor_key is None and after_created_at is not None and sort == "createdAt":
@@ -678,6 +754,7 @@ class ResourceRepository:
             stmt = stmt.limit(limit).offset(offset)
         rows = (await self._session.execute(stmt)).all()
         resources = await self._attach_thumbnail_paths([_orm_to_resource(row[0]) for row in rows])
+        await self.attach_categories(resources)
         await self.attach_scrape_pending(resources)
         await self.attach_primary_files(resources)
         keys = [serialize_sort_value(row[1]) for row in rows]
@@ -971,20 +1048,24 @@ class ResourceRepository:
         else:
             await self._session.flush()
 
-    async def ensure_category(self, name: str, *, commit: bool = True) -> Category:
-        """按名查找或创建分类词条。"""
+    async def ensure_category(
+        self, name: str, *, type_: ResourceType = ResourceType.IMAGE, commit: bool = True
+    ) -> Category:
+        """查找或创建同类型分类（兼容旧调用）。"""
         trimmed = name.strip()
-        stmt = select(CategoryRow).where(CategoryRow.name == trimmed)
+        stmt = select(CategoryRow).where(
+            CategoryRow.name == trimmed, CategoryRow.type == type_.value
+        )
         row = (await self._session.execute(stmt)).scalars().first()
         if row is None:
-            row = CategoryRow(name=trimmed)
+            row = CategoryRow(name=trimmed, type=type_.value)
             self._session.add(row)
             if commit:
                 await self._session.commit()
             else:
                 await self._session.flush()
             await self._session.refresh(row)
-        return Category(id=row.id, name=row.name)
+        return _category_to_domain(row)
 
     async def set_category_id(
         self, resource_id: int, category_id: int | None, *, commit: bool = True
@@ -994,6 +1075,25 @@ class ResourceRepository:
             return
         row.category_id = category_id
         row.updated_at = db_now()
+        if commit:
+            await self._session.commit()
+        else:
+            await self._session.flush()
+
+    async def set_categories(
+        self, resource_id: int, category_ids: list[int], *, commit: bool = True
+    ) -> None:
+        await self._session.execute(
+            delete(ResourceCategoryRow).where(ResourceCategoryRow.resource_id == resource_id)
+        )
+        unique_ids = list(dict.fromkeys(category_ids))
+        for category_id in unique_ids:
+            self._session.add(ResourceCategoryRow(
+                resource_id=resource_id, category_id=category_id
+            ))
+        row = await self._session.get(ResourceRow, resource_id)
+        if row is not None:
+            row.updated_at = db_now()
         if commit:
             await self._session.commit()
         else:
@@ -1098,11 +1198,12 @@ class ResourceRepository:
         for item in resources:
             item.scrape_pending = item.id in pending
 
-    async def list_categories(self) -> list[Category]:
-        rows = (
-            await self._session.execute(select(CategoryRow).order_by(CategoryRow.name))
-        ).scalars().all()
-        return [Category(id=r.id, name=r.name) for r in rows]
+    async def list_categories(self, type_: ResourceType | None = None) -> list[Category]:
+        stmt = select(CategoryRow).order_by(CategoryRow.type, CategoryRow.name)
+        if type_ is not None:
+            stmt = stmt.where(CategoryRow.type == type_.value)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [_category_to_domain(row) for row in rows]
 
     async def list_tags(self, type_: ResourceType | None = None) -> list[Tag]:
         """标签词表；给类型时只返回该类型 active 资源实际打过的标签（本类标签筛选）。"""
@@ -1214,6 +1315,7 @@ class ResourceRepository:
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         resources = await self._attach_thumbnail_paths([_orm_to_resource(r) for r in rows])
+        await self.attach_categories(resources)
         await self.attach_scrape_pending(resources)
         return resources
 
@@ -1281,22 +1383,28 @@ class ResourceRepository:
         self,
         *,
         include_all: bool,
+        type_: ResourceType,
         year: int | None,
         month: int | None,
-        category_id: int | None,
+        category_ids: list[int] | None,
         tag_ids: list[int] | None,
+        exclude_category_ids: list[int] | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        include_untimed: bool = False,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
-        """时间线瓦片：active 图片/视频按天返回（含宽高/时长/缩略图），未知时间单独返回。"""
+        """Single-type timeline tiles; unknown time optional."""
         primary = aliased(FileRow)
         thumb = aliased(FileRow)
         base = self._filter(
             select(ResourceRow.id),
-            None,
+            type_,
             ResourceStatus.ACTIVE,
-            category_id=category_id,
+            category_ids=category_ids,
+            exclude_category_ids=exclude_category_ids,
             tag_ids=tag_ids,
             timeline_visible=None if include_all else True,
-        ).where(ResourceRow.type.in_((ResourceType.IMAGE.value, ResourceType.VIDEO.value)))
+        )
         join = (
             select(
                 ResourceRow.id,
@@ -1358,6 +1466,10 @@ class ResourceRepository:
                 dated_stmt = dated_stmt.where(
                     func.substr(primary.exif_taken_at, 6, 2) == f"{month:02d}"
                 )
+        if date_from is not None:
+            dated_stmt = dated_stmt.where(func.substr(primary.exif_taken_at, 1, 10) >= date_from[:10])
+        if date_to is not None:
+            dated_stmt = dated_stmt.where(func.substr(primary.exif_taken_at, 1, 10) <= date_to[:10])
         dated_rows = (await self._session.execute(dated_stmt)).all()
 
         days_map: dict[str, list[dict[str, Any]]] = {}
@@ -1369,13 +1481,15 @@ class ResourceRepository:
             for date, photos in sorted(days_map.items(), reverse=True)
         ]
 
-        has_taken = self._taken_date_exists(None)
-        unknown_rows = (
-            await self._session.execute(
-                join.where(~has_taken).order_by(desc(ResourceRow.id))
-            )
-        ).all()
-        unknown = [to_tile(row) for row in unknown_rows]
+        unknown: list[dict[str, Any]] = []
+        if include_untimed:
+            has_taken = self._taken_date_exists(None)
+            unknown_rows = (
+                await self._session.execute(
+                    join.where(~has_taken).order_by(desc(ResourceRow.id))
+                )
+            ).all()
+            unknown = [to_tile(row) for row in unknown_rows]
         total = sum(day["count"] for day in days) + len(unknown)
         return days, unknown, total
 
@@ -1415,6 +1529,7 @@ class ResourceRepository:
             .offset(offset)
         )).all()
         items: list[object] = []
+        collection_ids: list[int] = []
         for kind, rid in rows:
             if kind == "resource":
                 row = await self._session.get(ResourceRow, rid)
@@ -1424,37 +1539,24 @@ class ResourceRepository:
                 col_row = await self._session.get(CollectionRow, rid)
                 if col_row is None:
                     continue
-                count = await self._session.scalar(
-                    select(func.count())
-                    .select_from(CollectionItemRow)
-                    .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
-                    .where(
-                        CollectionItemRow.collection_id == rid,
-                        ResourceRow.status == ResourceStatus.ACTIVE.value,
-                    )
-                )
-                thumb = (await self._session.execute(
-                    select(FileRow)
-                    .join(CollectionItemRow, CollectionItemRow.resource_id == FileRow.resource_id)
-                    .join(ResourceRow, ResourceRow.id == FileRow.resource_id)
-                    .where(
-                        CollectionItemRow.collection_id == rid,
-                        FileRow.role == FILE_ROLE_THUMBNAIL,
-                        ResourceRow.status == ResourceStatus.ACTIVE.value,
-                    )
-                    .order_by(CollectionItemRow.position)
-                    .limit(1)
-                )).scalars().first()
+                collection_ids.append(int(rid))
                 items.append({
                     "cardType": "collection",
                     "id": rid,
                     "title": col_row.title,
-                    "memberCount": int(count or 0),
+                    "memberCount": 0,
                     "updatedAt": col_row.updated_at,
-                    "thumbnailPath": (
-                        _file_content_url(thumb.resource_id, thumb.id) if thumb is not None else None
-                    ),
+                    "previewThumbnails": [],
                 })
+        if collection_ids:
+            collection_repo = CollectionRepository(self._session)
+            counts = await collection_repo._active_member_counts(collection_ids)
+            previews = await collection_repo._preview_thumbnails(collection_ids)
+            for item in items:
+                if isinstance(item, dict) and item.get("cardType") == "collection":
+                    cid = int(item["id"])
+                    item["memberCount"] = counts.get(cid, 0)
+                    item["previewThumbnails"] = previews.get(cid, [])
         return items, total
 
 
@@ -1483,6 +1585,321 @@ class TaskSummaryRepository:
         }
 
 
+class CategoryRepository:
+    """每类型分类树：读取、后代展开、计数与管理。"""
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    async def get(self, category_id: int) -> Category | None:
+        row = await self._session.get(CategoryRow, category_id)
+        return _category_to_domain(row) if row is not None else None
+
+    async def list_rows(self, type_: ResourceType) -> list[CategoryRow]:
+        return list((await self._session.execute(
+            select(CategoryRow)
+            .where(CategoryRow.type == type_.value)
+            .order_by(CategoryRow.sort, CategoryRow.name, CategoryRow.id)
+        )).scalars().all())
+
+    async def list_all_rows(self) -> list[CategoryRow]:
+        return list((await self._session.execute(
+            select(CategoryRow).order_by(CategoryRow.type, CategoryRow.sort, CategoryRow.name)
+        )).scalars().all())
+
+    async def descendant_ids(self, category_ids: list[int]) -> list[int]:
+        """返回节点自身及全部后代；按去重顺序。"""
+        if not category_ids:
+            return []
+        rows = await self.list_all_rows()
+        children: dict[int | None, list[int]] = {}
+        for row in rows:
+            children.setdefault(row.parent_id, []).append(row.id)
+        out: list[int] = []
+        seen: set[int] = set()
+        stack = list(category_ids)
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            out.append(current)
+            stack.extend(children.get(current, []))
+        return out
+
+    async def counts(self, type_: ResourceType) -> dict[int, int]:
+        """每个节点（含后代）的去重 active 资源数。"""
+        sql = text("""
+            WITH RECURSIVE tree(ancestor_id, id) AS (
+              SELECT id, id FROM categories WHERE type = :type
+              UNION ALL
+              SELECT tree.ancestor_id, child.id
+              FROM categories child
+              JOIN tree ON child.parent_id = tree.id
+            )
+            SELECT tree.ancestor_id, COUNT(DISTINCT rc.resource_id)
+            FROM tree
+            JOIN resource_categories rc ON rc.category_id = tree.id
+            JOIN resources r ON r.id = rc.resource_id
+            WHERE r.status = 'active'
+            GROUP BY tree.ancestor_id
+        """)
+        rows = (await self._session.execute(sql, {"type": type_.value})).all()
+        return {int(row[0]): int(row[1]) for row in rows}
+
+    async def create(
+        self, type_: ResourceType, parent_id: int | None, name: str, sort: int = 0
+    ) -> Category:
+        row = CategoryRow(
+            type=type_.value, parent_id=parent_id, name=name.strip(), sort=sort
+        )
+        self._session.add(row)
+        await self._session.commit()
+        await self._session.refresh(row)
+        return _category_to_domain(row)
+
+    async def update(
+        self,
+        category_id: int,
+        *,
+        name: str | None,
+        parent_id: int | None,
+        sort: int | None,
+        update_parent: bool = False,
+    ) -> Category | None:
+        row = await self._session.get(CategoryRow, category_id)
+        if row is None:
+            return None
+        if name is not None:
+            row.name = name.strip()
+        if update_parent:
+            row.parent_id = parent_id
+        if sort is not None:
+            row.sort = sort
+        await self._session.commit()
+        await self._session.refresh(row)
+        return _category_to_domain(row)
+
+    async def delete(self, category_id: int) -> bool:
+        row = await self._session.get(CategoryRow, category_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
+    async def has_children(self, category_id: int) -> bool:
+        return bool(await self._session.scalar(
+            select(func.count()).select_from(CategoryRow).where(
+                CategoryRow.parent_id == category_id
+            )
+        ))
+
+    async def has_resources(self, category_id: int) -> bool:
+        return bool(await self._session.scalar(
+            select(func.count()).select_from(ResourceCategoryRow).where(
+                ResourceCategoryRow.category_id == category_id
+            )
+        ))
+
+    async def name_exists(
+        self, type_: ResourceType, parent_id: int | None, name: str, exclude_id: int | None = None
+    ) -> bool:
+        stmt = select(CategoryRow.id).where(
+            CategoryRow.type == type_.value,
+            CategoryRow.parent_id.is_(parent_id) if parent_id is None else CategoryRow.parent_id == parent_id,
+            func.lower(CategoryRow.name) == name.strip().lower(),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(CategoryRow.id != exclude_id)
+        return (await self._session.execute(stmt)).first() is not None
+
+    async def depth(self, category_id: int | None) -> int:
+        """根为 1；None 为 0。"""
+        depth = 0
+        current = category_id
+        seen: set[int] = set()
+        while current is not None and current not in seen:
+            seen.add(current)
+            depth += 1
+            row = await self._session.get(CategoryRow, current)
+            current = row.parent_id if row is not None else None
+        return depth
+
+    async def subtree_height(self, category_id: int) -> int:
+        """节点自身高度（叶子为 1）。"""
+        rows = await self.list_all_rows()
+        children: dict[int, list[int]] = {}
+        for row in rows:
+            if row.parent_id is not None:
+                children.setdefault(row.parent_id, []).append(row.id)
+        best = 1
+        stack: list[tuple[int, int]] = [(category_id, 1)]
+        seen: set[int] = set()
+        while stack:
+            current, height = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            best = max(best, height)
+            for child in children.get(current, []):
+                stack.append((child, height + 1))
+        return best
+
+
+class SavedViewRepository:
+    """保存的时间线筛选器；无成员表。"""
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    @staticmethod
+    def _to_domain(row: SavedViewRow) -> SavedView:
+        scope = row.type
+        try:
+            raw = json.loads(row.filters_json or "{}")
+        except (ValueError, TypeError):
+            raw = {}
+        if "image" in raw or "video" in raw:
+            try:
+                filters = SavedViewFilters(**raw)
+            except (ValueError, TypeError):
+                filters = SavedViewFilters()
+        else:
+            legacy = [int(value) for value in raw.get("category_ids", []) if value is not None]
+            filters = SavedViewFilters(
+                image=CategoryRule(include=legacy if scope == "image" else []),
+                video=CategoryRule(include=legacy if scope == "video" else []),
+                tag_ids=[int(value) for value in raw.get("tag_ids", []) if value is not None],
+                date_from=raw.get("date_from"),
+                date_to=raw.get("date_to"),
+                include_untimed=bool(raw.get("include_untimed", False)),
+            )
+        return SavedView(
+            id=row.id,
+            kind=row.kind,
+            scope=scope,
+            name=row.name,
+            filters=filters,
+            sort=row.sort,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def list(self, kind: str, scope: str | None = None) -> list[SavedView]:
+        stmt = select(SavedViewRow).where(SavedViewRow.kind == kind)
+        if scope:
+            stmt = stmt.where(SavedViewRow.type == scope)
+        rows = (await self._session.execute(
+            stmt.order_by(SavedViewRow.updated_at.desc(), SavedViewRow.id.desc())
+        )).scalars().all()
+        return [self._to_domain(row) for row in rows]
+
+    async def get(self, view_id: int) -> SavedView | None:
+        row = await self._session.get(SavedViewRow, view_id)
+        return self._to_domain(row) if row is not None else None
+
+    async def create(
+        self,
+        *,
+        kind: str,
+        scope: str,
+        name: str,
+        filters: SavedViewFilters,
+        sort: str,
+    ) -> SavedView:
+        now = db_now()
+        row = SavedViewRow(
+            kind=kind,
+            type=scope,
+            name=name.strip(),
+            filters_json=filters.model_dump_json(),
+            sort=sort,
+            created_at=now,
+            updated_at=now,
+        )
+        self._session.add(row)
+        await self._session.commit()
+        await self._session.refresh(row)
+        return self._to_domain(row)
+
+    async def update(
+        self,
+        view_id: int,
+        *,
+        scope: str | None = None,
+        name: str | None,
+        filters: SavedViewFilters | None,
+        sort: str | None,
+    ) -> SavedView | None:
+        row = await self._session.get(SavedViewRow, view_id)
+        if row is None:
+            return None
+        if scope is not None:
+            row.type = scope
+        if name is not None:
+            row.name = name.strip()
+        if filters is not None:
+            row.filters_json = filters.model_dump_json()
+        if sort is not None:
+            row.sort = sort
+        row.updated_at = db_now()
+        await self._session.commit()
+        await self._session.refresh(row)
+        return self._to_domain(row)
+
+    async def delete(self, view_id: int) -> bool:
+        row = await self._session.get(SavedViewRow, view_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
+    async def name_exists(
+        self, kind: str, scope: str, name: str, exclude_id: int | None = None
+    ) -> bool:
+        stmt = select(SavedViewRow.id).where(
+            SavedViewRow.kind == kind,
+            SavedViewRow.type == scope,
+            func.lower(SavedViewRow.name) == name.strip().lower(),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(SavedViewRow.id != exclude_id)
+        return (await self._session.execute(stmt)).first() is not None
+
+    async def remove_category(self, category_id: int) -> int:
+        """Remove a category id from include/exclude rules or legacy category_ids."""
+        rows = (await self._session.execute(select(SavedViewRow))).scalars().all()
+        changed = 0
+        for row in rows:
+            try:
+                raw = json.loads(row.filters_json or "{}")
+            except (ValueError, TypeError):
+                continue
+            touched = False
+            for media_type in ("image", "video"):
+                rule = raw.get(media_type)
+                if not isinstance(rule, dict):
+                    continue
+                for field in ("include", "exclude"):
+                    ids = rule.get(field)
+                    if isinstance(ids, list) and category_id in ids:
+                        rule[field] = [value for value in ids if int(value) != category_id]
+                        touched = True
+            legacy = raw.get("category_ids")
+            if isinstance(legacy, list) and category_id in legacy:
+                raw["category_ids"] = [value for value in legacy if int(value) != category_id]
+                touched = True
+            if touched:
+                row.filters_json = json.dumps(raw, ensure_ascii=False)
+                row.updated_at = db_now()
+                changed += 1
+        if changed:
+            await self._session.commit()
+        return changed
+
+
 class CollectionRepository:
     """合集仓储：CRUD + 成员增删排序。"""
 
@@ -1501,22 +1918,37 @@ class CollectionRepository:
         rows = (await self._session.execute(
             select(CollectionRow).order_by(CollectionRow.updated_at.desc())
         )).scalars().all()
-        out: list[Collection] = []
-        for row in rows:
-            count = await self._active_member_count(row.id)
-            out.append(Collection(id=row.id, title=row.title, description=row.description,
-                                  member_count=count, created_at=row.created_at,
-                                  updated_at=row.updated_at))
-        return out
+        ids = [row.id for row in rows]
+        counts = await self._active_member_counts(ids)
+        previews = await self._preview_thumbnails(ids)
+        return [
+            Collection(
+                id=row.id,
+                title=row.title,
+                description=row.description,
+                member_count=counts.get(row.id, 0),
+                preview_thumbnails=previews.get(row.id, []),
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
 
     async def get(self, collection_id: int) -> Collection | None:
         row = await self._session.get(CollectionRow, collection_id)
         if row is None:
             return None
-        count = await self._active_member_count(row.id)
-        return Collection(id=row.id, title=row.title, description=row.description,
-                          member_count=count, created_at=row.created_at,
-                          updated_at=row.updated_at)
+        counts = await self._active_member_counts([collection_id])
+        previews = await self._preview_thumbnails([collection_id])
+        return Collection(
+            id=row.id,
+            title=row.title,
+            description=row.description,
+            member_count=counts.get(collection_id, 0),
+            preview_thumbnails=previews.get(collection_id, []),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def find_by_title(self, title: str) -> Collection | None:
         row = (await self._session.execute(
@@ -1562,6 +1994,50 @@ class CollectionRepository:
         await self._session.commit()
         return True
 
+    async def add_items(self, collection_id: int, resource_ids: list[int]) -> tuple[int, int, int]:
+        """批量加入：去重、跳过已存在/不存在；返回 (added, skipped, missing)。"""
+        unique: list[int] = []
+        seen: set[int] = set()
+        for resource_id in resource_ids:
+            if resource_id not in seen:
+                seen.add(resource_id)
+                unique.append(resource_id)
+        if not unique:
+            return 0, 0, 0
+
+        member_ids = set((await self._session.scalars(
+            select(CollectionItemRow.resource_id).where(
+                CollectionItemRow.collection_id == collection_id,
+                CollectionItemRow.resource_id.in_(unique),
+            )
+        )).all())
+        known_ids = set((await self._session.scalars(
+            select(ResourceRow.id).where(ResourceRow.id.in_(unique))
+        )).all())
+        max_pos = await self._session.scalar(
+            select(func.max(CollectionItemRow.position))
+            .where(CollectionItemRow.collection_id == collection_id)
+        )
+        next_pos = int(max_pos or -1) + 1
+        added = skipped = missing = 0
+        for resource_id in unique:
+            if resource_id not in known_ids:
+                missing += 1
+                continue
+            if resource_id in member_ids:
+                skipped += 1
+                continue
+            self._session.add(CollectionItemRow(
+                collection_id=collection_id, resource_id=resource_id,
+                position=next_pos,
+            ))
+            next_pos += 1
+            added += 1
+        if added:
+            await self._touch_collection(collection_id)
+            await self._session.commit()
+        return added, skipped, missing
+
     async def remove_item(self, collection_id: int, resource_id: int) -> bool:
         row = await self._session.get(CollectionItemRow, (collection_id, resource_id))
         if row is None:
@@ -1582,6 +2058,7 @@ class CollectionRepository:
             .order_by(CollectionItemRow.position)
         )).scalars().all()
         resources = [_orm_to_resource(row) for row in rows]
+        await ResourceRepository(self._session).attach_categories(resources)
         return await self._attach_thumbnails(resources)
 
     async def member_ids(self, collection_id: int) -> list[int]:
@@ -1622,6 +2099,54 @@ class CollectionRepository:
         return [Collection(id=row.id, title=row.title, description=row.description,
                            created_at=row.created_at, updated_at=row.updated_at)
                 for row in rows]
+
+    async def _active_member_counts(self, collection_ids: list[int]) -> dict[int, int]:
+        if not collection_ids:
+            return {}
+        rows = (await self._session.execute(
+            select(CollectionItemRow.collection_id, func.count())
+            .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
+            .where(
+                CollectionItemRow.collection_id.in_(collection_ids),
+                ResourceRow.status == ResourceStatus.ACTIVE.value,
+            )
+            .group_by(CollectionItemRow.collection_id)
+        )).all()
+        return {int(row[0]): int(row[1]) for row in rows}
+
+    async def _preview_thumbnails(self, collection_ids: list[int]) -> dict[int, list[str]]:
+        if not collection_ids:
+            return {}
+        ranked = (
+            select(
+                CollectionItemRow.collection_id.label("collection_id"),
+                FileRow.resource_id.label("resource_id"),
+                FileRow.id.label("file_id"),
+                func.row_number().over(
+                    partition_by=CollectionItemRow.collection_id,
+                    order_by=(CollectionItemRow.position, CollectionItemRow.resource_id),
+                ).label("rn"),
+            )
+            .join(FileRow, FileRow.resource_id == CollectionItemRow.resource_id)
+            .join(ResourceRow, ResourceRow.id == CollectionItemRow.resource_id)
+            .where(
+                CollectionItemRow.collection_id.in_(collection_ids),
+                FileRow.role == FILE_ROLE_THUMBNAIL,
+                ResourceRow.status == ResourceStatus.ACTIVE.value,
+            )
+            .subquery()
+        )
+        rows = (await self._session.execute(
+            select(ranked.c.collection_id, ranked.c.resource_id, ranked.c.file_id)
+            .where(ranked.c.rn <= 3)
+            .order_by(ranked.c.collection_id, ranked.c.rn)
+        )).all()
+        out: dict[int, list[str]] = {}
+        for collection_id, resource_id, file_id in rows:
+            out.setdefault(int(collection_id), []).append(
+                _file_content_url(int(resource_id), int(file_id))
+            )
+        return out
 
     async def _active_member_count(self, collection_id: int) -> int:
         value = await self._session.scalar(

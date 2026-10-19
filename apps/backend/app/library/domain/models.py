@@ -113,7 +113,7 @@ class Resource(ApiModel):
     timeline_visible: bool | None = None  # 照片时间线：None=按 EXIF 自动
     created_at: datetime | None = None
     updated_at: datetime | None = None
-    category: "Category | None" = None
+    categories: list["Category"] = Field(default_factory=list)
     tags: list["Tag"] = Field(default_factory=list)
     files: list["ResourceFile"] = Field(default_factory=list)
     todos: list["ResourceTodo"] = Field(default_factory=list)
@@ -212,19 +212,51 @@ class Tag(ApiModel):
 
 
 class Category(ApiModel):
-    """分类词条（资源单选）。"""
+    """分类词表；每个资源类型一棵独立树。"""
 
     id: int | None = None
     name: str
+    type: ResourceType | None = None
+    parent_id: int | None = None
+    sort: int = 0
+    is_system: bool = False
+
+
+class CategoryRule(ApiModel):
+    include: list[int] = Field(default_factory=list)
+    exclude: list[int] = Field(default_factory=list)
+
+
+class SavedViewFilters(ApiModel):
+    """时间线规则：图片/视频各自包含与排除；无成员表。"""
+
+    image: CategoryRule = Field(default_factory=CategoryRule)
+    video: CategoryRule = Field(default_factory=CategoryRule)
+    tag_ids: list[int] = Field(default_factory=list)
+    date_from: str | None = None
+    date_to: str | None = None
+    include_untimed: bool = False
+
+
+class SavedView(ApiModel):
+    id: int | None = None
+    kind: str = "timeline"
+    scope: str = "image"  # image / video / media
+    name: str
+    filters: SavedViewFilters = Field(default_factory=SavedViewFilters)
+    sort: str = "takenAt"
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class Collection(ApiModel):
-    """合集：用户给已有资源起的一组（跨类型、手动排序）。"""
+    """合集：用户手动把资源组成一组（可跨类型、可排序）。"""
 
     id: int | None = None
     title: str
     description: str | None = None
-    member_count: int = 0  # active 成员数（列表展示用）
+    member_count: int = 0  # active 成员数，列表展示用
+    preview_thumbnails: list[str] = Field(default_factory=list)
     created_at: str | None = None
     updated_at: str | None = None
 

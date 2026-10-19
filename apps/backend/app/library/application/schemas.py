@@ -10,6 +10,8 @@ from app.library.domain.models import (
     Category,
     Resource,
     ResourceType,
+    SavedView,
+    SavedViewFilters,
     StorageKind,
     Tag,
 )
@@ -45,7 +47,7 @@ class ConsumptionItem(ApiModel):
 
 
 class Overview(ApiModel):
-    """首页概览（统计 + 最近添加 + 任务 + 工作）。"""
+    """首页聚合：统计 + 最近资源 + 任务 + 工作 + 消费。"""
 
     stats: ResourceStats
     recent: list[Resource]
@@ -87,13 +89,21 @@ class ResourcePage(ApiModel):
 
 
 class CollectionCard(ApiModel):
-    """全库混排里的合集卡。"""
+    """全库混排的合集卡。"""
 
     card_type: Literal["collection"] = "collection"
     id: int
     title: str
     member_count: int = 0
     updated_at: str | None = None
+    preview_thumbnails: list[str] = Field(default_factory=list)
+
+
+class HomeSummary(Overview):
+    """资源工作台聚合。"""
+
+    collections: list[CollectionCard] = Field(default_factory=list)
+    saved_timelines: list[SavedView] = Field(default_factory=list)
 
 
 class CollectionCreate(ApiModel):
@@ -111,6 +121,7 @@ class CollectionOut(ApiModel):
     title: str
     description: str | None = None
     member_count: int = 0
+    preview_thumbnails: list[str] = Field(default_factory=list)
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -123,19 +134,31 @@ class CollectionAddItem(ApiModel):
     resource_id: int
 
 
+class CollectionAddItems(ApiModel):
+    """批量加入合集；忽略重复成员。"""
+
+    resource_ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class CollectionAddItemsResult(ApiModel):
+    added: int
+    skipped: int
+    missing: int
+
+
 class CollectionMove(ApiModel):
     direction: Literal["up", "down"]
 
 
 class ResourcePatch(ApiModel):
-    """资源部分更新。tag_names 若出现则整表替换该资源标签；category_name 按名查找或创建分类。"""
+    """资源部分更新。tag_names 若出现则替换标签；category_ids 为空数组时清空分类。"""
 
     title: str | None = None
     description: str | None = None
     synopsis: str | None = None
     author: str | None = None
     rating: Rating | None = None
-    category_name: str | None = None
+    category_ids: list[int] | None = None
     tag_names: list[str] | None = None
     exif_taken_at: str | None = None
     timeline_visible: bool | None = None
@@ -198,10 +221,55 @@ class TodoPatch(ApiModel):
     done: bool | None = None
 
 
-class CategoryList(ApiModel):
-    """分类词表只读列表。"""
+class CategoryNode(ApiModel):
+    id: int
+    type: ResourceType
+    parent_id: int | None = None
+    name: str
+    sort: int = 0
+    is_system: bool = False
+    count: int = 0
+    children: list["CategoryNode"] = Field(default_factory=list)
 
-    items: list[Category]
+
+class CategoryList(ApiModel):
+    """分类树（含计数）。"""
+
+    items: list[CategoryNode]
+
+
+class CategoryCreate(ApiModel):
+    type: ResourceType
+    parent_id: int | None = None
+    name: str
+    sort: int = 0
+
+
+class CategoryPatch(ApiModel):
+    name: str | None = None
+    parent_id: int | None = None
+    sort: int | None = None
+
+
+class SavedViewCreate(ApiModel):
+    kind: Literal["timeline"] = "timeline"
+    scope: Literal["image", "video", "media"] = "image"
+    # 兼容旧客户端；新客户端只发 scope
+    type: ResourceType | None = None
+    name: str
+    filters: SavedViewFilters = Field(default_factory=SavedViewFilters)
+    sort: str = "takenAt"
+
+
+class SavedViewPatch(ApiModel):
+    scope: Literal["image", "video", "media"] | None = None
+    name: str | None = None
+    filters: SavedViewFilters | None = None
+    sort: str | None = None
+
+
+class SavedViewList(ApiModel):
+    items: list[SavedView]
 
 
 class TagList(ApiModel):
@@ -218,6 +286,8 @@ class ImportCreate(ApiModel):
     paths: list[str] = Field(min_length=1)
     storage_kind: StorageKind | None = None
     timeline_visible: bool | None = None
+    category_ids: list[int] | None = None
+    tag_names: list[str] | None = None
 
 
 class ImportJobCreated(ApiModel):
@@ -229,9 +299,10 @@ class ImportJobCreated(ApiModel):
 class ResourceBatchRequest(ApiModel):
     """批量操作（移回收站/恢复/彻底删除/批量打标）；ids 去重后逐条处理，200 返回每项结果。"""
 
-    action: Literal["trash", "restore", "purge", "add_tags"]
+    action: Literal["trash", "restore", "purge", "add_tags", "add_categories", "remove_categories"]
     ids: list[int] = Field(min_length=1, max_length=200)
     tag_names: list[str] | None = None
+    category_ids: list[int] | None = None
 
 
 class CollectionExportRequest(ApiModel):

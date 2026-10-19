@@ -74,7 +74,7 @@ class MetadataPanelTests(unittest.IsolatedAsyncioTestCase):
             assert got is not None
             self.assertTrue(got.created_at)
             self.assertEqual(got.tags, [])
-            self.assertIsNone(got.category)
+            self.assertEqual(got.categories, [])
             primaries = [f for f in got.files if f.role == "primary"]
             self.assertEqual(len(primaries), 1)
             self.assertGreater(primaries[0].size or 0, 0)
@@ -111,11 +111,12 @@ class MetadataPanelTests(unittest.IsolatedAsyncioTestCase):
     async def test_patch_creates_category(self) -> None:
         async with self.factory() as session:
             rid = await self._import_one(session)
-            updated = await self._svc(session).patch(rid, ResourcePatch(category_name="风景"))
+            repo = ResourceRepository(session)
+            cat = await repo.ensure_category("风景", type_=ResourceType.IMAGE)
+            updated = await self._svc(session).patch(rid, ResourcePatch(category_ids=[cat.id]))
             assert updated is not None
-            assert updated.category is not None
-            self.assertEqual(updated.category.name, "风景")
-            cats = await ResourceRepository(session).list_categories()
+            self.assertEqual([item.name for item in updated.categories], ["风景"])
+            cats = await repo.list_categories(ResourceType.IMAGE)
             self.assertEqual([c.name for c in cats], ["风景"])
 
     async def test_replace_cover_keeps_primary(self) -> None:

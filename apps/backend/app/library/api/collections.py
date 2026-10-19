@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.schemas import (
     CollectionAddItem,
+    CollectionAddItems,
+    CollectionAddItemsResult,
     CollectionCreate,
     CollectionExportRequest,
     CollectionExportResult,
@@ -84,6 +86,16 @@ async def add_collection_item(
     service: CollectionService = Depends(_service),
 ) -> None:
     await service.add_item(collection_id, body.resource_id)
+
+
+@router.post("/{collection_id}/items/batch", response_model=CollectionAddItemsResult)
+async def add_collection_items(
+    collection_id: int,
+    body: CollectionAddItems,
+    service: CollectionService = Depends(_service),
+) -> CollectionAddItemsResult:
+    added, skipped, missing = await service.add_items(collection_id, body.resource_ids)
+    return CollectionAddItemsResult(added=added, skipped=skipped, missing=missing)
 
 
 @router.delete("/{collection_id}/items/{resource_id}", status_code=204)

@@ -99,6 +99,8 @@ class ImportService:
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
         """执行导入。prehashed: 路径→sha256（监视导入复用事件预计算值，避免二次全量哈希）；
         auto_scrape=False 时导入后不入刮削队列（监视导入默认关）。"""
@@ -124,7 +126,8 @@ class ImportService:
         job.phase = "hash"
         if self._session_factory is not None:
             await self._run_pooled(
-                job, type_, layout, candidates, prehashed, auto_scrape, timeline_visible
+                job, type_, layout, candidates, prehashed, auto_scrape, timeline_visible,
+                category_ids, tag_names,
             )
             return
         if self._resources is None:
@@ -135,6 +138,8 @@ class ImportService:
                 self._resources, job, type_, layout, candidate,
                 digest=digest, auto_scrape=auto_scrape,
                 timeline_visible=timeline_visible,
+                category_ids=category_ids,
+                tag_names=tag_names,
             )
             job.done += 1
             await asyncio.sleep(0)
@@ -148,6 +153,8 @@ class ImportService:
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
         factory = self._session_factory
         assert factory is not None
@@ -165,6 +172,8 @@ class ImportService:
                                 repo, job, type_, layout, source,
                                 digest=digest, auto_scrape=auto_scrape,
                                 timeline_visible=timeline_visible,
+                                category_ids=category_ids,
+                                tag_names=tag_names,
                             )
                         last_error = None
                         break
@@ -259,6 +268,8 @@ class ImportService:
         digest: str | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
         try:
             if digest is not None:
@@ -350,6 +361,10 @@ class ImportService:
             if type_ == ResourceType.IMAGE and cover is not None:
                 resource.cover_path = f"/library/resources/{resource.id}/content"
                 await resources.update(resource.id, resource, commit=False)
+            if category_ids:
+                await resources.set_categories(resource.id, category_ids, commit=False)
+            if tag_names:
+                await resources.add_tags_union(resource.id, tag_names, commit=False)
             await resources.commit()
             job.imported += 1
             job.phase = "cover"

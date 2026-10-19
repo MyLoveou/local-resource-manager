@@ -158,6 +158,22 @@ class BatchTagExportTests(unittest.IsolatedAsyncioTestCase):
         body = ResourceBatchRequest(action="add_tags", ids=[1], tag_names=["t"])
         self.assertEqual(body.tag_names, ["t"])
 
+    async def test_batch_add_items_is_idempotent_and_skips_duplicates(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, "a.png", seed=1)
+            b = await self._import_image(session, "b.png", seed=2)
+            collections = self._collection_svc(session)
+            created = await collections.create("批量加入", None)
+            assert created.id is not None
+
+            first = await collections.add_items(created.id, [a, b, a, 99999])
+            self.assertEqual(first, (2, 0, 1))
+            second = await collections.add_items(created.id, [a, b])
+            self.assertEqual(second, (0, 2, 0))
+
+            members = await collections.members(created.id)
+            self.assertEqual([item.id for item in members], [a, b])
+
     async def test_export_copies_members_with_order_names(self) -> None:
         async with self.factory() as session:
             a = await self._import_image(session, "a.png", seed=1)

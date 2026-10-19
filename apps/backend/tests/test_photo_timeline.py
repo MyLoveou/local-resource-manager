@@ -115,18 +115,28 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
 
             photos = self._photos(session)
             default = await photos.timeline(
-                include_all=False, year=None, month=None, category_id=None, tag_ids=None
+                include_all=False, type_=ResourceType.IMAGE, year=None, month=None,
+                category_ids=None, tag_ids=None,
             )
             self.assertEqual(default.days[0].date, "2026-10-17")
             self.assertEqual(default.days[0].count, 2)
             self.assertEqual(len(default.days[0].photos), 2)
             self.assertIsNotNone(default.days[0].photos[0].thumbnail_path)
-            self.assertEqual(default.unknown_count, 1)
-            self.assertEqual(len(default.unknown_photos), 1)
-            self.assertEqual(default.total, 3)
+            self.assertEqual(default.unknown_count, 0)
+            self.assertEqual(len(default.unknown_photos), 0)
+            self.assertEqual(default.total, 2)
+
+            with_unknown = await photos.timeline(
+                include_all=False, type_=ResourceType.IMAGE, year=None, month=None,
+                category_ids=None, tag_ids=None, include_untimed=True,
+            )
+            self.assertEqual(with_unknown.unknown_count, 1)
+            self.assertEqual(len(with_unknown.unknown_photos), 1)
+            self.assertEqual(with_unknown.total, 3)
 
             all_photos = await photos.timeline(
-                include_all=True, year=None, month=None, category_id=None, tag_ids=None
+                include_all=True, type_=ResourceType.IMAGE, year=None, month=None,
+                category_ids=None, tag_ids=None, include_untimed=True,
             )
             self.assertEqual(all_photos.days[0].count, 2)
             self.assertEqual(all_photos.unknown_count, 1)
@@ -203,7 +213,7 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
             )
             await repo.commit()
             photos = await self._photos(session).timeline(
-                include_all=False, year=None, month=None, category_id=None, tag_ids=None
+                include_all=False, type_=ResourceType.VIDEO, year=None, month=None, category_ids=None, tag_ids=None
             )
             self.assertEqual(photos.total, 1)
             tile = photos.days[0].photos[0]
@@ -226,7 +236,7 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
             items = await repo.list(ResourceType.IMAGE, None, 10, 0, "desc")
             self.assertFalse(items[0].timeline_visible)
             photos = await self._photos(session).timeline(
-                include_all=False, year=None, month=None, category_id=None, tag_ids=None
+                include_all=False, type_=ResourceType.IMAGE, year=None, month=None, category_ids=None, tag_ids=None
             )
             self.assertEqual(photos.total, 0)
 

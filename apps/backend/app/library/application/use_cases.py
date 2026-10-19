@@ -14,8 +14,10 @@ from app.library.application.media_probe import normalize_taken_at
 from app.library.application.packages.layouts import layout_for
 from app.library.application.packages.resource_package import ResourcePackage, default_library_store
 from app.library.application.schemas import (
+    CategoryNode,
     CollectionExportResult,
     CoverReplace,
+    HomeSummary,
     Overview,
     ResourceBatchFailedItem,
     ResourceBatchResult,
@@ -23,6 +25,8 @@ from app.library.application.schemas import (
     ResourcePatch,
     ResourceSortField,
     ResourceStats,
+    SavedViewCreate,
+    SavedViewPatch,
     SubtitleAdd,
     TaskSummary,
     TodoCreate,
@@ -32,8 +36,10 @@ from app.library.application.workbench import active_work, recent_consumption
 from app.library.application.subtitle_naming import original_stem_from_extra, subtitle_dest_name
 from app.library.domain.type_profile import allows_user_cover
 from app.library.infrastructure.repositories import (
+    CategoryRepository,
     CollectionRepository,
     ResourceRepository,
+    SavedViewRepository,
     TaskSummaryRepository,
 )
 from app.shared.config import settings
@@ -46,10 +52,13 @@ from app.library.domain.media_types import (
     SUBTITLE_EXTENSIONS,
 )
 from app.library.domain.models import (
+    Category,
     Collection,
     Resource,
     ResourceStatus,
     ResourceType,
+    SavedView,
+    SavedViewFilters,
 )
 
 
@@ -63,20 +72,53 @@ class LibraryQueryService:
         *,
         file_ops: FileOps | None = None,
         store_root: Path | None = None,
+        categories: CategoryRepository | None = None,
+        collections: CollectionRepository | None = None,
+        saved_views: SavedViewRepository | None = None,
     ):
         self._resources = resources
         self._tasks = tasks
         self._ops = file_ops or FileOps()
         self._store = store_root or default_library_store(settings.db_path)
+        self._categories = categories or CategoryRepository(resources.session)
+        self._collections = collections or CollectionRepository(resources.session)
+        self._saved_views = saved_views or SavedViewRepository(resources.session)
 
     async def overview(self) -> Overview:
-        """首页概览：统计 + 最近添加 + 任务计数。"""
+        """首页聚合：统计 + 最近资源 + 任务 + 工作 + 消费。"""
         return Overview(
             stats=ResourceStats(**await self._resources.stats()),
             recent=await self._resources.recent(limit=12),
             tasks=TaskSummary(**await self._tasks.summary()),
             active_work=await active_work(self._resources.session),
             recent_consumption=await recent_consumption(self._resources.session),
+        )
+
+    async def home(self) -> HomeSummary:
+        """资源工作台聚合：在 overview 上补合集与保存时间线。"""
+        overview = await self.overview()
+        collections = await self._collections.list()
+        saved_views = await self._saved_views.list("timeline")
+        collection_cards = [
+            {
+                "cardType": "collection",
+                "id": item.id,
+                "title": item.title,
+                "memberCount": item.member_count,
+                "updatedAt": item.updated_at,
+                "previewThumbnails": item.preview_thumbnails,
+            }
+            for item in collections
+            if item.id is not None
+        ]
+        return HomeSummary(
+            stats=overview.stats,
+            recent=overview.recent,
+            tasks=overview.tasks,
+            active_work=overview.active_work,
+            recent_consumption=overview.recent_consumption,
+            collections=collection_cards,
+            saved_timelines=saved_views,
         )
 
     async def list_page(
@@ -93,6 +135,8 @@ class LibraryQueryService:
         q: str | None = None,
         tag_ids: list[int] | None = None,
         category_id: int | None = None,
+        category_ids: list[int] | None = None,
+        uncategorized: bool = False,
         after_key: str | None = None,
         include_collected: bool = False,
         taken_date: str | None = None,
@@ -106,6 +150,8 @@ class LibraryQueryService:
         """
         query = normalize_q(q)
         tags = tag_ids or []
+        category_filter = list(dict.fromkeys(category_ids or ([] if category_id is None else [category_id])))
+        expanded_category_ids = await self._categories.descendant_ids(category_filter)
         if sort.value not in allowed_sorts(type_):
             raise HTTPException(status_code=422, detail="sort not allowed")
         exclude_collected = (
@@ -120,6 +166,8 @@ class LibraryQueryService:
             and not query
             and not tags
             and category_id is None
+            and not category_ids
+            and not uncategorized
             and sort.value == "createdAt"
             and order == "desc"
             and after_key is None
@@ -153,7 +201,9 @@ class LibraryQueryService:
             sort=sort.value,
             q=query,
             tag_ids=tags,
-            category_id=category_id,
+            category_id=None,
+            category_ids=expanded_category_ids,
+            uncategorized=uncategorized,
             after_key=cursor_key if use_keyset else None,
             after_id=after_id if use_keyset else None,
             exclude_collected=exclude_collected,
@@ -170,7 +220,9 @@ class LibraryQueryService:
             status,
             q=query,
             tag_ids=tags,
-            category_id=category_id,
+            category_id=None,
+            category_ids=expanded_category_ids,
+            uncategorized=uncategorized,
             exclude_collected=exclude_collected,
             taken_date=taken_date,
             untimed=untimed,
@@ -198,7 +250,7 @@ class LibraryQueryService:
             return None
         data = body.model_dump(exclude_unset=True)
         data.pop("tag_names", None)
-        data.pop("category_name", None)
+        data.pop("category_ids", None)
         data.pop("exif_taken_at", None)
         if "author" in data:
             raw_author = data["author"]
@@ -209,13 +261,14 @@ class LibraryQueryService:
         updated = await self._resources.update(resource_id, existing, commit=False)
         if updated is None:
             return None
-        if "category_name" in body.model_fields_set:
-            raw = body.category_name
-            if raw is None or not raw.strip():
-                await self._resources.set_category_id(resource_id, None, commit=False)
-            else:
-                cat = await self._resources.ensure_category(raw, commit=False)
-                await self._resources.set_category_id(resource_id, cat.id, commit=False)
+        if "category_ids" in body.model_fields_set:
+            ids = list(dict.fromkeys(body.category_ids or []))
+            categories = [await self._categories.get(category_id) for category_id in ids]
+            if any(category is None for category in categories):
+                raise HTTPException(status_code=422, detail="category not found")
+            if any(category.type != existing.type for category in categories if category is not None):
+                raise HTTPException(status_code=422, detail="category type mismatch")
+            await self._resources.set_categories(resource_id, ids, commit=False)
         if "tag_names" in body.model_fields_set:
             await self._resources.replace_tags(resource_id, body.tag_names or [], commit=False)
         if "exif_taken_at" in body.model_fields_set:
@@ -380,7 +433,11 @@ class LibraryQueryService:
         return await self._resources.delete_row(existing.id)
 
     async def batch(
-        self, action: str, ids: list[int], tag_names: list[str] | None = None
+        self,
+        action: str,
+        ids: list[int],
+        tag_names: list[str] | None = None,
+        category_ids: list[int] | None = None,
     ) -> ResourceBatchResult:
         """逐条独立提交；部分失败不影响已成功项。"""
         unique: list[int] = []
@@ -393,6 +450,7 @@ class LibraryQueryService:
         ok: list[int] = []
         failed: list[ResourceBatchFailedItem] = []
         names = [name.strip() for name in (tag_names or []) if name.strip()]
+        category_ids = list(dict.fromkeys(category_ids or []))
         for rid in unique:
             try:
                 if action == "trash":
@@ -419,6 +477,27 @@ class LibraryQueryService:
                     else:
                         await self._resources.add_tags_union(rid, names)
                         ok.append(rid)
+                elif action in ("add_categories", "remove_categories"):
+                    if not category_ids:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="empty categories"))
+                        continue
+                    resource = await self._resources.get(rid)
+                    if resource is None:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="resource not found"))
+                        continue
+                    selected = [await self._categories.get(cid) for cid in category_ids]
+                    if any(item is None or item.type != resource.type for item in selected):
+                        failed.append(ResourceBatchFailedItem(id=rid, message="category type mismatch"))
+                        continue
+                    current = {
+                        category.id for category in (resource.categories or []) if category.id is not None
+                    }
+                    if action == "add_categories":
+                        current.update(int(cid) for cid in category_ids)
+                    else:
+                        current.difference_update(int(cid) for cid in category_ids)
+                    await self._resources.set_categories(rid, sorted(current))
+                    ok.append(rid)
                 else:
                     failed.append(ResourceBatchFailedItem(id=rid, message="invalid action"))
             except InvalidStateError:
@@ -431,6 +510,198 @@ class LibraryQueryService:
 
 
 """合集用例：CRUD + 成员增删排序。标题空白 422；合集不存在 404；资源不存在 422。"""
+
+
+class CategoryService:
+    """每类型分类树：树查询、管理、资源分类校验。"""
+
+    def __init__(self, categories: CategoryRepository, saved_views: SavedViewRepository):
+        self._categories = categories
+        self._saved_views = saved_views
+
+    async def tree(self, type_: ResourceType) -> list[CategoryNode]:
+        rows = await self._categories.list_rows(type_)
+        counts = await self._categories.counts(type_)
+        nodes: dict[int, CategoryNode] = {}
+        for row in rows:
+            nodes[row.id] = CategoryNode(
+                id=row.id,
+                type=type_,
+                parent_id=row.parent_id,
+                name=row.name,
+                sort=row.sort,
+                is_system=bool(row.is_system),
+                count=counts.get(row.id, 0),
+            )
+        roots: list[CategoryNode] = []
+        for node in nodes.values():
+            parent = nodes.get(node.parent_id) if node.parent_id is not None else None
+            if parent is None:
+                roots.append(node)
+            else:
+                parent.children.append(node)
+        visible = [
+            node for node in roots
+            if not (node.is_system and not node.children and node.count == 0)
+        ]
+        return sorted(visible, key=lambda item: (item.sort, item.name.lower()))
+
+    async def create(
+        self, type_: ResourceType, parent_id: int | None, name: str, sort: int
+    ) -> Category:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            raise HTTPException(status_code=422, detail="name required")
+        parent = await self._categories.get(parent_id) if parent_id is not None else None
+        if parent_id is not None and parent is None:
+            raise HTTPException(status_code=422, detail="parent not found")
+        if parent is not None and parent.type != type_:
+            raise HTTPException(status_code=422, detail="parent type mismatch")
+        if await self._categories.depth(parent_id) + 1 > 4:
+            raise HTTPException(status_code=422, detail="category depth exceeded")
+        if await self._categories.name_exists(type_, parent_id, cleaned):
+            raise HTTPException(status_code=409, detail="category name exists")
+        return await self._categories.create(type_, parent_id, cleaned, sort)
+
+    async def patch(
+        self,
+        category_id: int,
+        *,
+        name: str | None,
+        parent_id: int | None,
+        update_parent: bool,
+        sort: int | None,
+    ) -> Category:
+        existing = await self._categories.get(category_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="category not found")
+        if existing.is_system and (update_parent or (name is not None and name.strip() != existing.name)):
+            raise HTTPException(status_code=409, detail="system category")
+        next_name = existing.name if name is None else name.strip()
+        if not next_name:
+            raise HTTPException(status_code=422, detail="name required")
+        next_parent = parent_id if update_parent else existing.parent_id
+        if next_parent is not None:
+            parent = await self._categories.get(next_parent)
+            if parent is None or parent.type != existing.type:
+                raise HTTPException(status_code=422, detail="parent type mismatch")
+            descendants = await self._categories.descendant_ids([category_id])
+            if next_parent in descendants:
+                raise HTTPException(status_code=409, detail="category cycle")
+            height = await self._categories.subtree_height(category_id)
+            if await self._categories.depth(next_parent) + height > 4:
+                raise HTTPException(status_code=422, detail="category depth exceeded")
+        if await self._categories.name_exists(
+            existing.type, next_parent, next_name, exclude_id=category_id
+        ):
+            raise HTTPException(status_code=409, detail="category name exists")
+        updated = await self._categories.update(
+            category_id,
+            name=next_name,
+            parent_id=next_parent,
+            sort=sort,
+            update_parent=update_parent,
+        )
+        assert updated is not None
+        return updated
+
+    async def delete(self, category_id: int) -> None:
+        existing = await self._categories.get(category_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="category not found")
+        if existing.is_system:
+            raise HTTPException(status_code=409, detail="system category")
+        if await self._categories.has_children(category_id):
+            raise HTTPException(status_code=409, detail="category has children")
+        if await self._categories.has_resources(category_id):
+            raise HTTPException(status_code=409, detail="category has resources")
+        await self._categories.delete(category_id)
+        await self._saved_views.remove_category(category_id)
+
+    async def validate_ids(self, type_: ResourceType, ids: list[int]) -> list[int]:
+        unique = list(dict.fromkeys(ids))
+        categories = [await self._categories.get(category_id) for category_id in unique]
+        if any(category is None for category in categories):
+            raise HTTPException(status_code=422, detail="category not found")
+        if any(category.type != type_ for category in categories if category is not None):
+            raise HTTPException(status_code=422, detail="category type mismatch")
+        return unique
+
+    async def expand_ids(self, ids: list[int]) -> list[int]:
+        return await self._categories.descendant_ids(ids)
+
+
+class SavedViewService:
+    """保存的时间线筛选器。"""
+
+    def __init__(self, saved_views: SavedViewRepository, categories: CategoryRepository):
+        self._saved_views = saved_views
+        self._categories = categories
+
+    async def list(self, scope: str | None = None) -> list[SavedView]:
+        return await self._saved_views.list("timeline", scope)
+
+    async def get(self, view_id: int) -> SavedView:
+        view = await self._saved_views.get(view_id)
+        if view is None:
+            raise HTTPException(status_code=404, detail="saved view not found")
+        return view
+
+    async def _validate_filters(self, filters: SavedViewFilters) -> None:
+        for type_, rule in (
+            (ResourceType.IMAGE, filters.image),
+            (ResourceType.VIDEO, filters.video),
+        ):
+            ids = list(dict.fromkeys([*rule.include, *rule.exclude]))
+            categories = [await self._categories.get(category_id) for category_id in ids]
+            if any(category is None for category in categories):
+                raise HTTPException(status_code=422, detail="category not found")
+            if any(category.type != type_ for category in categories if category is not None):
+                raise HTTPException(status_code=422, detail="category type mismatch")
+
+    async def create(self, body: SavedViewCreate) -> SavedView:
+        cleaned = body.name.strip()
+        if not cleaned:
+            raise HTTPException(status_code=422, detail="name required")
+        scope = body.scope
+        if "scope" not in body.model_fields_set and body.type is not None:
+            scope = body.type.value
+        await self._validate_filters(body.filters)
+        if await self._saved_views.name_exists(body.kind, scope, cleaned):
+            raise HTTPException(status_code=409, detail="saved view name exists")
+        return await self._saved_views.create(
+            kind=body.kind,
+            scope=scope,
+            name=cleaned,
+            filters=body.filters,
+            sort=body.sort,
+        )
+
+    async def patch(self, view_id: int, body: SavedViewPatch) -> SavedView:
+        existing = await self.get(view_id)
+        next_name = existing.name if body.name is None else body.name.strip()
+        next_scope = body.scope or existing.scope
+        if not next_name:
+            raise HTTPException(status_code=422, detail="name required")
+        next_filters = body.filters if body.filters is not None else existing.filters
+        await self._validate_filters(next_filters)
+        if await self._saved_views.name_exists(
+            existing.kind, next_scope, next_name, exclude_id=view_id
+        ):
+            raise HTTPException(status_code=409, detail="saved view name exists")
+        updated = await self._saved_views.update(
+            view_id,
+            scope=next_scope,
+            name=next_name,
+            filters=body.filters,
+            sort=body.sort,
+        )
+        assert updated is not None
+        return updated
+
+    async def delete(self, view_id: int) -> None:
+        await self.get(view_id)
+        await self._saved_views.delete(view_id)
 
 
 class CollectionService:
@@ -477,6 +748,11 @@ class CollectionService:
         if await self._resources.get(resource_id) is None:
             raise HTTPException(status_code=422, detail="resource not found")
         await self._collections.add_item(collection_id, resource_id)
+
+    async def add_items(self, collection_id: int, resource_ids: list[int]) -> tuple[int, int, int]:
+        """批量加入；返回 (added, skipped, missing)。"""
+        await self.get(collection_id)
+        return await self._collections.add_items(collection_id, resource_ids)
 
     async def remove_item(self, collection_id: int, resource_id: int) -> None:
         await self.get(collection_id)
