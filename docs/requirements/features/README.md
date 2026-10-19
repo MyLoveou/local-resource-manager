@@ -2,6 +2,25 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
+## photo-management-next（**R1 已落地 · R2–R4 需求收集** · 2026-10-18）
+
+> R1 批量加入合集已实现；多时间线（旅游/漫展）、角色维度（角色/作品/扮演者）、本地人脸识别与模型管理待设计。
+
+| 文档 | 内容 |
+|------|------|
+| [`photo-management-next/需求.md`](photo-management-next/需求.md) | R1–R4、候选方案、验收与开放问题；R1 实现记录 |
+
+## library-workspace（**已落地 · 待发版手验** · 2026-10-19）
+
+> 资源底层 + 每类型分类树 + 资源库/视图导航 + 首页工作台；含合集 D 卡与批量快捷键。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-workspace/需求.md`](library-workspace/需求.md) | 已确认决策、W1–W7 验收、IN/OUT |
+| [`library-workspace/设计.md`](library-workspace/设计.md) | L2：模型/交互/模块/切片/开放问题 |
+| [`library-workspace/实现方案.md`](library-workspace/实现方案.md) | L3：路径/契约/数据流/纵向步骤 |
+| [`library-workspace/handoff.md`](library-workspace/handoff.md) | 已落地；发版手验/提交待办 |
+
 ## platform-debt（**已定稿 · 已落地** · D-20260927-06）
 
 > D1 Notify 迁移、D2 token 校验、D3 导入进度分相、D4 事件循环**四项均已落地**（2026-09-27）。余 Electron 手验（媒体豁免生效 + 导入大目录时 `/health` 可用）。
