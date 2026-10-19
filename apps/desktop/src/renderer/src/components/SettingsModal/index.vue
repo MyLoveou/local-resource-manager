@@ -269,6 +269,12 @@
           :percentage="update.status.percent ?? 0"
           :height="6"
         />
+        <p
+          v-if="update.status.phase === 'downloading'"
+          class="set-modal__progress"
+        >
+          {{ updateProgressDetail }}
+        </p>
         <pre
           v-if="update.status.releaseNotes"
           class="set-modal__notes"
@@ -297,7 +303,18 @@
           >
             重启安装
           </n-button>
+          <n-button
+            v-if="showManualDownload"
+            size="small"
+            quaternary
+            @click="openReleasePage"
+          >
+            手动下载
+          </n-button>
         </div>
+        <p class="set-modal__hint set-modal__speed-tip">
+          自动下载走 GitHub，速度受网络影响；较慢时可手动下载安装包。
+        </p>
       </n-tab-pane>
     </n-tabs>
   </n-modal>
@@ -348,6 +365,52 @@ const updatePhaseLabel = computed(() => {
       return status.phase
   }
 })
+
+const RELEASE_PAGE = 'https://github.com/MyLoveou/local-resource-manager/releases/latest'
+
+function formatBytes(value = 0): string {
+  if (value <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
+  const size = value / 1024 ** index
+  return `${size >= 100 || index === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[index]}`
+}
+
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = total % 60
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
+  return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
+const updateProgressDetail = computed(() => {
+  const { transferred, total, bytesPerSecond } = update.status
+  if (!transferred) return '连接中…'
+  const parts = [`${formatBytes(transferred)}${total ? ` / ${formatBytes(total)}` : ''}`]
+  if (bytesPerSecond && bytesPerSecond > 0) {
+    parts.push(`${formatBytes(bytesPerSecond)}/s`)
+    if (total && total > transferred) {
+      parts.push(`剩余约 ${formatDuration((total - transferred) / bytesPerSecond)}`)
+    }
+  }
+  return parts.join(' · ')
+})
+
+const showManualDownload = computed(() =>
+  ['available', 'downloading', 'error'].includes(update.status.phase)
+)
+
+async function openReleasePage(): Promise<void> {
+  const api = window.electron
+  if (!api?.openExternal) {
+    notify.toast.error('当前环境不支持打开浏览器')
+    return
+  }
+  const result = await api.openExternal(RELEASE_PAGE)
+  if (!result.ok) notify.toast.error(result.message)
+}
 
 void update.init()
 const emit = defineEmits<{ 'update:show': [boolean] }>()
@@ -624,6 +687,17 @@ watch(
   color: var(--sm-color-text-muted);
   background: var(--sm-color-bg-surface);
   border-radius: var(--sm-radius-control);
+}
+
+.set-modal__progress {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--sm-color-text-muted);
+}
+
+.set-modal__speed-tip {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 .set-modal__about {

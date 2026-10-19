@@ -35,6 +35,9 @@ type UpdateStatus = {
   version?: string
   releaseNotes?: string
   percent?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
   message?: string
 }
 
@@ -68,6 +71,8 @@ const api = {
     ipcRenderer.invoke('shell:openWith', { path }),
   openAny: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:openAny', { path }),
+  openExternal: (url: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:openExternal', { url }),
   runCommand: (payload: {
     template: string
     path: string

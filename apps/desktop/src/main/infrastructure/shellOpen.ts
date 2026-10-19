@@ -110,6 +110,21 @@ export function registerShellOpenIpc(): void {
     }
   })
 
+  ipcMain.handle('shell:openExternal', async (_event, payload: unknown): Promise<ShellOpenResult> => {
+    try {
+      const raw = payload !== null && typeof payload === 'object' && 'url' in payload
+        ? (payload as { url: unknown }).url
+        : payload
+      if (typeof raw !== 'string' || !/^https:\/\//i.test(raw)) {
+        return fail('仅支持 HTTPS 链接')
+      }
+      await shell.openExternal(raw)
+      return ok()
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : 'openExternal failed')
+    }
+  })
+
   ipcMain.handle('shell:runCommand', async (_event, payload: unknown) => {
     try {
       const body = payload as { template?: string; path?: string }

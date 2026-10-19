@@ -15,5 +15,8 @@ export interface UpdateStatus {
   version?: string
   releaseNotes?: string
   percent?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
   message?: string
 }
