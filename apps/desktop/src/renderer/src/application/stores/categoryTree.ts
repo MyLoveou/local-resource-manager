@@ -5,7 +5,6 @@ import {
   createCategory,
   deleteCategory,
   getCategoryTree,
-  invalidateCategoryTree,
   patchCategory,
 } from '@/infrastructure/http'
 
@@ -57,13 +56,11 @@ export const useCategoryTreeStore = defineStore('categoryTree', () => {
   }
 
   async function remove(id: number, type: ResourceType): Promise<void> {
-    await deleteCategory(id, type)
-    invalidateCategoryTree(type)
-    delete trees.value[type]
+    await deleteCategory(id)
+    setTree(type, await getCategoryTree(type))
   }
 
   function invalidate(type?: ResourceType): void {
-    invalidateCategoryTree(type)
     if (type) delete trees.value[type]
     else trees.value = {}
   }

@@ -188,7 +188,7 @@ onMounted(async () => {
 
 const library = useLibraryStore()
 watch(
-  () => library.revision,
+  () => library.homeRevision,
   () => {
     void initOverviewData()
   }

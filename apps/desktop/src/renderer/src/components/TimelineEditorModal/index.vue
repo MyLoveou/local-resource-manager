@@ -89,6 +89,7 @@ import {
 } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { createSavedView, getCategoryTree, getTags, patchSavedView } from '@/infrastructure/http'
+import { useLibraryStore } from '@/application/stores/library'
 import type {
   CategoryNode,
   SavedView,
@@ -101,6 +102,7 @@ const props = defineProps<{
   view?: SavedView | null
   initialScope?: TimelineScope
 }>()
+const library = useLibraryStore()
 const emit = defineEmits<{
   'update:show': [value: boolean]
   saved: [view: SavedView]
@@ -189,6 +191,7 @@ async function save(): Promise<void> {
     const saved = props.view
       ? await patchSavedView(props.view.id, { scope: scope.value, name: title, filters })
       : await createSavedView({ scope: scope.value, name: title, filters })
+    library.invalidate({ savedViews: true, home: true })
     emit('saved', saved)
     emit('update:show', false)
     notify.toast.success(props.view ? '时间线已保存' : '时间线已创建')

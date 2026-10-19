@@ -1,5 +1,5 @@
 /**
- * 资源分页状态机：首屏替换、触底 keyset 追加、bump 只重拉首页。
+ * 资源分页状态机：首屏替换、触底 keyset 追加、resourceRevision 变化重拉第一页。
  */
 import { computed, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { getResources, invalidateResourceCache } from '@/infrastructure/http'
@@ -182,16 +182,10 @@ export function useResourcePage(options: {
 
   const library = useLibraryStore()
   watch(
-    () => library.revision,
+    () => library.resourceRevision(type.value),
     () => {
       invalidateResourceCache()
-      if (
-        type.value === undefined ||
-        library.importedType === null ||
-        library.importedType === type.value
-      ) {
-        void reset()
-      }
+      void reset()
     }
   )
 

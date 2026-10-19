@@ -7,7 +7,6 @@ export { getOverview } from './overview'
 export { getHome } from './home'
 export {
   getCategoryTree,
-  invalidateCategoryTree,
   createCategory,
   patchCategory,
   deleteCategory,

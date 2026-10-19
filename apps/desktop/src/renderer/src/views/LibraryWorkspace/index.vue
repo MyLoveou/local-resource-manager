@@ -160,7 +160,7 @@ watch(
 )
 
 watch(
-  () => library.revision,
+  () => library.categoryRevision(type.value),
   () => {
     void categoryStore.load(type.value, true)
   },

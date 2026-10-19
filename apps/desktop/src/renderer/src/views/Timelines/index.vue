@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import CollectionCard from '@/components/CollectionCard/index.vue'
@@ -33,6 +33,7 @@ import TimelineEditorModal from '@/components/TimelineEditorModal/index.vue'
 import { notify } from '@/application/notify'
 import { getPhotoTimeline, listSavedViews } from '@/infrastructure/http'
 import type { PhotoTile } from '@/domain'
+import { useLibraryStore } from '@/application/stores/library'
 
 interface Card {
   id: number
@@ -42,6 +43,7 @@ interface Card {
 }
 
 const router = useRouter()
+const library = useLibraryStore()
 const cards = ref<Card[]>([])
 const allCount = ref(0)
 const loading = ref(false)
@@ -91,6 +93,17 @@ async function load(): Promise<void> {
 function open(id: string): void {
   void router.push(`/timelines/${id}`)
 }
+
+watch(
+  () => [
+    library.savedViewsRevision,
+    library.resourceRevision('image') + library.resourceRevision('video'),
+    library.watchRevision,
+  ],
+  () => {
+    void load()
+  }
+)
 
 onMounted(() => {
   void load()

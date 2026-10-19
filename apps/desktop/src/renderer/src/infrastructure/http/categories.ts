@@ -1,21 +1,15 @@
 import client from './client'
 import type { CategoryNode, ResourceType } from '@/domain'
 
-const treeCache = new Map<string, CategoryNode[]>()
-
+/**
+ * 分类树只由 Pinia categoryTree store 缓存。
+ * HTTP 层不再维护第二份树缓存，避免 force 刷新仍读到旧计数。
+ */
 export async function getCategoryTree(type: ResourceType): Promise<CategoryNode[]> {
-  const hit = treeCache.get(type)
-  if (hit) return hit
   const { data } = await client.get<{ items: CategoryNode[] }>('/library/categories', {
     params: { type },
   })
-  treeCache.set(type, data.items)
   return data.items
-}
-
-export function invalidateCategoryTree(type?: ResourceType): void {
-  if (type) treeCache.delete(type)
-  else treeCache.clear()
 }
 
 export async function createCategory(body: {
@@ -25,7 +19,6 @@ export async function createCategory(body: {
   sort?: number
 }): Promise<CategoryNode[]> {
   const { data } = await client.post<{ items: CategoryNode[] }>('/library/categories', body)
-  treeCache.set(body.type, data.items)
   return data.items
 }
 
@@ -38,11 +31,9 @@ export async function patchCategory(
     `/library/categories/${id}`,
     body,
   )
-  treeCache.set(type, data.items)
   return data.items
 }
 
-export async function deleteCategory(id: number, type: ResourceType): Promise<void> {
+export async function deleteCategory(id: number): Promise<void> {
   await client.delete(`/library/categories/${id}`)
-  treeCache.delete(type)
 }

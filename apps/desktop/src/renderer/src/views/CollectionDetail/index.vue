@@ -131,10 +131,12 @@ import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import type { CategoryNode, Collection, Resource, ResourceType } from '@/domain'
 import { RESOURCE_TYPE_LABEL, flattenCategoryTree } from '@/domain'
 import { useSelectionStore } from '@/application/stores/selection'
+import { useLibraryStore } from '@/application/stores/library'
 
 const route = useRoute()
 const router = useRouter()
 const selection = useSelectionStore()
+const library = useLibraryStore()
 const collection = ref<Collection | null>(null)
 const members = ref<Resource[]>([])
 const loading = ref(false)
@@ -229,7 +231,7 @@ async function removeSelected(): Promise<void> {
   try {
     await removeCollectionItem(id, rid)
     selection.clear()
-    await load()
+    library.invalidate({ collections: true, resources: true, home: true })
   } catch (error) {
     notify.fromError(error, { context: '移出合集' })
   }
@@ -241,7 +243,7 @@ async function moveSelected(direction: 'up' | 'down'): Promise<void> {
   if (!Number.isFinite(id) || rid === null) return
   try {
     await moveCollectionItem(id, rid, direction)
-    await load()
+    library.invalidate({ collections: true, home: true })
   } catch (error) {
     notify.fromError(error, { context: '调整顺序' })
   }
@@ -252,6 +254,7 @@ async function removeCollection(): Promise<void> {
   if (!Number.isFinite(id)) return
   try {
     await deleteCollectionApi(id)
+    library.invalidate({ collections: true, resources: true, home: true })
     notify.toast.success('已删除合集')
     void router.push('/collections')
   } catch (error) {
@@ -316,6 +319,30 @@ watch(activeType, () => {
 watch([categoryId, tagIds], () => {
   selection.clear()
 })
+
+watch(
+  () => [
+    library.categoryRevision(
+      activeType.value === 'all' ? undefined : activeType.value,
+    ),
+    library.tagsRevision,
+  ],
+  () => {
+    void loadCategories()
+    void getTags().then((tags) => {
+      tagOptions.value = tags.flatMap((tag) =>
+        tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+      )
+    })
+  }
+)
+
+watch(
+  () => [library.collectionsRevision, library.resourceRevision()],
+  () => {
+    if (Number.isFinite(Number(route.params.id))) void load()
+  }
+)
 </script>
 
 <style scoped lang="less">

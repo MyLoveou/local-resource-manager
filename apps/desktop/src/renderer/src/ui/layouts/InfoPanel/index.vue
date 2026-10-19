@@ -337,7 +337,7 @@ import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSel
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
-import { getResource, getCategoryTree, invalidateCategoryTree, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResource, getCategoryTree, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import {
   addCollectionItem,
@@ -580,7 +580,7 @@ async function toggleTimeline(checked: boolean): Promise<void> {
     const patched = await patchResource(id, { timelineVisible: checked })
     resource.value = patched
     applyResourceToDraft(patched)
-    library.bump(null)
+    library.invalidate({ resources: [patched.type], home: true })
   } catch (error) {
     notify.fromError(error, { context: '?????' })
   } finally {
@@ -711,7 +711,7 @@ watch(
 )
 
 watch(
-  () => library.revision,
+  () => (resource.value ? library.resourceRevision(resource.value.type) : 0),
   async () => {
     const id = selectedId.value
     if (id === null || editOpen.value) return
@@ -726,6 +726,14 @@ watch(
       if (gen !== loadGen) return
       console.error(error)
     }
+  }
+)
+
+watch(
+  () => (resource.value ? library.categoryRevision(resource.value.type) : 0),
+  () => {
+    const type = resource.value?.type
+    if (type) void categoryStore.load(type, true)
   }
 )
 
@@ -778,14 +786,15 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
       ...(row.type === 'image' ? { exifTakenAt: localInputToTakenAt(draft.takenAtLocal) } : {}),
     })
     resource.value = patched
-    invalidateCategoryTree(row.type)
-    void categoryStore.load(row.type, true)
     const pending = draft.pendingCoverPath
     applyResourceToDraft(patched)
     draft.pendingCoverPath = pending
-    if (includeTextFields || patched.coverPath !== row.coverPath) {
-      library.bump(patched.type)
-    }
+    library.invalidate({
+      resources: [patched.type],
+      categories: [patched.type],
+      tags: true,
+      home: true,
+    })
     return true
   } catch (error) {
     errorMessage.value = '保存失败'
@@ -821,7 +830,7 @@ async function saveModal(): Promise<void> {
       const updated = await replaceCover(id, pending)
       resource.value = updated
       applyResourceToDraft(updated)
-      library.bump(updated.type)
+      library.invalidate({ resources: [updated.type], home: true })
     } catch (error) {
       errorMessage.value = '更换封面失败'
       draft.pendingCoverPath = pending
@@ -858,7 +867,7 @@ async function pickCoverImmediate(): Promise<void> {
     const updated = await replaceCover(id, path)
     resource.value = updated
     applyResourceToDraft(updated)
-    library.bump(updated.type)
+    library.invalidate({ resources: [updated.type], home: true })
   } catch (error) {
     errorMessage.value = '更换封面失败'
     console.error(error)
@@ -1043,7 +1052,7 @@ async function addNote(): Promise<void> {
     resource.value = await createWorkNote(id, noteTitle.value, noteContent.value)
     noteTitle.value = ''
     noteContent.value = ''
-    library.bump('work_directory')
+    library.invalidate({ resources: ['work_directory'], home: true })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '备注保存失败'
   } finally {
@@ -1058,7 +1067,7 @@ async function removeNote(noteId: string): Promise<void> {
   errorMessage.value = ''
   try {
     resource.value = await deleteWorkNote(id, noteId)
-    library.bump('work_directory')
+    library.invalidate({ resources: ['work_directory'], home: true })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '备注删除失败'
   } finally {
@@ -1120,7 +1129,7 @@ async function saveCollections(): Promise<void> {
     for (const collectionId of toAdd) await addCollectionItem(collectionId, id)
     for (const collectionId of toRemove) await removeCollectionItem(collectionId, id)
     collectionOpen.value = false
-    library.bump(null)
+    library.invalidate({ collections: true, resources: true, home: true })
     notify.toast.success('已更新合集')
   } catch (error) {
     notify.fromError(error, { context: '更新合集' })
@@ -1142,7 +1151,7 @@ async function createAndAdd(): Promise<void> {
     collectionList.value = all
     collectionOriginalIds.value = new Set([...collectionOriginalIds.value, created.id])
     collectionMemberIds.value = new Set([...collectionMemberIds.value, created.id])
-    library.bump(null)
+    library.invalidate({ collections: true, resources: true, home: true })
   } catch (error) {
     notify.fromError(error, { context: '新建合集' })
   } finally {
@@ -1180,7 +1189,12 @@ async function handleDelete(): Promise<void> {
   errorMessage.value = ''
   try {
     await deleteResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: [row.type],
+      categories: [row.type],
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()
@@ -1199,7 +1213,12 @@ async function handleRestore(): Promise<void> {
   errorMessage.value = ''
   try {
     await restoreResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()
@@ -1218,7 +1237,12 @@ async function handlePurge(): Promise<void> {
   errorMessage.value = ''
   try {
     await purgeResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()

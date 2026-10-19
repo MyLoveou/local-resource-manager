@@ -50,6 +50,7 @@ import { getTags } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useViewOptionsStore } from '@/application/stores/viewOptions'
+import { useLibraryStore } from '@/application/stores/library'
 
 const props = defineProps<{
   type?: ResourceType
@@ -59,6 +60,7 @@ const props = defineProps<{
 
 const browse = useBrowseQueryStore()
 const viewOptions = useViewOptionsStore()
+const library = useLibraryStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const localQ = ref(session.value.q)
 const tagOptions = ref<{ label: string; value: number }[]>([])
@@ -84,6 +86,13 @@ onMounted(() => {
 
 watch(
   () => props.type,
+  () => {
+    void loadTags()
+  }
+)
+
+watch(
+  () => library.tagsRevision,
   () => {
     void loadTags()
   }

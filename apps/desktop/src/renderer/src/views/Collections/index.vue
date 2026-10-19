@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NInput } from 'naive-ui'
 import { notify } from '@/application/notify'
@@ -56,8 +56,10 @@ import { createCollection, listCollections } from '@/infrastructure/http/collect
 import CollectionCard from '@/components/CollectionCard/index.vue'
 import type { Collection } from '@/domain'
 import { useViewOptionsStore } from '@/application/stores/viewOptions'
+import { useLibraryStore } from '@/application/stores/library'
 
 const router = useRouter()
+const library = useLibraryStore()
 const collections = ref<Collection[]>([])
 const viewOptions = useViewOptionsStore()
 const newTitle = ref('')
@@ -81,8 +83,8 @@ async function submit(): Promise<void> {
   busy.value = true
   try {
     const created = await createCollection({ title })
+    library.invalidate({ collections: true, home: true })
     newTitle.value = ''
-    await load()
     await router.push(`/collections/${created.id}`)
   } catch (error) {
     notify.fromError(error, { context: '新建合集' })
@@ -94,6 +96,13 @@ async function submit(): Promise<void> {
 function open(id: number): void {
   void router.push(`/collections/${id}`)
 }
+
+watch(
+  () => library.collectionsRevision,
+  () => {
+    void load()
+  }
+)
 
 onMounted(() => {
   void load()

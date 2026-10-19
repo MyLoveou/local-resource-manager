@@ -67,7 +67,7 @@ import {
   previewScrapeCandidate,
   selectScrapeCandidate,
 } from '@/infrastructure/http/scrape'
-import { invalidateResourceCache } from '@/infrastructure/http'
+import { invalidateResourceCache, invalidateTags } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type { Candidate, ScrapeJob, ScrapePreview } from '@/domain'
 import ScrapeCandidateList from './ScrapeCandidateList.vue'
@@ -203,7 +203,13 @@ async function confirmOne(): Promise<void> {
     })
     if (mine !== gen) return
     invalidateResourceCache()
-    library.bump(null)
+    invalidateTags()
+    library.invalidate({
+      resources: true,
+      categories: true,
+      home: true,
+      tags: true,
+    })
     emit('applied')
     await advance()
   } catch (err) {

@@ -156,6 +156,12 @@ class LibraryWorkspaceTests(unittest.IsolatedAsyncioTestCase):
                 ResourceType.IMAGE, None, "批量", 0
             )
             query = self._query(session)
+            uncategorized = await query.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc", uncategorized=True,
+            )
+            self.assertEqual({item.id for item in uncategorized.items}, {a, b})
+
             added = await query.batch("add_categories", [a, b], category_ids=[category.id])
             self.assertEqual(added.ok, [a, b])
             self.assertEqual(
@@ -165,9 +171,24 @@ class LibraryWorkspaceTests(unittest.IsolatedAsyncioTestCase):
                 ),
                 [category.id],
             )
+            uncategorized = await query.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc", uncategorized=True,
+            )
+            self.assertEqual(uncategorized.total, 0)
+            counts = await CategoryRepository(session).counts(ResourceType.IMAGE)
+            self.assertEqual(counts.get(category.id), 2)
+
             removed = await query.batch("remove_categories", [a], category_ids=[category.id])
             self.assertEqual(removed.ok, [a])
             self.assertEqual((await ResourceRepository(session).get(a)).categories, [])
+            uncategorized = await query.list_page(
+                ResourceType.IMAGE, ResourceStatus.ACTIVE, 50, 0,
+                ResourceSortField.CREATED_AT, "desc", uncategorized=True,
+            )
+            self.assertEqual({item.id for item in uncategorized.items}, {a})
+            counts = await CategoryRepository(session).counts(ResourceType.IMAGE)
+            self.assertEqual(counts.get(category.id), 1)
 
     async def test_import_applies_categories_and_tags(self) -> None:
         async with self.factory() as session:

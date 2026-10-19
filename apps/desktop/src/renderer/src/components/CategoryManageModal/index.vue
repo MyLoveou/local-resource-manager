@@ -49,6 +49,7 @@ import { computed, ref, watch } from 'vue'
 import { NButton, NInput, NInputNumber, NModal, NPopconfirm, NSelect } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { useCategoryTreeStore } from '@/application/stores/categoryTree'
+import { useLibraryStore } from '@/application/stores/library'
 import type { CategoryNode, ResourceType } from '@/domain'
 
 const props = defineProps<{
@@ -60,6 +61,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:show': [value: boolean] }>()
 
 const store = useCategoryTreeStore()
+const library = useLibraryStore()
 const selectedId = ref<number | null>(null)
 const name = ref('')
 const parentValue = ref(0)
@@ -158,6 +160,7 @@ async function remove(): Promise<void> {
   busy.value = true
   try {
     await store.remove(selectedId.value, props.type)
+    library.invalidate({ savedViews: true })
     startCreate()
     notify.toast.success('分类已删除')
   } catch (error) {

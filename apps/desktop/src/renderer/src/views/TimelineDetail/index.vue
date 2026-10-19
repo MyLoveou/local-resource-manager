@@ -61,10 +61,12 @@ import PhotoTimeline from '@/components/PhotoTimeline/index.vue'
 import TimelineEditorModal from '@/components/TimelineEditorModal/index.vue'
 import { notify } from '@/application/notify'
 import { deleteSavedView, getSavedView } from '@/infrastructure/http'
+import { useLibraryStore } from '@/application/stores/library'
 import type { SavedView, SavedViewFilters, TimelineScope } from '@/domain'
 
 const route = useRoute()
 const router = useRouter()
+const library = useLibraryStore()
 const savedView = ref<SavedView | null>(null)
 const view = ref<'timeline' | 'map'>('timeline')
 const editOpen = ref(false)
@@ -111,6 +113,7 @@ async function remove(): Promise<void> {
   if (!savedView.value) return
   try {
     await deleteSavedView(savedView.value.id)
+    library.invalidate({ savedViews: true, home: true })
     notify.toast.success('时间线已删除')
     void router.push('/timelines')
   } catch (error) {

@@ -1,9 +1,10 @@
 /**
- * 监视导入自动刷新：轮询 watch-revision，修订号变化时 bump 对应类型列表。
+ * 监视导入自动刷新：轮询 watch-revision，修订号变化时软刷新对应类型列表。
  * 挂载在 App 壳（全局生效）。
  */
 import { onMounted, onUnmounted } from 'vue'
 import { getWatchRevision } from '@/infrastructure/http/resources'
+import { invalidateTags } from '@/infrastructure/http/vocab'
 import { useLibraryStore } from '@/application/stores/library'
 import type { ResourceType } from '@/domain'
 
@@ -18,6 +19,7 @@ export function useWatchAutoRefresh(): void {
     try {
       const snapshot = await getWatchRevision()
       if (lastRevision !== null && snapshot.revision !== lastRevision && snapshot.type) {
+        invalidateTags()
         library.watchBump(snapshot.type as ResourceType)
       }
       lastRevision = snapshot.revision

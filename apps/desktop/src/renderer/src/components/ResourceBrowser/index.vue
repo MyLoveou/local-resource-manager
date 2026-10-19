@@ -85,7 +85,7 @@ import { useViewOptionsStore } from '@/application/stores/viewOptions'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
-import { useLibraryStore } from '@/application/stores/library'
+import { useLibraryStore, type LibraryInvalidation } from '@/application/stores/library'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
 import { consumeResource } from '@/infrastructure/consume/consumeResource'
@@ -237,29 +237,58 @@ function ids(type: ResourceType): number[] {
   )
 }
 
-async function runBatch(action: ResourceBatchAction, tagNames?: string[], categoryIds?: number[]): Promise<void> {
+async function runBatch(action: ResourceBatchAction, tagNames?: string[], categoryIds?: number[]): Promise<boolean> {
   const ids = [...selectedIds.value]
-  if (ids.length === 0) return
+  if (ids.length === 0) {
+    batchMessage.value = '没有选中的资源'
+    return false
+  }
   const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
+  let ok = 0
+  let failed = 0
   try {
-    const result = await batchResources(action, ids, tagNames, categoryIds)
-    library.bump(null)
-    if (!shellBatch.isLive(live)) return
-    if (action === 'add_tags') {
-      batchMessage.value = `已为 ${result.ok.length} 项添加标签`
-      selection.clear()
-    } else {
-      shellBatch.exit()
-      if (result.failed.length > 0) {
-        batchMessage.value = `完成 ${result.ok.length} 项，失败 ${result.failed.length} 项`
-      }
+    for (let index = 0; index < ids.length; index += BATCH_LIMIT) {
+      const result = await batchResources(
+        action,
+        ids.slice(index, index + BATCH_LIMIT),
+        tagNames,
+        categoryIds,
+      )
+      ok += result.ok.length
+      failed += result.failed.length
     }
+    const scope: LibraryInvalidation = {
+      resources: props.type ? [props.type] : true,
+      home: true,
+    }
+    if (action === 'add_categories' || action === 'remove_categories') {
+      scope.categories = props.type ? [props.type] : true
+    }
+    if (action === 'add_tags') scope.tags = true
+    if (action === 'trash' || action === 'restore' || action === 'purge') {
+      scope.collections = true
+    }
+    library.invalidate(scope)
+    if (!shellBatch.isLive(live)) return false
+    if (action === 'add_tags') {
+      batchMessage.value = failed > 0
+        ? `已为 ${ok} 项添加标签，失败 ${failed} 项`
+        : `已为 ${ok} 项添加标签`
+      if (failed === 0) selection.clear()
+    } else {
+      if (failed === 0) shellBatch.exit()
+      batchMessage.value = failed > 0
+        ? `完成 ${ok} 项，失败 ${failed} 项`
+        : `已完成 ${ok} 项`
+    }
+    return ok > 0 && failed === 0
   } catch (err) {
-    if (!shellBatch.isLive(live)) return
+    if (!shellBatch.isLive(live)) return false
     batchMessage.value = '批量操作失败'
     console.error(err)
+    return false
   } finally {
     if (shellBatch.isLive(live)) batchBusy.value = false
   }
@@ -297,7 +326,12 @@ async function emptyTrash(): Promise<void> {
       const result = await batchResources('purge', chunk)
       failed += result.failed.length
     }
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     if (!shellBatch.isLive(live)) return
     shellBatch.exit()
     if (failed > 0) {
@@ -340,13 +374,6 @@ watch(
   () => [hasMore.value, loadingMore.value] as const,
   () => {
     imageViewer.notifyPager()
-  }
-)
-
-watch(
-  () => library.revision,
-  () => {
-    if (imageViewer.visible) imageViewer.close()
   }
 )
 

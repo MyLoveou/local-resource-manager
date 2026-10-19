@@ -2,6 +2,7 @@
  * 资源列表端点（infrastructure/http · 后端 /library/resources）
  */
 import client from './client'
+import { invalidateTags } from './vocab'
 import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 
 const DETAIL_CACHE_LIMIT = 50
@@ -89,6 +90,7 @@ export async function getResource(resourceId: number): Promise<Resource> {
 
 export async function patchResource(resourceId: number, patch: ResourcePatch): Promise<Resource> {
   const { data } = await client.patch<Resource>(`/library/resources/${resourceId}`, patch)
+  if (patch.tagNames !== undefined) invalidateTags()
   return rememberDetail(data)
 }
 
@@ -176,5 +178,6 @@ export async function batchResources(
     ...(categoryIds ? { categoryIds } : {}),
   })
   for (const id of ids) invalidateResourceCache(id)
+  if (action === 'add_tags') invalidateTags()
   return data
 }

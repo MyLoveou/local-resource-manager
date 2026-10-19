@@ -2,7 +2,7 @@
  * 导入向导：选类型 → 选文件/目录 → 轮询后端 job。
  */
 import { computed, ref } from 'vue'
-import { createImport, getCategoryTree, getImportJob, getTags } from '@/infrastructure/http'
+import { createImport, getCategoryTree, getImportJob, getTags, invalidateTags } from '@/infrastructure/http'
 import type { ImportJob, ImportSourceKind } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import {
@@ -147,7 +147,13 @@ export function useLibraryImport() {
         job.value = current
       }
       if (current.status === 'done') {
-        library.bump(resourceType.value)
+        invalidateTags()
+        library.invalidate({
+          resources: [resourceType.value],
+          categories: [resourceType.value],
+          tags: true,
+          home: true,
+        })
       } else {
         errorMessage.value = current.error || '导入失败'
       }

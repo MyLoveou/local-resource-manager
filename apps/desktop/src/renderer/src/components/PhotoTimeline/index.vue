@@ -411,8 +411,35 @@ watch(
 )
 
 watch(
-  () => library.revision,
+  () => library.tagsRevision,
+  () => {
+    void getTags(props.type).then((tags) => {
+      tagOptions.value = tags.flatMap((tag) =>
+        tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+      )
+    })
+  },
+)
+
+watch(
+  () =>
+    props.scope === 'media'
+      ? library.resourceRevision('image') + library.resourceRevision('video')
+      : library.resourceRevision(props.type),
   async () => {
+    const top = scrollRef.value?.scrollTop ?? 0
+    await load()
+    await nextTick()
+    if (scrollRef.value) scrollRef.value.scrollTop = top
+  }
+)
+
+watch(
+  () => library.watchRevision,
+  async () => {
+    const type = library.watchType
+    if (type !== 'image' && type !== 'video') return
+    if (props.scope !== 'media' && type !== props.type) return
     const top = scrollRef.value?.scrollTop ?? 0
     await load()
     await nextTick()

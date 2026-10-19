@@ -238,7 +238,7 @@ async function addWorkDirectory(): Promise<void> {
   addingWork.value = true
   try {
     const created = await createWorkDirectory(dir)
-    library.bump('work_directory')
+    library.invalidate({ resources: ['work_directory'], home: true })
     if (created.id != null) selection.select(created.id)
     notify.toast.success('已添加工作目录')
   } catch (error) {
@@ -265,8 +265,8 @@ function addTagDraft(): void {
 async function commitBatchTag(): Promise<void> {
   if (tagNames.value.length === 0) return
   const names = [...tagNames.value]
-  await runBatch('add_tags', names)
-  tagNames.value = []
+  const ok = await runBatch('add_tags', names)
+  if (ok) tagNames.value = []
 }
 
 const batchCollectionOpen = ref(false)
@@ -322,7 +322,7 @@ async function confirmBatchCollection(): Promise<void> {
     }
 
     shellBatch.exit()
-    library.bump(null)
+    library.invalidate({ collections: true, resources: true, home: true })
     const extras = [
       skipped > 0 ? `跳过重复 ${skipped} 项` : '',
       missing > 0 ? `跳过缺失 ${missing} 项` : '',
@@ -376,12 +376,17 @@ async function confirmBatchCategories(mode: 'add' | 'remove'): Promise<void> {
   if (batchCategoryIds.value.length === 0) return
   batchCategoryBusy.value = true
   try {
-    await shellBatch.runBatch(
+    const ok = await shellBatch.runBatch(
       mode === 'add' ? 'add_categories' : 'remove_categories',
       undefined,
       [...batchCategoryIds.value],
     )
-    await categoryStore.load(batchCategoryType.value, true)
+    if (!ok) {
+      notify.toast.error(
+        `分类${mode === 'add' ? '追加' : '移除'}未完全成功，请查看批量提示后重试`,
+      )
+      return
+    }
     batchCategoryOpen.value = false
   } finally {
     batchCategoryBusy.value = false
