@@ -13,7 +13,7 @@
       :timeline-visible="includeAll ? undefined : true"
       :include-collected-override="true"
       :category-ids-override="categoryIds"
-      :uncategorized-override="false"
+      :ignore-uncategorized="true"
       :tag-ids-override="tagIds"
     />
   </div>

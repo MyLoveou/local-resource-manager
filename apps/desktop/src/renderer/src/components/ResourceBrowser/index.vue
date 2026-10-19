@@ -112,7 +112,7 @@ const props = defineProps<{
   timelineMedia?: boolean
   includeCollectedOverride?: boolean
   categoryIdsOverride?: number[]
-  uncategorizedOverride?: boolean
+  ignoreUncategorized?: boolean
   tagIdsOverride?: number[]
 }>()
 
@@ -139,7 +139,8 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   order: () => session.value.order,
   tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
   categoryIds: () => props.categoryIdsOverride ?? session.value.categoryIds,
-  uncategorized: () => props.uncategorizedOverride ?? session.value.uncategorized,
+  uncategorized: () =>
+    props.ignoreUncategorized === true ? false : session.value.uncategorized,
   includeCollected: () =>
     props.includeCollectedOverride === true ? true : viewOptions.includeCollected,
   takenDate: () => props.takenDate,
