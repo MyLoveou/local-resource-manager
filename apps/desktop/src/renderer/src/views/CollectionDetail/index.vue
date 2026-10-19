@@ -54,8 +54,21 @@
         返回
       </n-button>
     </div>
+    <div v-if="types.length > 1" class="collection-detail__types">
+      <button
+        v-for="item in typeTabs"
+        :key="item.value"
+        type="button"
+        class="collection-detail__type"
+        :class="{ 'collection-detail__type--active': activeType === item.value }"
+        @click="activeType = item.value"
+      >
+        {{ item.label }}
+      </button>
+    </div>
     <div class="collection-detail__filters">
       <n-select
+        v-if="activeType !== 'all'"
         v-model:value="categoryId"
         size="small"
         clearable
@@ -105,7 +118,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NPopconfirm, NSelect } from 'naive-ui'
 import { notify } from '@/application/notify'
-import { getCategories, getTags, resolveCardImageUrl } from '@/infrastructure/http'
+import { getCategoryTree, getTags, resolveCardImageUrl } from '@/infrastructure/http'
 import {
   collectionMembers,
   deleteCollection as deleteCollectionApi,
@@ -115,7 +128,8 @@ import {
   removeCollectionItem,
 } from '@/infrastructure/http/collections'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
-import type { Collection, Resource } from '@/domain'
+import type { CategoryNode, Collection, Resource, ResourceType } from '@/domain'
+import { RESOURCE_TYPE_LABEL, flattenCategoryTree } from '@/domain'
 import { useSelectionStore } from '@/application/stores/selection'
 
 const route = useRoute()
@@ -125,14 +139,52 @@ const collection = ref<Collection | null>(null)
 const members = ref<Resource[]>([])
 const loading = ref(false)
 const selectedId = computed(() => selection.selectedId)
+const activeType = ref<ResourceType | 'all'>('all')
 const categoryId = ref<number | null>(null)
 const tagIds = ref<number[]>([])
-const categoryOptions = ref<{ label: string; value: number }[]>([])
+const categoryTree = ref<CategoryNode[]>([])
 const tagOptions = ref<{ label: string; value: number }[]>([])
+
+const types = computed(() =>
+  [...new Set(members.value.map((item) => item.type))],
+)
+const typeTabs = computed(() => [
+  { label: '全部', value: 'all' as const },
+  ...types.value.map((type) => ({
+    label: RESOURCE_TYPE_LABEL[type] ?? type,
+    value: type,
+  })),
+])
+const categoryOptions = computed(() =>
+  flattenCategoryTree(categoryTree.value).map((category) => ({
+    label: category.name,
+    value: category.id,
+  })),
+)
+const categoryFilterIds = computed(() => {
+  if (categoryId.value === null) return null
+  const byId = new Map(flattenCategoryTree(categoryTree.value).map((node) => [node.id, node]))
+  const ids = new Set<number>()
+  const walk = (id: number): void => {
+    if (ids.has(id)) return
+    ids.add(id)
+    for (const node of byId.values()) {
+      if (node.parentId === id) walk(node.id)
+    }
+  }
+  walk(categoryId.value)
+  return ids
+})
 
 const filteredMembers = computed(() =>
   members.value.filter((item) => {
-    if (categoryId.value !== null && item.category?.id !== categoryId.value) return false
+    if (activeType.value !== 'all' && item.type !== activeType.value) return false
+    if (
+      categoryFilterIds.value !== null &&
+      !(item.categories ?? []).some((category) => category.id !== undefined && categoryFilterIds.value?.has(category.id))
+    ) {
+      return false
+    }
     if (tagIds.value.length > 0) {
       const ids = new Set(
         (item.tags ?? []).flatMap((tag) => (tag.id === undefined ? [] : [tag.id]))
@@ -158,6 +210,7 @@ async function load(): Promise<void> {
   try {
     collection.value = await getCollection(id)
     members.value = await collectionMembers(id)
+    if (types.value.length === 1) activeType.value = types.value[0]
     loading.value = false
   } catch (error) {
     loading.value = false
@@ -232,19 +285,32 @@ async function exportToFolder(): Promise<void> {
   }
 }
 
+async function loadCategories(): Promise<void> {
+  categoryId.value = null
+  if (activeType.value === 'all') {
+    categoryTree.value = []
+    return
+  }
+  try {
+    categoryTree.value = await getCategoryTree(activeType.value)
+  } catch (error) {
+    notify.fromError(error, { context: '读取分类' })
+  }
+}
+
 onMounted(() => {
   selection.clear()
   void load()
-  void getCategories().then((categories) => {
-    categoryOptions.value = categories.flatMap((category) =>
-      category.id === undefined ? [] : [{ label: category.name, value: category.id }]
-    )
-  })
   void getTags().then((tags) => {
     tagOptions.value = tags.flatMap((tag) =>
       tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
     )
   })
+})
+
+watch(activeType, () => {
+  void loadCategories()
+  selection.clear()
 })
 
 watch([categoryId, tagIds], () => {
@@ -277,6 +343,27 @@ watch([categoryId, tagIds], () => {
 .collection-detail__grid {
   flex: 1;
   min-height: 0;
+}
+
+.collection-detail__types {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.collection-detail__type {
+  border: 0;
+  background: transparent;
+  color: var(--sm-color-text-muted);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+
+  &--active {
+    color: var(--sm-color-text);
+    font-weight: 600;
+    border-bottom: 2px solid var(--sm-color-accent, #2563eb);
+  }
 }
 
 .collection-detail__filters {

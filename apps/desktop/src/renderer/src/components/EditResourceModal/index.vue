@@ -43,12 +43,12 @@
       <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
       <label class="edit-resource__label">分类</label>
       <n-select
+        multiple
         filterable
-        tag
         clearable
         :options="categoryOptions"
-        :value="draft.categoryName"
-        @update:value="draft.categoryName = $event"
+        :value="draft.categoryIds"
+        @update:value="(value: number[]) => (draft.categoryIds = value ?? [])"
       />
       <label class="edit-resource__label">标签（Enter 切词，保存后才写入）</label>
       <div class="edit-resource__tags">
@@ -82,7 +82,7 @@ import type { MetadataDraft } from '@/domain'
 const props = defineProps<{
   show: boolean
   draft: MetadataDraft
-  categoryOptions: { label: string; value: string }[]
+  categoryOptions: { label: string; value: number }[]
   coverUrl: string
   saving: boolean
   allowCover: boolean

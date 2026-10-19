@@ -48,6 +48,25 @@
           计入时间线（默认按拍摄时间）
         </n-checkbox>
       </div>
+      <p class="hint">整理信息（可选，应用整批）</p>
+      <n-select
+        v-model:value="categoryIds"
+        multiple
+        filterable
+        clearable
+        placeholder="导入后加入分类"
+        :options="categoryOptions"
+        :disabled="busy"
+      />
+      <n-select
+        v-model:value="tagIds"
+        multiple
+        filterable
+        clearable
+        placeholder="导入后添加标签"
+        :options="tagOptions"
+        :disabled="busy"
+      />
       <div class="actions">
         <n-button :disabled="busy" @click="step = 'type'">上一步</n-button>
         <n-button type="primary" :disabled="busy" @click="pickAndImport">选择并导入</n-button>
@@ -82,7 +101,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSpace, NProgress } from 'naive-ui'
+import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSelect, NSpace, NProgress } from 'naive-ui'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
 import { SourceKind } from '@/domain'
 
@@ -93,6 +112,10 @@ const {
   sourceKind,
   storageKind,
   timelineVisible,
+  categoryIds,
+  tagIds,
+  categoryOptions,
+  tagOptions,
   job,
   busy,
   errorMessage,

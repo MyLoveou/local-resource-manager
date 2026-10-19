@@ -10,6 +10,7 @@ export interface CollectionCardData {
   memberCount: number
   updatedAt?: string | null
   thumbnailPath?: string | null
+  previewThumbnails?: string[]
 }
 
 /** 合集 */
@@ -18,6 +19,7 @@ export interface Collection {
   title: string
   description?: string | null
   memberCount: number
+  previewThumbnails?: string[]
   createdAt?: string | null
   updatedAt?: string | null
 }

@@ -15,9 +15,12 @@ export const HIDDEN_SECTIONS: readonly string[] = [
 /** 路由 path 是否属于隐藏分区（精确命中或子路径前缀）。 */
 export function isSectionHidden(path: string): boolean {
   if (!path || path === '/') return false
+  const candidate = path.startsWith('/library/')
+    ? `/${path.split('/')[2] ?? ''}`
+    : path
   return HIDDEN_SECTIONS.some((key) => {
     if (!key || key === '/') return false
     const section = key.endsWith('/') ? key.slice(0, -1) : key
-    return path === section || path.startsWith(`${section}/`)
+    return candidate === section || candidate.startsWith(`${section}/`)
   })
 }

@@ -30,6 +30,7 @@
       </template>
       <template v-else>
         <span>已选 {{ selectedCount }}</span>
+        <span class="tool-bar__batch-hint">Ctrl/Shift 多选 · Esc 退出</span>
         <template v-if="isTrash">
           <n-popconfirm positive-text="恢复" negative-text="取消" :disabled="selectedCount === 0"
             @positive-click="() => runBatch('restore')">
@@ -57,6 +58,12 @@
           </template>
           确定将所选资源移入回收站？可稍后恢复。
         </n-popconfirm>
+        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCollections">
+          加入合集
+        </n-button>
+        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCategories">
+          设置分类
+        </n-button>
         <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="startScrape">
           获取元数据
         </n-button>
@@ -88,13 +95,104 @@
     <ImportWizard ref="wizardRef" />
     <SettingsModal v-model:show="settingsOpen" :tab="settingsTab" />
     <ScrapeConfirmQueue v-model:show="scrapeOpen" :resource-ids="scrapeIds" />
+    <n-modal
+      v-model:show="batchCollectionOpen"
+      preset="card"
+      title="加入合集"
+      style="width: 380px"
+      :mask-closable="!batchCollectionBusy"
+      :close-on-esc="!batchCollectionBusy"
+    >
+      <div class="tool-bar__collection-form">
+        <n-select
+          v-model:value="batchCollectionId"
+          :options="batchCollectionOptions"
+          placeholder="选择已有合集"
+          filterable
+          :disabled="batchCollectionBusy"
+          @update:value="batchCollectionTitle = ''"
+        />
+        <n-input
+          v-model:value="batchCollectionTitle"
+          placeholder="或输入新合集名称"
+          :disabled="batchCollectionBusy"
+          @update:value="batchCollectionId = null"
+          @keydown.enter.prevent="confirmBatchCollection"
+        />
+        <p class="tool-bar__collection-hint">
+          将把已选 {{ selectedCount }} 项加入合集；资源仍保留在主库。
+        </p>
+      </div>
+      <template #footer>
+        <div class="tool-bar__collection-actions">
+          <n-button size="small" :disabled="batchCollectionBusy" @click="batchCollectionOpen = false">
+            取消
+          </n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="batchCollectionBusy"
+            :disabled="batchCollectionBusy || (!batchCollectionId && !batchCollectionTitle.trim())"
+            @click="confirmBatchCollection"
+          >
+            确定
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+    <n-modal
+      v-model:show="batchCategoryOpen"
+      preset="card"
+      title="设置分类"
+      style="width: 400px"
+      :mask-closable="!batchCategoryBusy"
+    >
+      <div class="tool-bar__collection-form">
+        <n-select
+          v-model:value="batchCategoryIds"
+          multiple
+          filterable
+          clearable
+          placeholder="选择分类（可多选）"
+          :options="batchCategoryOptions"
+          :disabled="batchCategoryBusy"
+        />
+        <p class="tool-bar__collection-hint">追加不会清空已有分类；移除只移除勾选的分类。</p>
+      </div>
+      <template #footer>
+        <div class="tool-bar__collection-actions">
+          <n-button size="small" :disabled="batchCategoryBusy" @click="batchCategoryOpen = false">
+            取消
+          </n-button>
+          <n-button
+            size="small"
+            type="error"
+            ghost
+            :loading="batchCategoryBusy"
+            :disabled="batchCategoryBusy || batchCategoryIds.length === 0"
+            @click="confirmBatchCategories('remove')"
+          >
+            移除
+          </n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="batchCategoryBusy"
+            :disabled="batchCategoryBusy || batchCategoryIds.length === 0"
+            @click="confirmBatchCategories('add')"
+          >
+            追加
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </header>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDropdown, NInput, NPopconfirm, type DropdownOption } from 'naive-ui'
+import { NButton, NDropdown, NInput, NModal, NPopconfirm, NSelect, type DropdownOption } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import { notify } from '@/application/notify'
 import ImportWizard from '@/components/ImportWizard/index.vue'
@@ -105,14 +203,19 @@ import { useThemeStore } from '@/application/stores/theme'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
-import { getResource } from '@/infrastructure/http'
+import { useCategoryTreeStore } from '@/application/stores/categoryTree'
+import { getCategoryTree, getResource } from '@/infrastructure/http'
+import { flattenCategoryTree } from '@/domain'
+import { addCollectionItems, createCollection, listCollections } from '@/infrastructure/http/collections'
 import { createWorkDirectory } from '@/infrastructure/http/workbench'
+import type { CategoryNode, Collection, ResourceType } from '@/domain'
 
 const wizardRef = ref<{ open: () => void } | null>(null)
 const theme = useThemeStore()
 const shellBatch = useShellBatchStore()
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const categoryStore = useCategoryTreeStore()
 const browse = useBrowseQueryStore()
 const scrapeOpen = ref(false)
 const scrapeIds = ref<number[]>([])
@@ -166,6 +269,75 @@ async function commitBatchTag(): Promise<void> {
   tagNames.value = []
 }
 
+const batchCollectionOpen = ref(false)
+const batchCollectionBusy = ref(false)
+const batchCollections = ref<Collection[]>([])
+const batchCollectionId = ref<number | null>(null)
+const batchCollectionTitle = ref('')
+const batchCollectionOptions = computed(() =>
+  batchCollections.value.map((collection) => ({
+    label: `${collection.title}（${collection.memberCount}）`,
+    value: collection.id,
+  })),
+)
+
+async function openBatchCollections(): Promise<void> {
+  if (selectedCount.value === 0) return
+  batchCollectionOpen.value = true
+  batchCollectionId.value = null
+  batchCollectionTitle.value = ''
+  batchCollectionBusy.value = false
+  try {
+    batchCollections.value = await listCollections()
+  } catch (error) {
+    notify.fromError(error, { context: '读取合集' })
+  }
+}
+
+async function confirmBatchCollection(): Promise<void> {
+  const ids = [...selection.selectedIds]
+  if (ids.length === 0) return
+  const title = batchCollectionTitle.value.trim()
+  if (!title && batchCollectionId.value == null) return
+  batchCollectionBusy.value = true
+  try {
+    let targetId = batchCollectionId.value
+    let targetTitle =
+      batchCollections.value.find((collection) => collection.id === targetId)?.title ?? ''
+    if (title) {
+      const created = await createCollection({ title })
+      targetId = created.id ?? null
+      targetTitle = created.title
+    }
+    if (targetId == null) return
+
+    let added = 0
+    let skipped = 0
+    let missing = 0
+    for (let index = 0; index < ids.length; index += 200) {
+      const result = await addCollectionItems(targetId, ids.slice(index, index + 200))
+      added += result.added
+      skipped += result.skipped
+      missing += result.missing
+    }
+
+    shellBatch.exit()
+    library.bump(null)
+    const extras = [
+      skipped > 0 ? `跳过重复 ${skipped} 项` : '',
+      missing > 0 ? `跳过缺失 ${missing} 项` : '',
+    ].filter(Boolean)
+    const summary = `已加入 ${added} 项到「${targetTitle || '合集'}」${extras.length ? `（${extras.join('，')}）` : ''}`
+    shellBatch.message = summary
+    notify.toast.success(summary)
+    batchCollectionOpen.value = false
+  } catch (error) {
+    notify.fromError(error, { context: '加入合集' })
+  } finally {
+    batchCollectionBusy.value = false
+  }
+}
+
 watch(
   () => batchMode.value,
   (value) => {
@@ -175,6 +347,46 @@ watch(
     }
   }
 )
+
+const batchCategoryOpen = ref(false)
+const batchCategoryBusy = ref(false)
+const batchCategoryIds = ref<number[]>([])
+const batchCategoryTree = ref<CategoryNode[]>([])
+const batchCategoryType = computed(() => (route.params.type as ResourceType) || 'image')
+const batchCategoryOptions = computed(() =>
+  flattenCategoryTree(batchCategoryTree.value).map((node) => ({
+    label: node.name,
+    value: node.id,
+  })),
+)
+
+async function openBatchCategories(): Promise<void> {
+  if (selectedCount.value === 0) return
+  batchCategoryOpen.value = true
+  batchCategoryIds.value = []
+  batchCategoryBusy.value = false
+  try {
+    batchCategoryTree.value = await categoryStore.load(batchCategoryType.value)
+  } catch (error) {
+    notify.fromError(error, { context: '读取分类' })
+  }
+}
+
+async function confirmBatchCategories(mode: 'add' | 'remove'): Promise<void> {
+  if (batchCategoryIds.value.length === 0) return
+  batchCategoryBusy.value = true
+  try {
+    await shellBatch.runBatch(
+      mode === 'add' ? 'add_categories' : 'remove_categories',
+      undefined,
+      [...batchCategoryIds.value],
+    )
+    await categoryStore.load(batchCategoryType.value, true)
+    batchCategoryOpen.value = false
+  } finally {
+    batchCategoryBusy.value = false
+  }
+}
 
 async function startScrape(): Promise<void> {
   const ids = [...selection.selectedIds]
@@ -305,6 +517,12 @@ async function onThemeSelect(key: string): Promise<void> {
   width: 160px;
 }
 
+.tool-bar__batch-hint {
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .tool-bar__tag-chips {
   max-width: 220px;
   overflow: hidden;
@@ -312,5 +530,23 @@ async function onThemeSelect(key: string): Promise<void> {
   white-space: nowrap;
   font-size: 12px;
   opacity: 0.8;
+}
+
+.tool-bar__collection-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tool-bar__collection-hint {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.tool-bar__collection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

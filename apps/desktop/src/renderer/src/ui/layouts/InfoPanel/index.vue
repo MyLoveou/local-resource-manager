@@ -184,8 +184,8 @@
         <div class="info-panel-label">评分</div>
         <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
         <div class="info-panel-label">分类</div>
-        <n-select filterable tag clearable :options="categoryOptions" :value="draft.categoryName"
-          @update:value="draft.categoryName = $event" />
+        <n-select multiple filterable clearable :options="categoryOptions" :value="draft.categoryIds"
+          @update:value="(value: number[]) => (draft.categoryIds = value ?? [])" />
         <div class="info-panel-label">标签（Enter 切词）</div>
         <div class="info-panel-tags">
           <n-tag v-for="name in draft.tagNames" :key="name" closable @close="removeTag(name)">
@@ -337,7 +337,7 @@ import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSel
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
-import { getResource, getCategories, invalidateCategories, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResource, getCategoryTree, invalidateCategoryTree, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import {
   addCollectionItem,
@@ -348,6 +348,7 @@ import {
 } from '@/infrastructure/http/collections'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
+import { useCategoryTreeStore } from '@/application/stores/categoryTree'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
@@ -361,7 +362,7 @@ import {
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { notify } from '@/application/notify'
 import { storeToRefs } from 'pinia'
-import type { Category, Collection, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
+import type { CategoryNode, Collection, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
   FILE_ROLE,
@@ -382,6 +383,7 @@ import {
 
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const categoryStore = useCategoryTreeStore()
 const imageViewer = useImageViewerStore()
 const videoPlayer = useVideoPlayerStore()
 const shellBusy = ref(false)
@@ -390,7 +392,7 @@ const { deleteResource, restoreResource, purgeResource, patchResource, replaceCo
   useResourceHandle()
 
 const resource = ref<Resource | null>(null)
-const categories = ref<Category[]>([])
+const categories = ref<CategoryNode[]>([])
 const deleting = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
@@ -409,7 +411,7 @@ const draft = reactive<MetadataDraft>({
   synopsis: '',
   author: '',
   ratingStars: 0,
-  categoryName: null,
+  categoryIds: [],
   tagNames: [],
   tagInput: '',
   pendingCoverPath: null,
@@ -422,7 +424,7 @@ function applyResourceToDraft(row: Resource): void {
   draft.synopsis = row.synopsis ?? ''
   draft.author = row.author ?? ''
   draft.ratingStars = (row.rating ?? 0) / 2
-  draft.categoryName = row.category?.name ?? null
+  draft.categoryIds = (row.categories ?? []).map((category) => category.id).filter((id): id is number => id != null)
   draft.tagNames = (row.tags ?? []).map((t) => t.name)
   draft.tagInput = ''
   draft.pendingCoverPath = null
@@ -435,12 +437,14 @@ function snapshotEqualsSaved(): boolean {
   if (!row) return true
   const savedTags = (row.tags ?? []).map((t) => t.name).join('\0')
   const draftTags = [...draft.tagNames].join('\0')
+  const savedCategories = (row.categories ?? []).map((category) => category.id ?? 0).sort().join(',')
+  const draftCategories = [...draft.categoryIds].sort().join(',')
   return (
     draft.ratingStars === (row.rating ?? 0) / 2 &&
     (draft.description ?? '') === (row.description ?? '') &&
     (draft.synopsis ?? '') === (row.synopsis ?? '') &&
     (draft.author ?? '') === (row.author ?? '') &&
-    (draft.categoryName ?? '') === (row.category?.name ?? '') &&
+    savedCategories === draftCategories &&
     savedTags === draftTags &&
     draft.tagInput.trim() === '' &&
     draft.takenAtLocal === takenAtToLocalInput(primaryTakenAt(row))
@@ -651,10 +655,25 @@ const catalogInfobox = computed(() => {
 const modalCoverUrl = computed(() => coverUrl.value)
 
 const categoryOptions = computed(() => {
-  const names = new Set(categories.value.map((c) => c.name))
-  if (draft.categoryName) names.add(draft.categoryName)
-  return [...names].sort().map((name) => ({ label: name, value: name }))
+  const out: { label: string; value: number }[] = []
+  const walk = (nodes: CategoryNode[], prefix = ''): void => {
+    for (const node of nodes) {
+      const path = prefix ? `${prefix} / ${node.name}` : node.name
+      out.push({ label: path, value: node.id })
+      if (node.children?.length) walk(node.children, path)
+    }
+  }
+  walk(categories.value)
+  return out
 })
+
+watch(
+  () => (resource.value ? categoryStore.trees[resource.value.type] : undefined),
+  (tree) => {
+    if (tree) categories.value = tree
+  },
+  { deep: true },
+)
 
 watch(
   selectedId,
@@ -677,7 +696,7 @@ watch(
       if (gen !== loadGen) return
       resource.value = row
       applyResourceToDraft(row)
-      void getCategories().then((cats) => {
+      void getCategoryTree(row.type).then((cats) => {
         if (gen !== loadGen) return
         categories.value = cats
       })
@@ -754,12 +773,13 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
       synopsis: draft.synopsis || null,
       author: draft.author || null,
       rating: draft.ratingStars * 2,
-      categoryName: draft.categoryName,
+      categoryIds: [...draft.categoryIds],
       tagNames: [...draft.tagNames],
       ...(row.type === 'image' ? { exifTakenAt: localInputToTakenAt(draft.takenAtLocal) } : {}),
     })
     resource.value = patched
-    invalidateCategories()
+    invalidateCategoryTree(row.type)
+    void categoryStore.load(row.type, true)
     const pending = draft.pendingCoverPath
     applyResourceToDraft(patched)
     draft.pendingCoverPath = pending

@@ -1,6 +1,62 @@
 <template>
   <div class="home">
     <div v-if="hasOverviewData">
+      <section v-if="recent.length" class="home__section">
+        <div class="home__section-head">
+          <h2>最近添加</h2>
+          <button type="button" class="home__more" @click="openLibrary">查看全部</button>
+        </div>
+        <div class="home__recent">
+          <button
+            v-for="item in recent"
+            :key="item.id"
+            type="button"
+            class="home__recent-item"
+            :title="item.title"
+            @click="openRecent(item)"
+          >
+            <img
+              v-if="item.thumbnailPath"
+              :src="resolveCardImageUrl(item)"
+              alt=""
+              loading="lazy"
+            />
+            <span v-else class="home__recent-placeholder">{{ item.title }}</span>
+          </button>
+        </div>
+      </section>
+      <section v-if="collections.length" class="home__section">
+        <div class="home__section-head">
+          <h2>我的合集</h2>
+          <button type="button" class="home__more" @click="router.push('/collections')">查看全部</button>
+        </div>
+        <div class="home__collections">
+          <CollectionCard
+            v-for="item in collections"
+            :key="item.id"
+            :title="item.title"
+            :member-count="item.memberCount"
+            :previews="item.previewThumbnails ?? []"
+            @open="router.push(`/collections/${item.id}`)"
+          />
+        </div>
+      </section>
+      <section v-if="savedTimelines.length" class="home__section">
+        <div class="home__section-head">
+          <h2>时间线</h2>
+        </div>
+        <div class="home__timelines">
+          <button
+            v-for="item in savedTimelines"
+            :key="item.id"
+            type="button"
+            class="home__timeline"
+            @click="openTimeline(item)"
+          >
+            {{ item.name }}
+          </button>
+        </div>
+      </section>
       <div class="overview-container">
         <div class="overview-content">
           <h2>概览</h2>
@@ -43,15 +99,17 @@
 <script setup lang="ts">
 import { onMounted, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getOverview } from '@/infrastructure/http'
+import { getHome, resolveCardImageUrl } from '@/infrastructure/http'
+import { consumeResource } from '@/infrastructure/consume/consumeResource'
 import { NCard } from 'naive-ui'
-import type { ConsumptionItem, Overview, Resource, ResourceType } from '@/domain'
+import type { ConsumptionItem, HomeSummary, Resource, ResourceType, SavedView } from '@/domain'
 import { profileFor } from '@/domain'
 import { typeMap } from '@/utils/typeMap'
 import { useLibraryStore } from '@/application/stores/library'
 import { notify } from '@/application/notify'
 import { isSectionHidden } from '@/domain/visibility'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
+import CollectionCard from '@/components/CollectionCard/index.vue'
 
 const ACTION_LABEL: Record<string, string> = {
   embedded: '内嵌打开',
@@ -62,10 +120,13 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 /** 首页概览数据（统计 + 最近添加 + 任务 + 工作） */
-const overviewData = ref<Overview | null>(null)
+const overviewData = ref<HomeSummary | null>(null)
 const router = useRouter()
 const activeWork = computed(() => overviewData.value?.activeWork ?? [])
 const recentConsumption = computed(() => overviewData.value?.recentConsumption ?? [])
+const recent = computed(() => overviewData.value?.recent ?? [])
+const collections = computed(() => overviewData.value?.collections ?? [])
+const savedTimelines = computed(() => overviewData.value?.savedTimelines ?? [])
 const visibleStats = computed(() =>
   Object.entries(overviewData.value?.stats.byType ?? {})
     .filter(([type]) => {
@@ -78,6 +139,9 @@ const hasOverviewData = computed(() => {
   const data = overviewData.value
   if (!data) return false
   return (
+    recent.value.length > 0 ||
+    collections.value.length > 0 ||
+    savedTimelines.value.length > 0 ||
     visibleStats.value.some((item) => item.count > 0) ||
     activeWork.value.length > 0 ||
     recentConsumption.value.length > 0
@@ -94,12 +158,25 @@ function openWork(item: Resource): void {
 }
 
 function openConsumed(item: ConsumptionItem): void {
-  const path = profileFor(item.type as ResourceType)?.routePath ?? '/'
+  const path = item.type === 'work_directory' ? '/work' : `/library/${item.type}`
   void router.push({ path, query: { select: String(item.resourceId) } })
+}
+
+function openRecent(item: Resource): void {
+  if (item.id == null) return
+  void consumeResource(item, [item.id])
+}
+
+function openLibrary(): void {
+  void router.push('/library/image')
+}
+
+function openTimeline(item: SavedView): void {
+  void router.push(`/timelines/${item.id}`)
 }
 const initOverviewData = async () => {
   try {
-    overviewData.value = await getOverview()
+    overviewData.value = await getHome()
   } catch (err) {
     notify.fromError(err, { context: '获取首页概览' })
   }
@@ -122,6 +199,87 @@ watch(
 .home {
   height: 100%;
   overflow: auto;
+
+  .home__section {
+    padding: 12px 20px 0;
+  }
+
+  .home__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+
+    h2 {
+      font-size: 15px;
+      margin: 0;
+    }
+  }
+
+  .home__more {
+    border: 0;
+    background: transparent;
+    color: var(--sm-color-text-muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .home__recent {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 120px;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .home__recent-item {
+    border: 0;
+    padding: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    background: var(--sm-color-bg-muted, #f1f1f1);
+    cursor: pointer;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .home__recent-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 6px;
+    font-size: 11px;
+    color: var(--sm-color-text-muted);
+  }
+
+  .home__collections {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .home__timelines {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .home__timeline {
+    border: 1px solid var(--sm-color-border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--sm-color-text);
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
 
   .overview-container {
     .overview-content {

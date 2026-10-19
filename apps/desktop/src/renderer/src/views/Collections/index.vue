@@ -35,19 +35,14 @@
       还没有合集。输入名称新建一个，把已有资源收成一组。
     </div>
     <div class="collections__grid">
-      <div
+      <CollectionCard
         v-for="collection in collections"
         :key="collection.id"
-        class="collections__card"
-        @click="open(collection.id)"
-      >
-        <div class="collections__card-title">
-          {{ collection.title }}
-        </div>
-        <div class="collections__card-meta">
-          {{ collection.memberCount }} 个成员
-        </div>
-      </div>
+        :title="collection.title"
+        :member-count="collection.memberCount"
+        :previews="collection.previewThumbnails ?? []"
+        @open="open(collection.id)"
+      />
     </div>
   </div>
 </template>
@@ -58,6 +53,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NInput } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { createCollection, listCollections } from '@/infrastructure/http/collections'
+import CollectionCard from '@/components/CollectionCard/index.vue'
 import type { Collection } from '@/domain'
 import { useViewOptionsStore } from '@/application/stores/viewOptions'
 
@@ -141,27 +137,7 @@ onMounted(() => {
 
 .collections__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--sm-space-2);
-}
-
-.collections__card {
-  border: 1px solid var(--sm-color-border);
-  border-radius: var(--sm-radius-control);
-  background: var(--sm-color-bg-surface);
-  padding: var(--sm-space-2);
-  cursor: pointer;
-}
-
-.collections__card-title {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.collections__card-meta {
-  font-size: 12px;
-  color: var(--sm-color-text-muted);
-  margin-top: 4px;
 }
 </style>

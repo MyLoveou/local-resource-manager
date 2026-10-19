@@ -1,25 +1,36 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import 'pinia-plugin-persistedstate'
-import { allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
+import {
+  allowedSortKeys,
+  type ResourceStatus,
+  type ResourceType,
+  type ViewMode,
+} from '@/domain'
 
 export type BrowseSession = {
   q: string
   sort: string
   order: 'asc' | 'desc'
   tagIds: number[]
-  categoryId: number | null
+  categoryIds: number[]
+  uncategorized: boolean
+  view: ViewMode
+  savedViewId: number | null
   /** 主库默认隐藏合集成员；true 时显示 */
   includeCollected: boolean
 }
 
-function defaultSession(): BrowseSession {
+export function defaultSession(): BrowseSession {
   return {
     q: '',
     sort: 'createdAt',
     order: 'desc',
     tagIds: [],
-    categoryId: null,
+    categoryIds: [],
+    uncategorized: false,
+    view: 'grid',
+    savedViewId: null,
     includeCollected: false,
   }
 }
@@ -41,6 +52,11 @@ export const useBrowseQueryStore = defineStore(
         sessions.value[key] = defaultSession()
       }
       const current = sessions.value[key]
+      // 兼容旧持久化数据
+      if (!Array.isArray(current.categoryIds)) current.categoryIds = []
+      if (current.uncategorized === undefined) current.uncategorized = false
+      if (!current.view) current.view = 'grid'
+      if (current.savedViewId === undefined) current.savedViewId = null
       const allowed = allowedSortKeys(status === 'trashed' ? undefined : type)
       if (!allowed.includes(current.sort)) {
         current.sort = 'createdAt'
@@ -48,13 +64,30 @@ export const useBrowseQueryStore = defineStore(
       return current
     }
 
-    function patch(type: ResourceType | undefined, status: ResourceStatus | undefined, partial: Partial<BrowseSession>): void {
+    function patch(
+      type: ResourceType | undefined,
+      status: ResourceStatus | undefined,
+      partial: Partial<BrowseSession>,
+    ): void {
       const key = browseScopeKey(type, status)
       const current = ensure(type, status)
       sessions.value[key] = { ...current, ...partial }
     }
 
-    return { sessions, ensure, patch }
+    function reset(
+      type: ResourceType | undefined,
+      status: ResourceStatus | undefined,
+      keepView = true,
+    ): void {
+      const key = browseScopeKey(type, status)
+      const previousView = sessions.value[key]?.view ?? 'grid'
+      sessions.value[key] = {
+        ...defaultSession(),
+        view: keepView ? previousView : 'grid',
+      }
+    }
+
+    return { sessions, ensure, patch, reset }
   },
   { persist: { pick: ['sessions'] } }
 )

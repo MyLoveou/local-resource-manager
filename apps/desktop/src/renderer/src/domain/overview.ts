@@ -4,6 +4,8 @@
  */
 import type { Resource } from './resource'
 import type { ResourceType } from './resource'
+import type { CollectionCardData } from './collection'
+import type { SavedView } from './savedView'
 /** 资源统计 */
 export interface ResourceStats {
   byType: Record<ResourceType, number>
@@ -36,4 +38,9 @@ export interface Overview {
   tasks: TaskSummary
   activeWork?: Resource[]
   recentConsumption?: ConsumptionItem[]
+}
+
+export interface HomeSummary extends Overview {
+  collections: CollectionCardData[]
+  savedTimelines: SavedView[]
 }

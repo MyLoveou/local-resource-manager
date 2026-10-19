@@ -58,7 +58,7 @@ export interface Resource {
   files?: ResourceFile[]
   todos?: ResourceTodo[]
   /** 独立分类词条，不是资源 type */
-  category?: Category | null
+  categories?: Category[]
   /** 仅 anime/av 详情：季集树 */
   seasons?: SeriesSeason[]
   extras?: SeriesExtra[]
@@ -144,6 +144,10 @@ export interface ResourceTodo {
 export interface Category {
   id?: number
   name: string
+  type?: ResourceType
+  parentId?: number | null
+  sort?: number
+  isSystem?: boolean
 }
 
 /** 标签 */
@@ -159,7 +163,7 @@ export interface MetadataDraft {
   synopsis: string
   author: string
   ratingStars: number
-  categoryName: string | null
+  categoryIds: number[]
   tagNames: string[]
   tagInput: string
   pendingCoverPath: string | null
@@ -192,6 +196,10 @@ export interface ResourcePageQuery {
   q?: string
   tagIds?: number[]
   categoryId?: number | null
+  categoryIds?: number[]
+  uncategorized?: boolean
+  dateFrom?: string
+  dateTo?: string
   takenDate?: string
   untimed?: boolean
   timelineVisible?: boolean

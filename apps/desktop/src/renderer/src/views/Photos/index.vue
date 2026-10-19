@@ -36,15 +36,15 @@ const mode = ref<'timeline' | 'grid'>('timeline')
 function openDay(payload: {
   date: string | null
   includeAll: boolean
-  categoryId: number | null
+  categoryIds: number[]
   tagIds: number[]
 }): void {
   const query: Record<string, string> = {}
   if (payload.includeAll) query.includeAll = '1'
-  if (payload.categoryId !== null) query.categoryId = String(payload.categoryId)
+  if (payload.categoryIds.length > 0) query.categoryIds = payload.categoryIds.join(',')
   if (payload.tagIds.length > 0) query.tagIds = payload.tagIds.join(',')
   void router.push({
-    path: `/photos/day/${payload.date ?? 'unknown'}`,
+    path: `/library/image/day/${payload.date ?? 'unknown'}`,
     query,
   })
 }

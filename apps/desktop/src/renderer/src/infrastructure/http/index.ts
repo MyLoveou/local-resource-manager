@@ -4,6 +4,21 @@
  */
 export { default as client } from './client'
 export { getOverview } from './overview'
+export { getHome } from './home'
+export {
+  getCategoryTree,
+  invalidateCategoryTree,
+  createCategory,
+  patchCategory,
+  deleteCategory,
+} from './categories'
+export {
+  listSavedViews,
+  getSavedView,
+  createSavedView,
+  patchSavedView,
+  deleteSavedView,
+} from './savedViews'
 export {
   getResources,
   getResource,
@@ -21,7 +36,7 @@ export {
 } from './resources'
 export { createImport, getImportJob } from './imports'
 export { getPhotoTimeline, backfillPhotos } from './photos'
-export { getCategories, invalidateCategories, getTags, invalidateTags } from './vocab'
+export { getTags, invalidateTags } from './vocab'
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
 export type { ImportCreate, ImportJob, ImportJobCreated, ImportSourceKind } from './imports'

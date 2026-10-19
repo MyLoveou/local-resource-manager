@@ -54,8 +54,9 @@ export function useResourceHandle() {
     action: ResourceBatchAction,
     ids: number[],
     tagNames?: string[],
+    categoryIds?: number[],
   ): Promise<ResourceBatchResult> => {
-    return batchResourcesApi(action, ids, tagNames)
+    return batchResourcesApi(action, ids, tagNames, categoryIds)
   }
 
   return {

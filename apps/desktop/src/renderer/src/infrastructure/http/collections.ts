@@ -43,6 +43,17 @@ export async function addCollectionItem(id: number, resourceId: number): Promise
   await client.post(`/library/collections/${id}/items`, { resourceId })
 }
 
+export async function addCollectionItems(
+  id: number,
+  resourceIds: number[],
+): Promise<{ added: number; skipped: number; missing: number }> {
+  const { data } = await client.post<{ added: number; skipped: number; missing: number }>(
+    `/library/collections/${id}/items/batch`,
+    { resourceIds },
+  )
+  return data
+}
+
 export async function removeCollectionItem(id: number, resourceId: number): Promise<void> {
   await client.delete(`/library/collections/${id}/items/${resourceId}`)
 }

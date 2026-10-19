@@ -41,8 +41,12 @@
       class="resource-browser__grid"
       :tiles="justifiedTiles"
       :selected-ids="gridSelectedIds"
+      :has-more="hasMore"
+      :loading-more="loadingMore"
+      :total="total"
       interactive="grid"
       @near-end="loadMore"
+      @load-more="loadMore"
       @card-click="handleCardClick"
     />
     <VirtualGrid
@@ -70,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
 import JustifiedMediaGrid from '@/components/JustifiedMediaGrid/index.vue'
@@ -90,6 +94,9 @@ import { isCollectionCard, type PhotoTile, type ResourceStatus, type ResourceTyp
 import type { ResourceBatchAction } from '@/infrastructure/http'
 import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
+import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
+import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
+import { useModelPreviewStore } from '@/application/stores/modelPreview'
 import { consumeKindOf, TYPE_PROFILES } from '@/domain'
 const BATCH_LIMIT = 200
 
@@ -104,7 +111,8 @@ const props = defineProps<{
   timelineVisible?: boolean
   timelineMedia?: boolean
   includeCollectedOverride?: boolean
-  categoryIdOverride?: number | null
+  categoryIdsOverride?: number[]
+  uncategorizedOverride?: boolean
   tagIdsOverride?: number[]
 }>()
 
@@ -130,8 +138,8 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   sort: () => session.value.sort,
   order: () => session.value.order,
   tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
-  categoryId: () =>
-    props.categoryIdOverride !== undefined ? props.categoryIdOverride : session.value.categoryId,
+  categoryIds: () => props.categoryIdsOverride ?? session.value.categoryIds,
+  uncategorized: () => props.uncategorizedOverride ?? session.value.uncategorized,
   includeCollected: () =>
     props.includeCollectedOverride === true ? true : viewOptions.includeCollected,
   takenDate: () => props.takenDate,
@@ -141,6 +149,9 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
 })
 const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
+const videoPlayer = useVideoPlayerStore()
+const audioPlayer = useAudioPlayerStore()
+const modelPreview = useModelPreviewStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -180,7 +191,13 @@ const gridSelectedIds = computed(() => {
   return selectedId.value === null ? [] : [selectedId.value]
 })
 
-function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
+const selectableOrderedIds = computed(() =>
+  items.value.flatMap((item) =>
+    item.id !== undefined && !isCollectionCard(item) ? [item.id] : []
+  )
+)
+
+function handleCardClick(event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
   const item = items.value.find((row) => row.id === itemId)
   // 合集卡：点击进入成员页
@@ -189,7 +206,11 @@ function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
     return
   }
   if (batchMode.value) {
-    selection.toggle(itemId)
+    if (event.shiftKey) {
+      selection.selectRange(selectableOrderedIds.value, itemId)
+    } else {
+      selection.toggle(itemId)
+    }
     return
   }
   if (selection.selectedId === itemId) {
@@ -216,14 +237,14 @@ function ids(type: ResourceType): number[] {
   )
 }
 
-async function runBatch(action: ResourceBatchAction, tagNames?: string[]): Promise<void> {
+async function runBatch(action: ResourceBatchAction, tagNames?: string[], categoryIds?: number[]): Promise<void> {
   const ids = [...selectedIds.value]
   if (ids.length === 0) return
   const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
   try {
-    const result = await batchResources(action, ids, tagNames)
+    const result = await batchResources(action, ids, tagNames, categoryIds)
     library.bump(null)
     if (!shellBatch.isLive(live)) return
     if (action === 'add_tags') {
@@ -348,7 +369,26 @@ watch(
   }
 )
 
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !batchMode.value) return
+  if (
+    imageViewer.visible ||
+    videoPlayer.visible ||
+    audioPlayer.visible ||
+    modelPreview.visible ||
+    document.querySelector('.n-modal, .n-drawer')
+  ) {
+    return
+  }
+  shellBatch.exit()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
+})
+
 onUnmounted(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
   unbindPagers()
   if (imageViewer.visible) imageViewer.close()
   shellBatch.unbind()

@@ -44,7 +44,7 @@ export interface ResourcePatch {
   synopsis?: string | null
   author?: string | null
   rating?: number | null
-  categoryName?: string | null
+  categoryIds?: number[]
   tagNames?: string[]
   exifTakenAt?: string | null
   timelineVisible?: boolean | null
@@ -64,8 +64,12 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       q: query.q,
       tagIds: query.tagIds,
       categoryId: query.categoryId,
+      categoryIds: query.categoryIds,
+      uncategorized: query.uncategorized,
       includeCollected: query.includeCollected,
       takenDate: query.takenDate,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
       untimed: query.untimed,
       timelineVisible: query.timelineVisible,
       timelineMedia: query.timelineMedia,
@@ -141,7 +145,13 @@ export async function purgeResource(resourceId: number): Promise<{ ok: boolean }
   return data
 }
 
-export type ResourceBatchAction = 'trash' | 'restore' | 'purge' | 'add_tags'
+export type ResourceBatchAction =
+  | 'trash'
+  | 'restore'
+  | 'purge'
+  | 'add_tags'
+  | 'add_categories'
+  | 'remove_categories'
 
 export interface ResourceBatchFailedItem {
   id: number
@@ -157,11 +167,13 @@ export async function batchResources(
   action: ResourceBatchAction,
   ids: number[],
   tagNames?: string[],
+  categoryIds?: number[],
 ): Promise<ResourceBatchResult> {
   const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', {
     action,
     ids,
     ...(tagNames ? { tagNames } : {}),
+    ...(categoryIds ? { categoryIds } : {}),
   })
   for (const id of ids) invalidateResourceCache(id)
   return data

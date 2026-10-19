@@ -1,6 +1,6 @@
 <template>
   <div class="photo-timeline">
-    <div class="photo-timeline__filters">
+    <div v-if="!hideFilters" class="photo-timeline__filters">
       <n-select
         size="small"
         clearable
@@ -21,16 +21,6 @@
       />
       <n-select
         size="small"
-        clearable
-        filterable
-        placeholder="分类"
-        :options="categoryOptions"
-        :value="categoryId"
-        class="photo-timeline__category"
-        @update:value="(value: number | null) => (categoryId = value ?? null)"
-      />
-      <n-select
-        size="small"
         multiple
         clearable
         filterable
@@ -47,9 +37,29 @@
       >
         显示全部照片
       </n-checkbox>
-      <n-button size="small" :loading="backfilling" @click="runBackfill">
+      <n-checkbox
+        size="small"
+        :checked="includeUntimed"
+        @update:checked="(checked: boolean) => (includeUntimed = checked)"
+      >
+        包含未知时间
+      </n-checkbox>
+      <n-button v-if="!embedded" size="small" :loading="backfilling" @click="runBackfill">
         回填拍摄时间
       </n-button>
+    </div>
+
+    <div v-if="timeline && months.length" class="photo-timeline__density">
+      <button
+        v-for="group in months"
+        :key="group.key"
+        type="button"
+        class="photo-timeline__density-item"
+        :style="{ flexGrow: Math.max(1, group.days.reduce((sum, day) => sum + day.count, 0)) }"
+        @click="scrollToMonth(group.key)"
+      >
+        <span>{{ group.label }}</span>
+      </button>
     </div>
 
     <div ref="scrollRef" class="photo-timeline__scroll">
@@ -64,6 +74,7 @@
         <section
           v-for="group in months"
           :key="group.key"
+          :id="`timeline-month-${group.key}`"
           class="photo-timeline__month-section"
         >
           <h3 class="photo-timeline__month">{{ group.label }}</h3>
@@ -74,7 +85,7 @@
           >
             <div class="photo-timeline__day-head">
               <span class="photo-timeline__day-label">{{ dayLabel(day.date) }} · {{ day.count }} 张</span>
-              <n-button text size="tiny" @click="openDay(day.date)">查看当天</n-button>
+              <n-button v-if="!hideFilters" text size="tiny" @click="openDay(day.date)">查看当天</n-button>
             </div>
             <div class="photo-timeline__row-wrap">
               <PhotoRow
@@ -93,7 +104,7 @@
           <div class="photo-timeline__day-section">
             <div class="photo-timeline__day-head">
               <span class="photo-timeline__day-label">{{ timeline.unknownCount }} 张</span>
-              <n-button text size="tiny" @click="openDay(null)">查看全部</n-button>
+              <n-button v-if="!hideFilters" text size="tiny" @click="openDay(null)">查看全部</n-button>
             </div>
             <div class="photo-timeline__row-wrap">
               <PhotoRow
@@ -128,14 +139,44 @@ import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
   backfillPhotos,
-  getCategories,
   getPhotoTimeline,
   getTags,
 } from '@/infrastructure/http'
-import type { PhotoTimeline, PhotoTimelineDay, PhotoTile } from '@/domain'
+import type {
+  CategoryRule,
+  PhotoTimeline as PhotoTimelineData,
+  PhotoTimelineDay,
+  PhotoTile,
+  ResourceType,
+  SavedViewFilters,
+  TimelineScope,
+} from '@/domain'
+
+const props = withDefaults(defineProps<{
+  type?: ResourceType
+  categoryIds?: number[]
+  tagIds?: number[]
+  scope?: TimelineScope
+  rules?: SavedViewFilters
+  hideFilters?: boolean
+  embedded?: boolean
+}>(), {
+  type: 'image',
+  categoryIds: () => [],
+  tagIds: () => [],
+  scope: undefined,
+  rules: () => ({
+    image: { include: [], exclude: [] },
+    video: { include: [], exclude: [] },
+    tagIds: [],
+    includeUntimed: false,
+  }),
+  hideFilters: false,
+  embedded: false,
+})
 
 const emit = defineEmits<{
-  openDay: [payload: { date: string | null; includeAll: boolean; categoryId: number | null; tagIds: number[] }]
+  openDay: [payload: { date: string | null; includeAll: boolean; categoryIds: number[]; tagIds: number[] }]
 }>()
 
 const route = useRoute()
@@ -143,16 +184,15 @@ const selection = useSelectionStore()
 const library = useLibraryStore()
 const imageViewer = useImageViewerStore()
 const videoPlayer = useVideoPlayerStore()
-const timeline = ref<PhotoTimeline | null>(null)
+const timeline = ref<PhotoTimelineData | null>(null)
 const loading = ref(false)
 const backfilling = ref(false)
 const includeAll = ref(false)
+const includeUntimed = ref(false)
 const year = ref<number | null>(null)
 const month = ref<number | null>(null)
-const categoryId = ref<number | null>(null)
-const tagIds = ref<number[]>([])
+const tagIds = ref<number[]>([...props.tagIds])
 
-const categoryOptions = ref<{ label: string; value: number }[]>([])
 const tagOptions = ref<{ label: string; value: number }[]>([])
 const scrollRef = ref<HTMLElement | null>(null)
 const { width: scrollWidth } = useElementSize(scrollRef)
@@ -239,6 +279,11 @@ const videoPlayerIds = computed(() =>
   allTiles().filter((photo) => photo.kind === 'video').map((photo) => photo.id)
 )
 
+function scrollToMonth(key: string): void {
+  const el = document.getElementById(`timeline-month-${key}`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function dayLabel(date: string): string {
   const [yearText, monthText, dayText] = date.split('-').map(Number)
   if (!yearText || !monthText || !dayText) return date
@@ -264,9 +309,9 @@ function openPhoto(id: number): void {
 function readQuery(): void {
   const query = route.query
   includeAll.value = query.includeAll === '1'
+  includeUntimed.value = query.includeUntimed === '1'
   year.value = query.year ? Number(query.year) : null
   month.value = query.month ? Number(query.month) : null
-  categoryId.value = query.categoryId ? Number(query.categoryId) : null
   tagIds.value = query.tagIds
     ? String(query.tagIds).split(',').flatMap((value) => {
         const id = Number(value)
@@ -278,15 +323,27 @@ function readQuery(): void {
 async function load(): Promise<void> {
   loading.value = true
   try {
+    const scope = (props.scope ?? props.type) as TimelineScope
+    const imageRule: CategoryRule = props.scope
+      ? props.rules.image
+      : { include: props.categoryIds, exclude: [] }
+    const videoRule: CategoryRule = props.scope ? props.rules.video : { include: [], exclude: [] }
     timeline.value = await getPhotoTimeline({
+      scope,
       includeAll: includeAll.value,
       year: year.value ?? undefined,
       month: month.value ?? undefined,
-      categoryId: categoryId.value,
-      tagIds: tagIds.value.length > 0 ? tagIds.value : undefined,
+      imageRule,
+      videoRule,
+      tagIds: props.hideFilters
+        ? props.rules.tagIds.length ? props.rules.tagIds : undefined
+        : tagIds.value.length ? tagIds.value : undefined,
+      dateFrom: props.hideFilters ? props.rules.dateFrom : null,
+      dateTo: props.hideFilters ? props.rules.dateTo : null,
+      includeUntimed: props.hideFilters ? props.rules.includeUntimed : includeUntimed.value,
     })
   } catch (error) {
-    notify.fromError(error, { context: '读取照片时间线' })
+    notify.fromError(error, { context: '获取照片时间线' })
   } finally {
     loading.value = false
   }
@@ -311,14 +368,47 @@ function openDay(date: string | null): void {
   emit('openDay', {
     date,
     includeAll: includeAll.value,
-    categoryId: categoryId.value,
+    categoryIds: props.categoryIds,
     tagIds: tagIds.value,
   })
 }
 
-watch([includeAll, year, month, categoryId, tagIds], () => {
-  void load()
-})
+watch(
+  [
+    includeAll,
+    includeUntimed,
+    year,
+    month,
+    tagIds,
+    () => props.type,
+    () => props.categoryIds,
+    () => props.scope,
+    () => props.rules,
+    () => props.hideFilters,
+  ],
+  () => {
+    void load()
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.tagIds,
+  (value) => {
+    tagIds.value = [...value]
+  },
+)
+
+watch(
+  () => props.type,
+  () => {
+    void getTags(props.type).then((tags) => {
+      tagOptions.value = tags.flatMap((tag) =>
+        tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+      )
+    })
+  },
+)
 
 watch(
   () => library.revision,
@@ -333,12 +423,7 @@ watch(
 onMounted(() => {
   readQuery()
   void load()
-  void getCategories().then((categories) => {
-    categoryOptions.value = categories.flatMap((category) =>
-      category.id === undefined ? [] : [{ label: category.name, value: category.id }]
-    )
-  })
-  void getTags().then((tags) => {
+  void getTags(props.type).then((tags) => {
     tagOptions.value = tags.flatMap((tag) =>
       tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
     )
@@ -361,6 +446,31 @@ onMounted(() => {
   gap: var(--sm-space-2);
   padding: var(--sm-space-2);
   flex-shrink: 0;
+}
+
+.photo-timeline__density {
+  display: flex;
+  gap: 3px;
+  height: 24px;
+  padding: 0 var(--sm-space-2) 4px;
+  flex-shrink: 0;
+}
+
+.photo-timeline__density-item {
+  min-width: 18px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--sm-color-bg-muted, #e5e7eb);
+  color: var(--sm-color-text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--sm-color-border);
+    color: var(--sm-color-text);
+  }
 }
 
 .photo-timeline__year,

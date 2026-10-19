@@ -5,14 +5,15 @@
       <h2 class="photo-day__title">{{ title }}</h2>
     </div>
     <ResourceBrowser
+      :type="type"
       :empty-hint="emptyHint"
-      timeline-media
       hide-controls
       :taken-date="takenDate"
       :untimed="untimed"
       :timeline-visible="includeAll ? undefined : true"
       :include-collected-override="true"
-      :category-id-override="categoryId"
+      :category-ids-override="categoryIds"
+      :uncategorized-override="false"
       :tag-ids-override="tagIds"
     />
   </div>
@@ -23,17 +24,24 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import ResourceBrowser from '@/components/ResourceBrowser/index.vue'
+import type { ResourceType } from '@/domain'
 
 const route = useRoute()
 const router = useRouter()
 
+const type = computed(() => route.params.type as ResourceType)
 const rawDate = computed(() => String(route.params.date ?? ''))
 const isUnknown = computed(() => rawDate.value === 'unknown')
 const takenDate = computed(() => (isUnknown.value ? undefined : rawDate.value))
 const untimed = computed(() => isUnknown.value)
 const includeAll = computed(() => route.query.includeAll === '1')
-const categoryId = computed(() =>
-  route.query.categoryId ? Number(route.query.categoryId) : null
+const categoryIds = computed(() =>
+  route.query.categoryIds
+    ? String(route.query.categoryIds).split(',').flatMap((value) => {
+        const id = Number(value)
+        return Number.isFinite(id) ? [id] : []
+      })
+    : []
 )
 const tagIds = computed(() =>
   route.query.tagIds
@@ -49,11 +57,11 @@ const emptyHint = computed(() =>
 )
 
 function back(): void {
-  const query: Record<string, string> = {}
+  const query: Record<string, string> = { view: 'timeline' }
   if (includeAll.value) query.includeAll = '1'
-  if (categoryId.value !== null) query.categoryId = String(categoryId.value)
+  if (categoryIds.value.length > 0) query.categoryIds = categoryIds.value.join(',')
   if (tagIds.value.length > 0) query.tagIds = tagIds.value.join(',')
-  void router.push({ path: '/photos', query })
+  void router.push({ path: `/library/${type.value}`, query })
 }
 </script>
 
