@@ -10,6 +10,14 @@
 |------|------|
 | [`photo-management-next/需求.md`](photo-management-next/需求.md) | R1–R4、候选方案、验收与开放问题；R1 实现记录 |
 
+## timeline-annotations（**L1 评审中 · 2026-10-19**）
+
+> 时间线某天/某条时间线的备注与地点名；不改 EXIF、不做地图/反向地理编码。当前只收集需求与待确认问题，未进入设计。
+
+| 文档 | 内容 |
+|------|------|
+| [`timeline-annotations/需求.md`](timeline-annotations/需求.md) | 日期备注/时间线备注/地点 IN-OUT、US-A.1–A.7、开放问题 G1 |
+
 ## library-workspace（**已落地 · 待发版手验** · 2026-10-19）
 
 > 资源底层 + 每类型分类树 + 资源库/视图导航 + 首页工作台；含合集 D 卡与批量快捷键。
