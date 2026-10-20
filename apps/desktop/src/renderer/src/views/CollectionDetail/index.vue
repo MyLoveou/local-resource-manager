@@ -119,6 +119,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NPopconfirm, NSelect } from 'naive-ui'
 import { notify } from '@/application/notify'
 import { getCategoryTree, getTags, resolveCardImageUrl } from '@/infrastructure/http'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import {
   collectionMembers,
   deleteCollection as deleteCollectionApi,
@@ -220,7 +221,19 @@ async function load(): Promise<void> {
   }
 }
 
+function playlistFor(type: ResourceType): number[] {
+  return filteredMembers.value.flatMap((item) =>
+    item.id !== undefined && item.type === type ? [item.id] : [],
+  )
+}
+
 function onCardClick(_event: MouseEvent, itemId: number): void {
+  const item = members.value.find((row) => row.id === itemId)
+  if (!item) return
+  if (selection.selectedId === itemId) {
+    void openResource(item, { playlist: playlistFor(item.type) })
+    return
+  }
   selection.select(itemId)
 }
 

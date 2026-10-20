@@ -100,7 +100,7 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getHome, resolveCardImageUrl } from '@/infrastructure/http'
-import { consumeResource } from '@/infrastructure/consume/consumeResource'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import { NCard } from 'naive-ui'
 import type { ConsumptionItem, HomeSummary, Resource, ResourceType, SavedView } from '@/domain'
 import { profileFor } from '@/domain'
@@ -164,7 +164,7 @@ function openConsumed(item: ConsumptionItem): void {
 
 function openRecent(item: Resource): void {
   if (item.id == null) return
-  void consumeResource(item, [item.id])
+  void openResource(item, { playlist: [item.id] })
 }
 
 function openLibrary(): void {

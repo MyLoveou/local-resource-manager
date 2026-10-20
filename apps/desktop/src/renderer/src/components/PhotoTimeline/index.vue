@@ -135,8 +135,7 @@ import PhotoRow from './PhotoRow.vue'
 import { notify } from '@/application/notify'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
-import { useImageViewerStore } from '@/application/stores/imageViewer'
-import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import {
   backfillPhotos,
   getPhotoTimeline,
@@ -182,8 +181,6 @@ const emit = defineEmits<{
 const route = useRoute()
 const selection = useSelectionStore()
 const library = useLibraryStore()
-const imageViewer = useImageViewerStore()
-const videoPlayer = useVideoPlayerStore()
 const timeline = ref<PhotoTimelineData | null>(null)
 const loading = ref(false)
 const backfilling = ref(false)
@@ -299,11 +296,14 @@ function selectPhoto(id: number): void {
 
 function openPhoto(id: number): void {
   const tile = allTiles().find((photo) => photo.id === id)
-  if (tile?.kind === 'video') {
-    videoPlayer.open(id, videoPlayerIds.value)
-    return
-  }
-  imageViewer.open(id, imageViewerIds.value)
+  if (!tile) return
+  void openResource(
+    { id: tile.id, type: tile.kind },
+    {
+      playlist:
+        tile.kind === 'video' ? videoPlayerIds.value : imageViewerIds.value,
+    },
+  )
 }
 
 function readQuery(): void {

@@ -6,7 +6,7 @@ import type { ConsumeKind } from '@/domain/libraryTypes'
 import type { AudioPlayerPager } from '@/application/stores/audioPlayer'
 import type { ImageViewerPager } from '@/application/stores/imageViewer'
 type PlayerApi = {
-  open: (id: number, ids: number[]) => void
+  open: (id: number, ids: number[], fileId?: number | null) => void
   close: () => void
   prev?: () => void
   next?: () => void
@@ -22,7 +22,7 @@ function playerByConsume(): Record<ConsumeKind, PlayerApi> {
   return {
     'overlay-video': {
       close: videoPlayer.close,
-      open: (id, ids) => videoPlayer.open(id, ids),
+      open: (id, ids, fileId) => videoPlayer.open(id, ids, fileId),
     },
     'overlay-image': {
       close: imageViewer.close,

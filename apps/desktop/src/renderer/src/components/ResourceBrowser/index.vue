@@ -88,16 +88,15 @@ import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore, type LibraryInvalidation } from '@/application/stores/library'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
-import { consumeResource } from '@/infrastructure/consume/consumeResource'
-import { storeToRefs } from 'pinia'
-import { isCollectionCard, type PhotoTile, type ResourceStatus, type ResourceType } from '@/domain'
+import { consumeKindOf, isCollectionCard, TYPE_PROFILES, type PhotoTile, type ResourceStatus, type ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
 import { useModelPreviewStore } from '@/application/stores/modelPreview'
-import { consumeKindOf, TYPE_PROFILES } from '@/domain'
+import { storeToRefs } from 'pinia'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
@@ -169,21 +168,12 @@ function typesForPager(): readonly ResourceType[] {
   return props.type ? [props.type] : TYPE_PROFILES.map((profile) => profile.type)
 }
 
-function bindPagers(): void {
-  for (const type of typesForPager()) {
-    const kind = consumeKindOf(type)
-    if (kind) PlayerByConsume[kind].bindPager?.(pagerFor(type))
-  }
-}
-
 function unbindPagers(): void {
   for (const type of typesForPager()) {
     const kind = consumeKindOf(type)
     if (kind) PlayerByConsume[kind].unbindPager?.()
   }
 }
-
-bindPagers()
 
 const useJustified = computed(() => props.type === 'image' || props.timelineMedia === true)
 
@@ -216,7 +206,10 @@ function handleCardClick(event: MouseEvent, itemId: number | undefined): void {
   }
   if (selection.selectedId === itemId) {
     if (!item) return
-    void consumeResource(item, ids(item.type))
+    void openResource(item, {
+      playlist: ids(item.type),
+      pager: pagerFor(item.type),
+    })
     return
   }
   selection.select(itemId)

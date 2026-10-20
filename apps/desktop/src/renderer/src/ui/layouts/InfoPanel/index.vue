@@ -338,6 +338,7 @@ import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { getResource, getCategoryTree, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import {
   addCollectionItem,
@@ -997,13 +998,14 @@ function openViewerFromCover(): void {
   if (id == null || row?.type !== 'image') return
   const bound = imageViewer.boundImageIds()
   const ids = bound.includes(id) ? bound : [id]
-  imageViewer.open(id, ids)
+  void openResource(row, { playlist: ids })
 }
 
 function playEpisode(fileId: number): void {
-  const id = resource.value?.id
-  if (id == null) return
-  videoPlayer.open(id, [id], fileId)
+  const row = resource.value
+  const id = row?.id
+  if (id == null || !row) return
+  void openResource(row, { playlist: [id], fileId })
 }
 
 function episodeButtonLabel(ep: SeriesEpisode): string {
