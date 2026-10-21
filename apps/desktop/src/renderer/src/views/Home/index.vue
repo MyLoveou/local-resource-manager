@@ -25,9 +25,10 @@
           </button>
         </div>
       </section>
+
       <section v-if="collections.length" class="home__section">
         <div class="home__section-head">
-          <h2>我的合集</h2>
+          <h2>合集</h2>
           <button type="button" class="home__more" @click="router.push('/collections')">查看全部</button>
         </div>
         <div class="home__collections">
@@ -41,6 +42,7 @@
           />
         </div>
       </section>
+
       <section v-if="savedTimelines.length" class="home__section">
         <div class="home__section-head">
           <h2>时间线</h2>
@@ -57,51 +59,109 @@
           </button>
         </div>
       </section>
-      <div class="overview-container">
+
+      <section class="overview-container">
         <div class="overview-content">
-          <h2>概览</h2>
+          <div class="overview-heading">
+            <h2>概览</h2>
+            <span>点击卡片进入对应资源库</span>
+          </div>
           <div class="overview-content-cards">
-            <n-card v-for="item in visibleStats" :key="item.type" :title="typeMap[item.type] ?? item.type"
-              class="overview-content-card" hoverable>
-              {{ item.count }}
-            </n-card>
+            <button
+              v-for="item in visibleStats"
+              :key="item.type"
+              type="button"
+              class="overview-stat"
+              @click="openType(item.type)"
+            >
+              <span class="overview-stat__stack">
+                <span
+                  v-for="index in 3"
+                  :key="index"
+                  class="overview-stat__layer"
+                  :class="`overview-stat__layer--${index}`"
+                >
+                  <img
+                    v-if="previewsFor(item.type)[index - 1]"
+                    :src="resolveLibraryMediaUrl(previewsFor(item.type)[index - 1])"
+                    alt=""
+                    loading="lazy"
+                  />
+                  <span v-else class="overview-stat__placeholder" />
+                </span>
+              </span>
+              <span class="overview-stat__shade" />
+              <span class="overview-stat__body">
+                <strong>{{ item.count }}</strong>
+                <span>{{ typeLabel(item.type) }}</span>
+              </span>
+            </button>
           </div>
         </div>
+
         <div class="overview-task">
-          <h2>进行中工作</h2>
+          <div class="overview-heading">
+            <h2>进行中的任务</h2>
+          </div>
           <ul v-if="activeWork.length" class="overview-list">
             <li v-for="item in activeWork" :key="item.id">
               <button type="button" class="overview-link" @click="openWork(item)">
-                {{ item.title || '未命名工作目录' }}
+                {{ item.title || '未命名任务' }}
               </button>
             </li>
           </ul>
-          <p v-else class="overview-empty">暂无进行中的工作目录</p>
+          <p v-else class="overview-empty">暂无进行中的任务</p>
         </div>
+
         <div class="overview-current">
-          <h2>最近消费</h2>
-          <ul v-if="recentConsumption.length" class="overview-list">
-            <li v-for="item in recentConsumption" :key="item.id">
-              <button type="button" class="overview-link" @click="openConsumed(item)">
-                {{ item.title || '未命名' }}
-                <span class="overview-action">{{ actionLabel(item.action) }}</span>
-              </button>
-            </li>
-          </ul>
-          <p v-else class="overview-empty">还没有打开记录</p>
+          <div class="overview-heading">
+            <h2>最近消费</h2>
+          </div>
+          <div v-if="recentConsumption.length" class="overview-consumption">
+            <button
+              v-for="item in recentConsumption"
+              :key="item.id"
+              type="button"
+              class="overview-consume"
+              :title="item.title"
+              @click="openConsumed(item)"
+            >
+              <span class="overview-consume__cover">
+                <img
+                  v-if="item.thumbnailPath"
+                  :src="resolveLibraryMediaUrl(item.thumbnailPath)"
+                  alt=""
+                  loading="lazy"
+                />
+                <span v-else class="overview-consume__placeholder">{{ typeLabel(item.type) }}</span>
+                <span class="overview-consume__action">{{ actionLabel(item.action) }}</span>
+                <span v-if="item.duration != null" class="overview-consume__duration">
+                  {{ formatDuration(item.duration) }}
+                </span>
+              </span>
+              <span class="overview-consume__meta">
+                <strong>{{ item.title || '未命名资源' }}</strong>
+                <span class="overview-consume__sub">
+                  {{ typeLabel(item.type) }}
+                  <template v-if="item.format"> · {{ item.format }}</template>
+                </span>
+                <span class="overview-consume__time">{{ formatDateTime(item.createdAt) }}</span>
+              </span>
+            </button>
+          </div>
+          <p v-else class="overview-empty">还没有消费记录</p>
         </div>
-      </div>
+      </section>
     </div>
-    <EmptyGuide v-else hint="暂无资源，请先在顶栏导入" />
+    <EmptyGuide v-else hint="还没有资源，先导入一些内容吧。" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHome, resolveCardImageUrl } from '@/infrastructure/http'
+import { getHome, resolveCardImageUrl, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
-import { NCard } from 'naive-ui'
 import type { ConsumptionItem, HomeSummary, Resource, ResourceType, SavedView } from '@/domain'
 import { profileFor } from '@/domain'
 import { typeMap } from '@/utils/typeMap'
@@ -112,14 +172,13 @@ import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import CollectionCard from '@/components/CollectionCard/index.vue'
 
 const ACTION_LABEL: Record<string, string> = {
-  embedded: '内嵌打开',
+  embedded: '内嵌播放',
   system: '系统打开',
   command: '命令打开',
   workbench: '工作台',
   open: '打开',
 }
 
-/** 首页概览数据（统计 + 最近添加 + 任务 + 工作） */
 const overviewData = ref<HomeSummary | null>(null)
 const router = useRouter()
 const activeWork = computed(() => overviewData.value?.activeWork ?? [])
@@ -148,8 +207,32 @@ const hasOverviewData = computed(() => {
   )
 })
 
+function typeLabel(type: string): string {
+  return typeMap[type as ResourceType] ?? type
+}
+
+function previewsFor(type: string): string[] {
+  return overviewData.value?.stats.previewsByType?.[type] ?? []
+}
+
 function actionLabel(action: string): string {
   return ACTION_LABEL[action] ?? action
+}
+
+function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const minutes = Math.floor(total / 60)
+  const rest = total % 60
+  return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
+function formatDateTime(value?: string | null): string {
+  return value ? value.replace('T', ' ').slice(0, 16) : ''
+}
+
+function openType(type: string): void {
+  const profile = profileFor(type as ResourceType)
+  void router.push(profile?.routePath ?? `/library/${type}`)
 }
 
 function openWork(item: Resource): void {
@@ -174,16 +257,17 @@ function openLibrary(): void {
 function openTimeline(item: SavedView): void {
   void router.push(`/timelines/${item.id}`)
 }
-const initOverviewData = async () => {
+
+const initOverviewData = async (): Promise<void> => {
   try {
     overviewData.value = await getHome()
   } catch (err) {
-    notify.fromError(err, { context: '获取首页概览' })
+    notify.fromError(err, { context: '读取首页数据失败' })
   }
 }
 
-onMounted(async () => {
-  initOverviewData()
+onMounted(() => {
+  void initOverviewData()
 })
 
 const library = useLibraryStore()
@@ -191,7 +275,7 @@ watch(
   () => library.homeRevision,
   () => {
     void initOverviewData()
-  }
+  },
 )
 </script>
 
@@ -282,24 +366,129 @@ watch(
   }
 
   .overview-container {
-    .overview-content {
-      padding: 20px;
+    padding: 0 20px 24px;
+  }
 
-      .overview-content-cards {
-        display: flex;
-        flex-direction: row;
+  .overview-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 20px 0 10px;
 
-        .overview-content-card {
-          flex: 1;
-          margin: 10px 10px 0 0;
-        }
-      }
+    h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    span {
+      color: var(--sm-color-text-muted);
+      font-size: 11px;
+    }
+  }
+
+  .overview-content-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .overview-stat {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid var(--sm-color-border);
+    border-radius: 12px;
+    background: var(--sm-color-bg-muted, #f1f1f1);
+    cursor: pointer;
+    isolation: isolate;
+    text-align: left;
+    transition: transform 180ms ease, box-shadow 180ms ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgb(0 0 0 / 12%);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--sm-color-accent, #2563eb);
+      outline-offset: 2px;
+    }
+  }
+
+  .overview-stat__stack {
+    position: absolute;
+    inset: 8%;
+  }
+
+  .overview-stat__layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--sm-color-bg-surface);
+    box-shadow: 0 8px 18px rgb(0 0 0 / 18%);
+
+    &--1 {
+      z-index: 3;
+    }
+    &--2 {
+      z-index: 2;
+      transform: translate(5%, 4%) rotate(3deg) scale(0.985);
+    }
+    &--3 {
+      z-index: 1;
+      transform: translate(10%, 8%) rotate(5deg) scale(0.97);
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .overview-stat__placeholder {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #dbeafe, #f8fafc);
+  }
+
+  .overview-stat__shade {
+    position: absolute;
+    inset: 55% 0 0;
+    z-index: 4;
+    background: linear-gradient(transparent, rgb(0 0 0 / 58%));
+  }
+
+  .overview-stat__body {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 10px;
+    z-index: 5;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+
+    strong {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    span {
+      font-size: 12px;
+      opacity: 0.9;
     }
   }
 
   .overview-task,
   .overview-current {
-    padding: 0 20px 12px;
+    padding-bottom: 4px;
   }
 
   .overview-list {
@@ -321,10 +510,101 @@ watch(
     cursor: pointer;
   }
 
-  .overview-action,
+  .overview-consumption {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 8px;
+  }
+
+  .overview-consume {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--sm-color-border);
+    border-radius: 10px;
+    background: var(--sm-color-bg-surface);
+    color: var(--sm-color-text);
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      background: color-mix(in srgb, var(--sm-color-primary) 5%, var(--sm-color-bg-surface));
+    }
+  }
+
+  .overview-consume__cover {
+    position: relative;
+    flex: 0 0 82px;
+    width: 82px;
+    height: 62px;
+    overflow: hidden;
+    border-radius: 7px;
+    background: var(--sm-color-bg-muted, #f1f1f1);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .overview-consume__placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    color: var(--sm-color-text-muted);
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .overview-consume__action,
+  .overview-consume__duration {
+    position: absolute;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: rgb(0 0 0 / 62%);
+    color: #fff;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .overview-consume__action {
+    left: 4px;
+    top: 4px;
+  }
+
+  .overview-consume__duration {
+    right: 4px;
+    bottom: 4px;
+  }
+
+  .overview-consume__meta {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+
+    strong {
+      overflow: hidden;
+      font-size: 13px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .overview-consume__sub,
+  .overview-consume__time,
   .overview-empty {
     color: var(--sm-color-text-muted);
-    font-size: 12px;
+    font-size: 11px;
+  }
+
+  .overview-consume__time {
+    margin-top: auto;
   }
 }
 </style>
