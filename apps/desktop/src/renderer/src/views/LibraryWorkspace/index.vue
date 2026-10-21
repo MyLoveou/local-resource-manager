@@ -2,7 +2,6 @@
   <div class="library-workspace">
     <TypeTabs :type="type" @change="changeType" />
     <div class="library-workspace__bar">
-      <ViewSwitch :view="session.view" @change="changeView" />
       <BrowseControls :type="type" placeholder="在资源库中搜索" />
     </div>
     <div class="library-workspace__body">
@@ -16,16 +15,11 @@
       />
       <section class="library-workspace__content">
         <ResourceBrowser
-          v-if="session.view === 'grid'"
           :key="`${type}-grid`"
           :type="type"
           :empty-hint="emptyHint"
           hide-controls
         />
-        <div v-else class="library-workspace__map">
-          <h3>地图</h3>
-          <p>地图视图入口已就绪；完整地图交互将在后续版本接入。</p>
-        </div>
       </section>
     </div>
     <CategoryManageModal
@@ -47,7 +41,6 @@ import { profileFor, type ResourceType } from '@/domain'
 import { isSectionHidden } from '@/domain/visibility'
 import { notify } from '@/application/notify'
 import TypeTabs from '@/components/LibraryWorkspace/TypeTabs.vue'
-import ViewSwitch from '@/components/LibraryWorkspace/ViewSwitch.vue'
 import CategoryTreePanel from '@/components/CategoryTreePanel/index.vue'
 import CategoryManageModal from '@/components/CategoryManageModal/index.vue'
 import BrowseControls from '@/components/BrowseControls/index.vue'
@@ -83,10 +76,8 @@ function applyQuery(): void {
     return
   }
   const query = route.query
-  const view = query.view === 'map' ? 'map' : 'grid'
   hydrating = true
   browse.patch(type.value, undefined, {
-    view,
     categoryIds: parseIds(query.categoryIds ?? query.categoryId),
     uncategorized: query.uncategorized === '1',
     tagIds: parseIds(query.tagIds),
@@ -118,13 +109,8 @@ function openCreateChild(id: number): void {
 
 function changeType(next: ResourceType): void {
   if (next === type.value) return
-  const view = session.value.view === 'map' ? 'map' : 'grid'
   browse.reset(next, undefined, true)
-  void router.push({ path: `/library/${next}`, query: view === 'map' ? { view } : {} })
-}
-
-function changeView(view: 'grid' | 'timeline' | 'map'): void {
-  browse.patch(type.value, undefined, { view: view === 'map' ? 'map' : 'grid' })
+  void router.push({ path: `/library/${next}` })
 }
 
 function selectCategory(id: number | null, uncategorized: boolean): void {
@@ -139,7 +125,6 @@ function syncQuery(): void {
   if (hydrating) return
   const current = session.value
   const query: Record<string, string> = {}
-  if (current.view === 'map') query.view = 'map'
   if (current.categoryIds.length) query.categoryIds = current.categoryIds.join(',')
   if (current.uncategorized) query.uncategorized = '1'
   if (current.tagIds.length) query.tagIds = current.tagIds.join(',')
@@ -202,12 +187,5 @@ onMounted(async () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.library-workspace__map {
-  margin: auto;
-  text-align: center;
-  color: var(--sm-color-text-muted);
-  font-size: 13px;
 }
 </style>
