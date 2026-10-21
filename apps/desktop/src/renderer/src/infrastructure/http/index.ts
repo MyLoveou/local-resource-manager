@@ -19,6 +19,17 @@ export {
   deleteSavedView,
 } from './savedViews'
 export {
+  getDateNotes,
+  getDateNote,
+  upsertDateNote,
+  deleteDateNote,
+  getSavedViewNote,
+  upsertSavedViewNote,
+  deleteSavedViewNote,
+  type TimelineNote,
+  type TimelineNoteUpsert,
+} from './timelineNotes'
+export {
   getResources,
   getResource,
   invalidateResourceCache,

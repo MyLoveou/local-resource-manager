@@ -49,7 +49,7 @@
       </n-button>
     </div>
 
-    <div v-if="timeline && months.length" class="photo-timeline__density">
+    <div v-if="layout === 'stream' && timeline && months.length" class="photo-timeline__density">
       <button
         v-for="group in months"
         :key="group.key"
@@ -62,7 +62,18 @@
       </button>
     </div>
 
-    <div ref="scrollRef" class="photo-timeline__scroll">
+    <JustifiedMediaGrid
+      v-if="layout === 'grid' && !loading && timeline && timeline.total > 0"
+      class="photo-timeline__grid"
+      :tiles="gridTiles"
+      :selected-ids="selectedId !== null ? [selectedId] : []"
+      :has-more="false"
+      :total="timeline.total"
+      interactive="viewer"
+      @select="selectPhoto"
+      @open="openPhoto"
+    />
+    <div v-else ref="scrollRef" class="photo-timeline__scroll">
       <div v-if="loading" class="photo-timeline__skeleton">
         <span v-for="index in 3" :key="index" class="photo-timeline__skeleton-row" />
       </div>
@@ -85,7 +96,19 @@
           >
             <div class="photo-timeline__day-head">
               <span class="photo-timeline__day-label">{{ dayLabel(day.date) }} · {{ day.count }} 张</span>
-              <n-button v-if="!hideFilters" text size="tiny" @click="openDay(day.date)">查看当天</n-button>
+              <div class="photo-timeline__day-actions">
+                <n-button text size="tiny" @click="editDateNote(day.date)">
+                  {{ dateNotes[day.date] ? '编辑备注' : '添加备注' }}
+                </n-button>
+                <n-button v-if="!hideFilters" text size="tiny" @click="openDay(day.date)">查看当天</n-button>
+              </div>
+            </div>
+            <div v-if="dateNotes[day.date]" class="photo-timeline__note">
+              <strong v-if="dateNotes[day.date].title">{{ dateNotes[day.date].title }}</strong>
+              <span v-if="dateNotes[day.date].locationName" class="photo-timeline__note-location">
+                {{ dateNotes[day.date].locationName }}
+              </span>
+              <p v-if="dateNotes[day.date].body">{{ dateNotes[day.date].body }}</p>
             </div>
             <div class="photo-timeline__row-wrap">
               <PhotoRow
@@ -121,6 +144,13 @@
         <p class="photo-timeline__total">共 {{ timeline.total }} 张</p>
       </template>
     </div>
+    <TimelineNoteModal
+      v-model:show="noteOpen"
+      :date="noteDate"
+      :note="noteDraft"
+      @saved="onDateNoteSaved"
+      @deleted="onDateNoteDeleted"
+    />
   </div>
 </template>
 
@@ -131,6 +161,8 @@ import { NButton, NCheckbox, NSelect } from 'naive-ui'
 import { useElementSize } from '@vueuse/core'
 import justifiedLayout from 'justified-layout'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
+import JustifiedMediaGrid from '@/components/JustifiedMediaGrid/index.vue'
+import TimelineNoteModal from '@/components/TimelineNoteModal/index.vue'
 import PhotoRow from './PhotoRow.vue'
 import { notify } from '@/application/notify'
 import { useSelectionStore } from '@/application/stores/selection'
@@ -138,8 +170,10 @@ import { useLibraryStore } from '@/application/stores/library'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import {
   backfillPhotos,
+  getDateNotes,
   getPhotoTimeline,
   getTags,
+  type TimelineNote,
 } from '@/infrastructure/http'
 import type {
   CategoryRule,
@@ -159,6 +193,7 @@ const props = withDefaults(defineProps<{
   rules?: SavedViewFilters
   hideFilters?: boolean
   embedded?: boolean
+  layout?: 'stream' | 'grid'
 }>(), {
   type: 'image',
   categoryIds: () => [],
@@ -172,6 +207,7 @@ const props = withDefaults(defineProps<{
   }),
   hideFilters: false,
   embedded: false,
+  layout: 'stream',
 })
 
 const emit = defineEmits<{
@@ -182,6 +218,10 @@ const route = useRoute()
 const selection = useSelectionStore()
 const library = useLibraryStore()
 const timeline = ref<PhotoTimelineData | null>(null)
+const dateNotes = ref<Record<string, TimelineNote>>({})
+const noteOpen = ref(false)
+const noteDate = ref<string | null>(null)
+const noteDraft = ref<TimelineNote | null>(null)
 const loading = ref(false)
 const backfilling = ref(false)
 const includeAll = ref(false)
@@ -268,6 +308,8 @@ function allTiles() {
   ]
 }
 
+const gridTiles = computed(() => allTiles())
+
 const imageViewerIds = computed(() =>
   allTiles().filter((photo) => photo.kind !== 'video').map((photo) => photo.id)
 )
@@ -292,6 +334,43 @@ function dayLabel(date: string): string {
 
 function selectPhoto(id: number): void {
   selection.select(id)
+}
+
+function editDateNote(date: string): void {
+  noteDate.value = date
+  noteDraft.value = dateNotes.value[date] ?? null
+  noteOpen.value = true
+}
+
+function onDateNoteSaved(note: TimelineNote): void {
+  if (!note.date) return
+  dateNotes.value = { ...dateNotes.value, [note.date]: note }
+  noteDraft.value = note
+}
+
+function onDateNoteDeleted(): void {
+  if (!noteDate.value) return
+  const next = { ...dateNotes.value }
+  delete next[noteDate.value]
+  dateNotes.value = next
+  noteDraft.value = null
+}
+
+async function loadDateNotes(): Promise<void> {
+  const days = timeline.value?.days ?? []
+  if (!days.length) {
+    dateNotes.value = {}
+    return
+  }
+  const dates = days.map((day) => day.date).sort()
+  try {
+    const notes = await getDateNotes(dates[0], dates[dates.length - 1])
+    dateNotes.value = Object.fromEntries(
+      notes.flatMap((note) => (note.date ? [[note.date, note]] : [])),
+    )
+  } catch (error) {
+    notify.fromError(error, { context: '获取日期备注' })
+  }
 }
 
 function openPhoto(id: number): void {
@@ -342,6 +421,7 @@ async function load(): Promise<void> {
       dateTo: props.hideFilters ? props.rules.dateTo : null,
       includeUntimed: props.hideFilters ? props.rules.includeUntimed : includeUntimed.value,
     })
+    await loadDateNotes()
   } catch (error) {
     notify.fromError(error, { context: '获取照片时间线' })
   } finally {
@@ -520,6 +600,11 @@ onMounted(() => {
   overflow: auto;
 }
 
+.photo-timeline__grid {
+  flex: 1;
+  min-height: 0;
+}
+
 .photo-timeline__month-section {
   position: relative;
 }
@@ -550,6 +635,41 @@ onMounted(() => {
 
 .photo-timeline__day-label {
   font-size: 12px;
+  color: var(--sm-color-text-muted);
+}
+
+.photo-timeline__day-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.photo-timeline__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--sm-color-primary, #6366f1);
+  background: var(--sm-color-bg-muted, #f5f5f5);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+
+  strong {
+    font-size: 13px;
+  }
+
+  p {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--sm-color-text-muted);
+    white-space: pre-wrap;
+  }
+}
+
+.photo-timeline__note-location {
   color: var(--sm-color-text-muted);
 }
 

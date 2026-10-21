@@ -4,8 +4,14 @@
       <div>
         <h2>{{ title }}</h2>
         <p>{{ subtitle }}</p>
+        <div v-if="viewNote" class="timeline-detail__note">
+          <strong v-if="viewNote.title">{{ viewNote.title }}</strong>
+          <span v-if="viewNote.locationName">{{ viewNote.locationName }}</span>
+          <p v-if="viewNote.body">{{ viewNote.body }}</p>
+        </div>
       </div>
       <div class="timeline-detail__actions">
+        <n-button v-if="savedView" size="small" @click="noteOpen = true">备注</n-button>
         <n-button v-if="savedView" size="small" @click="editOpen = true">编辑规则</n-button>
         <n-popconfirm
           v-if="savedView"
@@ -22,33 +28,37 @@
       </div>
     </header>
     <div class="timeline-detail__bar">
+      <span class="timeline-detail__scope">{{ scopeLabel }}</span>
       <n-button-group size="small">
-        <n-button :type="view === 'timeline' ? 'primary' : 'default'" @click="view = 'timeline'">
+        <n-button :type="layout === 'stream' ? 'primary' : 'default'" @click="setLayout('stream')">
           时间线
         </n-button>
-        <n-button :type="view === 'map' ? 'primary' : 'default'" @click="view = 'map'">
-          地图
+        <n-button :type="layout === 'grid' ? 'primary' : 'default'" @click="setLayout('grid')">
+          网格
         </n-button>
       </n-button-group>
-      <span class="timeline-detail__scope">{{ scopeLabel }}</span>
     </div>
     <div class="timeline-detail__body">
       <PhotoTimeline
-        v-if="view === 'timeline'"
         :scope="scope"
         :rules="rules"
+        :layout="layout"
         hide-filters
       />
-      <div v-else class="timeline-detail__map">
-        <h3>地图</h3>
-        <p>当前时间线的地图视图；完整 MapLibre 交互后续接入。</p>
-      </div>
     </div>
     <TimelineEditorModal
       v-if="savedView"
       v-model:show="editOpen"
       :view="savedView"
       @saved="onSaved"
+    />
+    <TimelineNoteModal
+      v-if="savedView"
+      v-model:show="noteOpen"
+      :saved-view-id="savedView.id"
+      :note="viewNote"
+      @saved="onNoteSaved"
+      @deleted="viewNote = null"
     />
   </div>
 </template>
@@ -59,8 +69,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NButtonGroup, NPopconfirm } from 'naive-ui'
 import PhotoTimeline from '@/components/PhotoTimeline/index.vue'
 import TimelineEditorModal from '@/components/TimelineEditorModal/index.vue'
+import TimelineNoteModal from '@/components/TimelineNoteModal/index.vue'
 import { notify } from '@/application/notify'
-import { deleteSavedView, getSavedView } from '@/infrastructure/http'
+import { deleteSavedView, getSavedView, getSavedViewNote, type TimelineNote } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type { SavedView, SavedViewFilters, TimelineScope } from '@/domain'
 
@@ -68,8 +79,18 @@ const route = useRoute()
 const router = useRouter()
 const library = useLibraryStore()
 const savedView = ref<SavedView | null>(null)
-const view = ref<'timeline' | 'map'>('timeline')
+const viewNote = ref<TimelineNote | null>(null)
 const editOpen = ref(false)
+const noteOpen = ref(false)
+const layout = ref<'stream' | 'grid'>('stream')
+
+function setLayout(next: 'stream' | 'grid'): void {
+  layout.value = next
+  const query = { ...route.query }
+  if (next === 'grid') query.view = 'grid'
+  else delete query.view
+  void router.replace({ query })
+}
 
 const scope = computed<TimelineScope>(() => savedView.value?.scope ?? 'media')
 const rules = computed<SavedViewFilters>(() => savedView.value?.filters ?? {
@@ -95,10 +116,20 @@ async function load(): Promise<void> {
   const raw = String(route.params.id ?? 'all')
   if (raw === 'all') {
     savedView.value = null
+    viewNote.value = null
     return
   }
   try {
-    savedView.value = await getSavedView(Number(raw))
+    const view = await getSavedView(Number(raw))
+    savedView.value = view
+    viewNote.value = null
+    if (view.id != null) {
+      try {
+        viewNote.value = await getSavedViewNote(view.id)
+      } catch (error) {
+        notify.fromError(error, { context: '读取时间线备注' })
+      }
+    }
   } catch (error) {
     notify.fromError(error, { context: '读取时间线' })
     void router.replace('/timelines')
@@ -107,6 +138,10 @@ async function load(): Promise<void> {
 
 function onSaved(next: SavedView): void {
   savedView.value = next
+}
+
+function onNoteSaved(note: TimelineNote): void {
+  viewNote.value = note
 }
 
 async function remove(): Promise<void> {
@@ -124,6 +159,14 @@ async function remove(): Promise<void> {
 watch(() => route.params.id, () => {
   void load()
 })
+
+watch(
+  () => route.query.view,
+  (raw) => {
+    layout.value = raw === 'grid' ? 'grid' : 'stream'
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   void load()
@@ -162,9 +205,39 @@ onMounted(() => {
   gap: 8px;
 }
 
+.timeline-detail__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--sm-color-primary, #6366f1);
+  background: var(--sm-color-bg-muted, #f5f5f5);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+
+  strong {
+    font-size: 13px;
+  }
+
+  span {
+    color: var(--sm-color-text-muted);
+  }
+
+  p {
+    flex-basis: 100%;
+    margin: 0;
+    color: var(--sm-color-text-muted);
+    white-space: pre-wrap;
+  }
+}
+
 .timeline-detail__bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 0 20px 8px;
 }
@@ -177,15 +250,5 @@ onMounted(() => {
 .timeline-detail__body {
   flex: 1;
   min-height: 0;
-}
-
-.timeline-detail__map {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--sm-color-text-muted);
-  font-size: 13px;
 }
 </style>
