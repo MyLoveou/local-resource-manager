@@ -755,6 +755,56 @@
 - **落点**：`application/stores/library.ts`、`useResourcePage`、`LibraryWorkspace`、`InfoPanel`、`Home`、`CollectionDetail`、`Timelines`、`TimelineEditorModal`、`ResourceBrowser`
 - 状态：有效（2026-10-19；typecheck/build/lint 通过，批量分类回归测试通过）
 
+### D-20261020-01 · 时间线备注与 GPS 地图
+
+- 日期：2026-10-20
+- 场景：图片/视频时间线需要按天或按保存时间线记录备注、地点；已有 GPS 无法在地图消费
+- **决定**：新增 `timeline_notes`（日期备注全局一条、保存时间线备注一条，标题/正文/地点名）；`PhotoTile` 返回 GPS；时间线详情接入 MapLibre + OSM，GPS 聚类、点击打开资源
+- **为何**：备注让时间线有人类语义；地图直接消费已有 EXIF GPS，不另造位置数据
+- **不选**：反向地理编码、地点写回 EXIF、地图选点、日期多备注、时间线成员表
+- **落点**：`0020_timeline_notes.sql`、`/library/timeline-notes`、`PhotoTimeline`、`TimelineDetail`、`PhotoMap`、`TimelineNoteModal`
+- 状态：有效（2026-10-20；201 tests，typecheck/build 通过，Electron 手验待跑）
+
+### D-20261021-01 · 图片优先级调整与 EXIF 只读详情
+
+- 日期：2026-10-21
+- 场景：图片主路径已闭环；需要决定下一批图片能力
+- **决定**：图片站点刮削、旧库缩略图回填降为 P3；EXIF 只读详情升为 P1（相机/镜头/ISO/光圈/快门）；R3/R4、时间线网格、动图/HEIC/回收站验收为 P2
+- **为何**：EXIF 详情是低风险、直接提升图片库信息密度的能力；刮削依赖站点且不确定性高；旧缩略图先确认实际影响
+- **不选**：复制 digiKam 的 C++/Qt/Exiv2 实现；EXIF 写回文件；把 CLIP/OCR 等候选塞进本轮
+- **落点**：`0022_exif_camera.sql`、`media_probe.probe_image`、`InfoPanel`、`docs/requirements/by-type/image.md`
+- 状态：有效（2026-10-21 已落地 EXIF 只读详情；不写回文件）
+
+### D-20261021-02 · 地图引擎改为 Leaflet + MarkerCluster
+
+- 日期：2026-10-21
+- 场景：MapLibre 首版地图的聚合样式不理想；浅色/深色底图切换依赖自定义 raster 图层可见性，存在时序和交互问题
+- **决定**：地图改用 Leaflet + `leaflet.markercluster` + 内置 `L.control.layers`；底图使用 OSM/Esri 浅色/深色；聚合点用自定义 `iconCreateFunction`，点击聚合点保留缩略图面板，点击单点/缩略图走 `openResource`；右侧「城市 / 地点」面板用本地城市库做最近城市分组，不请求外部地理编码
+- **为何**：`L.control.layers` 是 Leaflet 内置底图控件，切换底图不重载地图/source，不会丢聚合点；MarkerCluster 的聚合、点击、边界缩放和动画成熟；当前仅数百个 GPS 点，Leaflet DOM 标记足够
+- **不选**：继续维护 MapLibre 自定义图层切换；Mapbox GL（token/许可）；OpenLayers（过重）；用第三方 MapLibre style-switcher fork（peer 版本旧、仍需自定义重挂 source）
+- **落点**：`apps/desktop/src/renderer/src/components/PhotoMap/index.vue`、`apps/desktop/package.json`、`apps/desktop/src/renderer/index.html`
+- 状态：有效（2026-10-21；typecheck/build/lint 通过，Electron 手验待跑）
+
+### D-20261021-03 · 资源库移除地图占位入口
+
+- 日期：2026-10-21
+- 场景：`/library/:type` 的「地图」只是首版占位空态；完整地图已在时间线详情，两个入口造成“资源库也有地图”的误解
+- **决定**：移除资源库的网格/地图切换、`?view=map` 查询和占位空态；资源库只保留网格；地图入口迁到独立顶级「地图」（见 D-20261021-04）
+- **为何**：地图不是资源类型或分类，不应在资源库再实现一套；避免占位入口与真实地图并存
+- **不选**：把地图做成资源库内独立视图；把地图当资源实体；保留空占位文案
+- **落点**：`apps/desktop/src/renderer/src/views/LibraryWorkspace/index.vue`、`components/LibraryWorkspace/ViewSwitch.vue`（已移除）
+- 状态：有效（2026-10-21；typecheck/build 通过）
+
+### D-20261021-04 · 地图独立入口、地图可见性与保存规则
+
+- 日期：2026-10-21
+- 场景：地图不应只是时间线详情的附属视图；导入时需要选择是否加入地图；地图规则需要和时间线一样可保存、编辑、删除
+- **决定**：新增顶级「地图」入口（`/maps`、`/maps/:id`）；地图规则使用 `saved_views.kind='map'`，编辑/删除规则与时间线一致；新增 `resources.map_visible`（NULL=有 GPS 自动纳入，1=强制加入，0=强制排除）；导入向导增加「加入地图」，信息栏增加「加入地图」；地图查询按 GPS + `map_visible` 过滤，不依赖 `timeline_visible`；时间线详情移除地图切换
+- **为何**：地图是独立的资源视图，不是时间线成员；地图可见性独立后，可以从时间线移除但仍保留地图，或反过来；保存地图规则复用现有 saved view 模型
+- **不选**：把地图做成时间线附属页；用 `timeline_visible` 复用地图开关；把地图当资源实体；地图删除资源
+- **落点**：`0021_map_visibility.sql`、`PhotoMap`、`Maps`、`MapDetail`、`ImportWizard`、`InfoPanel`、`saved_views`
+- 状态：有效（2026-10-21；204 tests，typecheck/build/lint 通过，Electron 手验待跑）
+
 ---
 
 ## 已撤销 / 被取代

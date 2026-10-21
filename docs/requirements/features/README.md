@@ -1,5 +1,7 @@
 # L1 需求文档
 
+> 按资源类型/跨类型能力的需求视图见 [`../README.md`](../README.md)；本目录保留每个能力的详细 L1/L2/L3。
+
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
 ## photo-management-next（**R1 已落地 · R2–R4 需求收集** · 2026-10-18）
@@ -10,13 +12,13 @@
 |------|------|
 | [`photo-management-next/需求.md`](photo-management-next/需求.md) | R1–R4、候选方案、验收与开放问题；R1 实现记录 |
 
-## timeline-annotations（**L1 评审中 · 2026-10-19**）
+## timeline-annotations（**v1 已实现 · 2026-10-20**）
 
-> 时间线某天/某条时间线的备注与地点名；不改 EXIF、不做地图/反向地理编码。当前只收集需求与待确认问题，未进入设计。
+> 时间线某天/某条时间线的备注与手动地点名；日期备注全局一条、保存时间线备注一条；不改 EXIF。地图由 `photo-timeline-map` 的地图视图承接。
 
 | 文档 | 内容 |
 |------|------|
-| [`timeline-annotations/需求.md`](timeline-annotations/需求.md) | 日期备注/时间线备注/地点 IN-OUT、US-A.1–A.7、开放问题 G1 |
+| [`timeline-annotations/需求.md`](timeline-annotations/需求.md) | 日期备注/时间线备注/地点 IN-OUT、US-A.1–A.7、v1 实现记录 |
 
 ## library-workspace（**已落地 · 待发版手验** · 2026-10-19）
 

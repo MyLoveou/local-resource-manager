@@ -11,7 +11,7 @@
 | 存储 | SQLite（WAL + 迁移） | `apps/backend/data/library.db` |
 | 监视导入 | watchdog + 事件桥（按类型派发、补扫、自动导入） | `apps/backend/app/shared/utils/watch_*` |
 
-需求与决策：`docs/product/facts.md`（事实基线）、`docs/product/decisions.md`（决策记忆）、`docs/requirements/features/`（L1 需求）。
+需求与决策：`docs/product/facts.md`（事实基线）、`docs/product/decisions.md`（决策记忆）、`docs/requirements/README.md`（按资源类型/跨类型总览）、`docs/requirements/features/`（详细 L1）。
 
 学习与经验：`docs/经验总结/README.md`（架构、进程、SQLite、发布、自动更新、媒体领域、学习路线）。
 

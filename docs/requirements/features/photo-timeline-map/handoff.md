@@ -18,7 +18,7 @@
 
 1. `pnpm release:win` 重打安装包
 2. 用户手验
-3. 地图刀：MapLibre+OSM、GCJ-02、无 GPS 提示
+3. 地图刀：Leaflet + MarkerCluster + LayersControl（OSM/Esri）、GCJ-02、无 GPS 提示
 
 ## 阻塞
 
