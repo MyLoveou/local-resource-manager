@@ -16,11 +16,12 @@ from app.library.application.schemas import (
     ThumbnailBackfillResult,
 )
 from app.library.application.thumbnails import source_for_grid_thumbnail
-from app.library.domain.media_types import FILE_ROLE_THUMBNAIL
+from app.library.domain.media_types import FILE_ROLE_PRIMARY, FILE_ROLE_THUMBNAIL
 from app.library.domain.models import CategoryRule, ResourceStatus, ResourceType
 from app.library.infrastructure.repositories import CategoryRepository, ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
+from app.shared.log import logger
 
 
 class PhotoTimelineService:
@@ -209,6 +210,74 @@ class PhotoTimelineService:
             scanned=scanned,
             taken_at_updated=taken_updated,
             gps_updated=gps_updated,
+            skipped=skipped,
+            failed=failed,
+        )
+
+    async def backfill_thumbnails(self) -> ThumbnailBackfillResult:
+        """Recreate missing grid thumbnails without touching primary files."""
+        rows = await self._resources.media_primary_files()
+        scanned = len(rows)
+        repaired = 0
+        skipped = 0
+        failed = 0
+        for primary_row, type_value in rows:
+            type_ = ResourceType(type_value)
+            resource = await self._resources.get(primary_row.resource_id)
+            if resource is None or resource.id is None:
+                failed += 1
+                continue
+            thumb = next(
+                (file for file in resource.files if file.role == FILE_ROLE_THUMBNAIL),
+                None,
+            )
+            if thumb is not None and thumb.path and Path(thumb.path).is_file():
+                skipped += 1
+                continue
+            source = Path(primary_row.path)
+            if not source.is_file():
+                failed += 1
+                continue
+            role_paths = {FILE_ROLE_PRIMARY: source}
+            thumb_source = source_for_grid_thumbnail(type_, role_paths)
+            layout = layout_for(type_)
+            if thumb_source is None or layout is None:
+                skipped += 1
+                continue
+            try:
+                if thumb is not None and thumb.id is not None:
+                    await self._resources.delete_file_row(thumb.id, commit=False)
+                package = ResourcePackage(
+                    self._store_root,
+                    type_,
+                    resource.id,
+                    self._ops,
+                    cover_falls_back_to_primary=layout.cover_falls_back_to_primary,
+                )
+                dest = await asyncio.to_thread(package.put_thumbnail, thumb_source)
+                if dest is None:
+                    await self._resources.rollback()
+                    failed += 1
+                    continue
+                size = await asyncio.to_thread(dest.stat)
+                await self._resources.add_file(
+                    resource.id,
+                    path=str(dest),
+                    sha256=None,
+                    size=size.st_size,
+                    format_="webp",
+                    role=FILE_ROLE_THUMBNAIL,
+                    commit=False,
+                )
+                await self._resources.commit()
+                repaired += 1
+            except Exception:
+                await self._resources.rollback()
+                logger.exception("thumbnail backfill failed resource=%s", resource.id)
+                failed += 1
+        return ThumbnailBackfillResult(
+            scanned=scanned,
+            repaired=repaired,
             skipped=skipped,
             failed=failed,
         )
