@@ -1,7 +1,14 @@
 <template>
   <div v-show="visible" class="image-viewer-overlay" role="dialog" aria-modal="true">
     <div class="image-viewer-overlay__stage">
-      <ImageViewerHost v-if="visible && imageSrc" :src="imageSrc" />
+      <ImageViewerHost
+        v-if="visible && imageSrc"
+        :src="imageSrc"
+        :animated="animated"
+        :format="format"
+        @open-external="openExternal"
+      />
+      <p v-if="trashed" class="image-viewer-overlay__trash">回收站预览 · 文件仍在，彻底删除前可查看</p>
     </div>
     <n-button class="image-viewer-overlay__close" size="small" circle aria-label="关闭" @click="close">
       ×
@@ -18,22 +25,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import ImageViewerHost from '@/components/ImageViewerHost/index.vue'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
-import { resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { FILE_ROLE, type Resource } from '@/domain'
+import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { notify } from '@/application/notify'
+import { openPrimaryDefault } from '@/infrastructure/shell/openLibraryFile'
+import { isAnimatedImageFormat } from '@/utils/imageFormat'
 
 const viewer = useImageViewerStore()
 const { visible, currentId, hasPrev, hasNext, playlistIds } = storeToRefs(viewer)
 const { close, prev, next } = viewer
+const current = ref<Resource | null>(null)
 
 const imageSrc = computed(() =>
   currentId.value == null || !visible.value
     ? ''
     : resolveLibraryMediaUrl(`/library/resources/${currentId.value}/content`)
 )
+const format = computed(() => {
+  const files = current.value?.files ?? []
+  return (files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0])?.format ?? null
+})
+const animated = computed(() => isAnimatedImageFormat(format.value))
+const trashed = computed(() => current.value?.status === 'trashed')
+
+async function openExternal(): Promise<void> {
+  const message = await openPrimaryDefault(current.value)
+  if (message) notify.toast.error(message)
+}
 
 function prefetchNeighbors(id: number): void {
   const ids = playlistIds.value
@@ -48,8 +71,16 @@ function prefetchNeighbors(id: number): void {
 watch(
   () => [visible.value, currentId.value, playlistIds.value] as const,
   ([open, id]) => {
-    if (!open || id == null) return
+    if (!open || id == null) {
+      current.value = null
+      return
+    }
     prefetchNeighbors(id)
+    void getResource(id).then((row) => {
+      if (currentId.value === id) current.value = row
+    }).catch(() => {
+      if (currentId.value === id) current.value = null
+    })
   }
 )
 
@@ -133,5 +164,18 @@ onUnmounted(() => {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.image-viewer-overlay__trash {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  z-index: 6;
+  margin: 0;
+  text-align: center;
+  color: #d1d5db;
+  font-size: 12px;
+  pointer-events: none;
 }
 </style>
