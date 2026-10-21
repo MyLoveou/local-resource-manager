@@ -29,6 +29,7 @@ class ResourceRow(Base):
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
     timeline_visible: Mapped[int | None] = mapped_column(Integer)
+    map_visible: Mapped[int | None] = mapped_column(Integer)
 
 
 class CategoryRow(Base):
@@ -131,6 +132,11 @@ class FileRow(Base):
     exif_taken_at: Mapped[str | None] = mapped_column(String)
     exif_lat: Mapped[float | None] = mapped_column(Float)
     exif_lng: Mapped[float | None] = mapped_column(Float)
+    exif_camera: Mapped[str | None] = mapped_column(String)
+    exif_lens: Mapped[str | None] = mapped_column(String)
+    exif_iso: Mapped[int | None] = mapped_column(Integer)
+    exif_aperture: Mapped[str | None] = mapped_column(String)
+    exif_shutter: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str | None] = mapped_column(String)
 
 
@@ -174,6 +180,22 @@ class CollectionItemRow(Base):
         Integer, ForeignKey('resources.id', ondelete='CASCADE'), primary_key=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TimelineNoteRow(Base):
+    __tablename__ = "timeline_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column(String, nullable=False)
+    date: Mapped[str | None] = mapped_column(String)
+    saved_view_id: Mapped[int | None] = mapped_column(
+        ForeignKey("saved_views.id", ondelete="CASCADE")
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    body: Mapped[str | None] = mapped_column(Text)
+    location_name: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
 
 
 class SavedViewRow(Base):

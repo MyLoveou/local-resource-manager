@@ -75,6 +75,7 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
             job, body.type, body.source_kind.value, body.paths,
             storage_kind=body.storage_kind.value if body.storage_kind else None,
             timeline_visible=body.timeline_visible,
+            map_visible=body.map_visible,
             category_ids=body.category_ids,
             tag_names=body.tag_names,
         )

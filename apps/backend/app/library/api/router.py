@@ -12,6 +12,7 @@ from app.library.api import (
     resources,
     saved_views,
     tags,
+    timeline_notes,
     todos,
     watch,
     workbench,
@@ -32,3 +33,4 @@ router.include_router(categories.router)
 router.include_router(saved_views.router)
 router.include_router(home.router)
 router.include_router(tags.router)
+router.include_router(timeline_notes.router)

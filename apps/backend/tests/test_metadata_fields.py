@@ -219,6 +219,34 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
         image.save(path, format="JPEG", exif=exif)
         return path
 
+    def _jpeg_with_camera(
+        self,
+        name: str,
+        *,
+        make: str = "Canon",
+        model: str = "EOS R6",
+        iso: int = 200,
+        fnumber: tuple[int, int] = (28, 10),
+        exposure: tuple[int, int] = (1, 125),
+        lens: str = "RF50mm F1.8 STM",
+    ) -> Path:
+        from PIL import Image
+        from PIL.ExifTags import Base, IFD
+        from PIL.TiffImagePlugin import IFDRational
+
+        path = self.root / name
+        image = Image.new("RGB", (8, 8), (12, 34, 56))
+        exif = image.getexif()
+        exif[Base.Make] = make
+        exif[Base.Model] = model
+        ifd = exif.get_ifd(IFD.Exif)
+        ifd[Base.ISOSpeedRatings] = iso
+        ifd[Base.FNumber] = IFDRational(*fnumber)
+        ifd[Base.ExposureTime] = IFDRational(*exposure)
+        ifd[Base.LensModel] = lens
+        image.save(path, format="JPEG", exif=exif.tobytes())
+        return path
+
     def test_normalize_taken_at(self) -> None:
         from app.library.application.media_probe import normalize_taken_at
 
@@ -236,6 +264,41 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
             primary = next(f for f in got.files if f.role == "primary")
             self.assertEqual(primary.exif_taken_at, "2024-03-15T14:08:01")
 
+    def test_probe_image_camera_fields(self) -> None:
+        from app.library.application.media_probe import probe_image
+
+        src = self._jpeg_with_camera("cam-detail.jpg")
+        fields = probe_image(src)
+        self.assertEqual(fields.exif_camera, "Canon EOS R6")
+        self.assertEqual(fields.exif_lens, "RF50mm F1.8 STM")
+        self.assertEqual(fields.exif_iso, 200)
+        self.assertEqual(fields.exif_aperture, "f/2.8")
+        self.assertEqual(fields.exif_shutter, "1/125")
+
+    def test_probe_image_camera_model_includes_make(self) -> None:
+        from app.library.application.media_probe import probe_image
+
+        src = self._jpeg_with_camera(
+            "sony.jpg", make="SONY", model="SONY ILCE-7M4", iso=100, fnumber=(18, 10), exposure=(2, 1)
+        )
+        fields = probe_image(src)
+        self.assertEqual(fields.exif_camera, "SONY ILCE-7M4")
+        self.assertEqual(fields.exif_shutter, "2s")
+        self.assertEqual(fields.exif_aperture, "f/1.8")
+
+    async def test_import_jpeg_writes_camera_exif(self) -> None:
+        src = self._jpeg_with_camera("detail.jpg")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            got = await ResourceRepository(session).get(rid)
+            assert got is not None
+            primary = next(f for f in got.files if f.role == "primary")
+            self.assertEqual(primary.exif_camera, "Canon EOS R6")
+            self.assertEqual(primary.exif_lens, "RF50mm F1.8 STM")
+            self.assertEqual(primary.exif_iso, 200)
+            self.assertEqual(primary.exif_aperture, "f/2.8")
+            self.assertEqual(primary.exif_shutter, "1/125")
+
     async def test_import_png_taken_at_empty(self) -> None:
         async with self.factory() as session:
             rid = await self._import(session, ResourceType.IMAGE, self._png("a.png"))
@@ -243,6 +306,11 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
             assert got is not None
             primary = next(f for f in got.files if f.role == "primary")
             self.assertIsNone(primary.exif_taken_at)
+            self.assertIsNone(primary.exif_camera)
+            self.assertIsNone(primary.exif_lens)
+            self.assertIsNone(primary.exif_iso)
+            self.assertIsNone(primary.exif_aperture)
+            self.assertIsNone(primary.exif_shutter)
 
     async def test_patch_taken_at(self) -> None:
         async with self.factory() as session:

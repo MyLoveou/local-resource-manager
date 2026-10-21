@@ -34,7 +34,12 @@ class CategoryMigrationTests(unittest.TestCase):
                     (rid, type_, f"r{rid}", cat),
                 )
             conn.commit()
-            self.assertEqual(migrate(conn), 2)
+            expected = sum(
+                1
+                for path in MIGRATIONS_DIR.glob("*.sql")
+                if int(path.name.split("_", 1)[0]) > 17
+            )
+            self.assertEqual(migrate(conn), expected)
 
             categories = {
                 (row["type"], row["name"]): row["id"]

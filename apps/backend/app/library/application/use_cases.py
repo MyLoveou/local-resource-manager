@@ -85,9 +85,11 @@ class LibraryQueryService:
         self._saved_views = saved_views or SavedViewRepository(resources.session)
 
     async def overview(self) -> Overview:
-        """首页聚合：统计 + 最近资源 + 任务 + 工作 + 消费。"""
+        """????:?? + ???? + ?? + ?? + ???"""
+        stats = await self._resources.stats()
+        stats["previews_by_type"] = await self._resources.previews_by_type()
         return Overview(
-            stats=ResourceStats(**await self._resources.stats()),
+            stats=ResourceStats(**stats),
             recent=await self._resources.recent(limit=12),
             tasks=TaskSummary(**await self._tasks.summary()),
             active_work=await active_work(self._resources.session),
@@ -143,6 +145,8 @@ class LibraryQueryService:
         untimed: bool = False,
         timeline_visible: bool | None = None,
         timeline_media: bool = False,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> ResourcePage:
         """分页列表。q/tagIds/categoryId/sort 服务端过滤；非法 sort 422。
 
@@ -175,6 +179,8 @@ class LibraryQueryService:
             and not untimed
             and timeline_visible is None
             and not timeline_media
+            and map_visible is None
+            and not map_only
         )
         if mixed_ok:
             items, total = await self._resources.list_mixed(
@@ -211,6 +217,8 @@ class LibraryQueryService:
             untimed=untimed,
             timeline_visible=timeline_visible,
             timeline_media=timeline_media,
+            map_visible=map_visible,
+            map_only=map_only,
         )
         has_more = len(items) > limit
         items = items[:limit]
@@ -228,6 +236,8 @@ class LibraryQueryService:
             untimed=untimed,
             timeline_visible=timeline_visible,
             timeline_media=timeline_media,
+            map_visible=map_visible,
+            map_only=map_only,
         )
         last = items[-1] if items else None
         next_key = keys[-1] if has_more and keys else None
@@ -638,8 +648,8 @@ class SavedViewService:
         self._saved_views = saved_views
         self._categories = categories
 
-    async def list(self, scope: str | None = None) -> list[SavedView]:
-        return await self._saved_views.list("timeline", scope)
+    async def list(self, scope: str | None = None, kind: str = "timeline") -> list[SavedView]:
+        return await self._saved_views.list(kind, scope)
 
     async def get(self, view_id: int) -> SavedView:
         view = await self._saved_views.get(view_id)

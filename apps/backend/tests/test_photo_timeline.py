@@ -12,12 +12,17 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.library.application.import_service import ImportService
-from app.library.application.media_probe import _gps_coord, _video_taken_at
+from app.library.application.media_probe import _gps_coord, _parse_iso6709, _video_gps, _video_taken_at
 from app.library.application.photos import PhotoTimelineService
-from app.library.application.schemas import ResourcePatch, ResourceSortField
-from app.library.application.use_cases import LibraryQueryService
+from app.library.application.schemas import ResourcePatch, ResourceSortField, SavedViewCreate
+from app.library.application.use_cases import LibraryQueryService, SavedViewService
 from app.library.infrastructure.import_job_store import ImportJobState
-from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
+from app.library.infrastructure.repositories import (
+    CategoryRepository,
+    ResourceRepository,
+    SavedViewRepository,
+    TaskSummaryRepository,
+)
 from app.library.domain.models import Resource, ResourceStatus, ResourceType
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
@@ -192,6 +197,15 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(_video_taken_at(None))
         self.assertIsNone(_video_taken_at("not-a-time"))
 
+    async def test_video_location_parser(self) -> None:
+        self.assertEqual(
+            _parse_iso6709("+31.2304+121.4737+010.000/"),
+            (31.2304, 121.4737),
+        )
+        self.assertEqual(_parse_iso6709("31.2304,121.4737"), (31.2304, 121.4737))
+        self.assertEqual(_video_gps({"location": "+31.2304+121.4737/"}), (31.2304, 121.4737))
+        self.assertEqual(_video_gps({"Location": "+0+0/"}), (None, None))
+
     async def test_timeline_includes_video_tiles(self) -> None:
         async with self.factory() as session:
             repo = ResourceRepository(session)
@@ -239,6 +253,80 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
                 include_all=False, type_=ResourceType.IMAGE, year=None, month=None, category_ids=None, tag_ids=None
             )
             self.assertEqual(photos.total, 0)
+
+    async def test_map_visibility_is_independent_from_timeline(self) -> None:
+        async with self.factory() as session:
+            a = await self._import_image(session, self._png("map-a.png", 1))
+            b = await self._import_image(session, self._png("map-b.png", 2))
+            repo = ResourceRepository(session)
+            svc = self._query(session)
+            fa = await repo.get_file_by_role(a, "primary")
+            fb = await repo.get_file_by_role(b, "primary")
+            assert fa is not None and fb is not None
+            await repo.update_file_exif(
+                fa.id, taken_at="2026-10-17T10:00:00", lat=31.23, lng=121.47
+            )
+            await repo.update_file_exif(
+                fb.id, taken_at="2026-10-18T10:00:00", lat=None, lng=None
+            )
+            await repo.commit()
+            await svc.patch(a, ResourcePatch(timeline_visible=False))
+
+            photos = self._photos(session)
+            points = await photos.timeline(
+                include_all=True,
+                type_=ResourceType.IMAGE,
+                year=None,
+                month=None,
+                category_ids=None,
+                tag_ids=None,
+                include_untimed=True,
+                map_visible=True,
+                map_only=True,
+            )
+            self.assertEqual({point.id for point in points.unknown_photos}, set())
+            self.assertEqual(
+                {photo.id for day in points.days for photo in day.photos}, {a}
+            )
+
+            await svc.patch(a, ResourcePatch(map_visible=False))
+            hidden = await photos.timeline(
+                include_all=True,
+                type_=ResourceType.IMAGE,
+                year=None,
+                month=None,
+                category_ids=None,
+                tag_ids=None,
+                include_untimed=True,
+                map_visible=True,
+                map_only=True,
+            )
+            self.assertEqual(hidden.total, 0)
+
+    async def test_import_can_exclude_from_map(self) -> None:
+        async with self.factory() as session:
+            repo = ResourceRepository(session)
+            job = ImportJobState(id="j-no-map")
+            await ImportService(repo, store_root=self.store, file_ops=self.ops).run(
+                job,
+                ResourceType.IMAGE,
+                "file",
+                [str(self._png("not-in-map.png", 8))],
+                map_visible=False,
+            )
+            self.assertEqual(job.imported, 1)
+            items = await repo.list(ResourceType.IMAGE, None, 10, 0, "desc")
+            self.assertFalse(items[0].map_visible)
+
+    async def test_saved_views_keep_map_kind_separate(self) -> None:
+        async with self.factory() as session:
+            views = SavedViewService(SavedViewRepository(session), CategoryRepository(session))
+            await views.create(SavedViewCreate(kind="map", scope="image", name="旅行地图"))
+            await views.create(SavedViewCreate(kind="timeline", scope="image", name="旅行时间线"))
+            map_views = await views.list(None, "map")
+            timeline_views = await views.list(None, "timeline")
+            self.assertEqual([view.name for view in map_views], ["旅行地图"])
+            self.assertEqual([view.name for view in timeline_views], ["旅行时间线"])
 
     async def test_backfill_reads_exif_and_keeps_visibility(self) -> None:
         async with self.factory() as session:

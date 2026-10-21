@@ -111,6 +111,7 @@ class Resource(ApiModel):
     extra: dict[str, Any] = Field(default_factory=dict)  # 站点特有元数据兜底
     scrape_pending: bool = False  # 有未确认的 search 候选
     timeline_visible: bool | None = None  # 照片时间线：None=按 EXIF 自动
+    map_visible: bool | None = None  # 地图：None=有 GPS 自动纳入
     created_at: datetime | None = None
     updated_at: datetime | None = None
     categories: list["Category"] = Field(default_factory=list)
@@ -173,6 +174,11 @@ class ResourceFile(ApiModel):
     exif_taken_at: str | None = None  # 图片拍摄时间 ISO 本地日历
     exif_lat: float | None = None  # WGS84 纬度
     exif_lng: float | None = None  # WGS84 经度
+    exif_camera: str | None = None  # 机身 Make+Model
+    exif_lens: str | None = None
+    exif_iso: int | None = None
+    exif_aperture: str | None = None  # 如 f/2.8
+    exif_shutter: str | None = None  # 如 1/125
     created_at: datetime | None = None
 
     @property
@@ -245,6 +251,20 @@ class SavedView(ApiModel):
     name: str
     filters: SavedViewFilters = Field(default_factory=SavedViewFilters)
     sort: str = "takenAt"
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class TimelineNote(ApiModel):
+    """时间线备注：全局日期备注，或某条保存时间线备注。"""
+
+    id: int | None = None
+    scope: str  # date / saved_view
+    date: str | None = None
+    saved_view_id: int | None = None
+    title: str = ""
+    body: str | None = None
+    location_name: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

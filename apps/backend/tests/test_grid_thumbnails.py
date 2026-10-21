@@ -141,6 +141,51 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("thumbs/grid", after.cover_path or "")
             self.assertNotEqual(after.thumbnail_path, before_thumb)
 
+    async def test_backfill_recreates_missing_thumb(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+        from app.library.application.schemas import ThumbnailBackfillResult
+
+        src = self._png("old.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            dest = self._thumb_path("image", rid)
+            dest.unlink()
+            repo = ResourceRepository(session)
+            got = await repo.get(rid)
+            assert got is not None
+            thumb = next(f for f in got.files if f.role == FILE_ROLE_THUMBNAIL)
+            await repo.delete_file_row(thumb.id)
+            result = await PhotoTimelineService(repo, store_root=self.store, file_ops=self.ops).backfill_thumbnails()
+            self.assertIsInstance(result, ThumbnailBackfillResult)
+            self.assertEqual(result.repaired, 1)
+            self.assertTrue(dest.is_file())
+            after = await repo.get(rid)
+            assert after is not None
+            self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in after.files))
+
+    async def test_backfill_skips_ok_and_does_not_purge_on_fail(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("keep.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            first = await PhotoTimelineService(repo, store_root=self.store, file_ops=self.ops).backfill_thumbnails()
+            self.assertEqual(first.repaired, 0)
+            self.assertGreaterEqual(first.skipped, 1)
+            with patch(
+                "app.library.application.packages.resource_package.ResourcePackage.put_thumbnail",
+                return_value=None,
+            ):
+                dest = self._thumb_path("image", rid)
+                dest.unlink()
+                result = await PhotoTimelineService(
+                    repo, store_root=self.store, file_ops=self.ops
+                ).backfill_thumbnails()
+            self.assertGreaterEqual(result.failed, 1)
+            still = await repo.get(rid)
+            self.assertIsNotNone(still)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -99,6 +99,7 @@ class ImportService:
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
         category_ids: list[int] | None = None,
         tag_names: list[str] | None = None,
     ) -> None:
@@ -127,7 +128,7 @@ class ImportService:
         if self._session_factory is not None:
             await self._run_pooled(
                 job, type_, layout, candidates, prehashed, auto_scrape, timeline_visible,
-                category_ids, tag_names,
+                map_visible, category_ids, tag_names,
             )
             return
         if self._resources is None:
@@ -138,6 +139,7 @@ class ImportService:
                 self._resources, job, type_, layout, candidate,
                 digest=digest, auto_scrape=auto_scrape,
                 timeline_visible=timeline_visible,
+                map_visible=map_visible,
                 category_ids=category_ids,
                 tag_names=tag_names,
             )
@@ -153,6 +155,7 @@ class ImportService:
         prehashed: dict[str, str] | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
         category_ids: list[int] | None = None,
         tag_names: list[str] | None = None,
     ) -> None:
@@ -172,6 +175,7 @@ class ImportService:
                                 repo, job, type_, layout, source,
                                 digest=digest, auto_scrape=auto_scrape,
                                 timeline_visible=timeline_visible,
+                                map_visible=map_visible,
                                 category_ids=category_ids,
                                 tag_names=tag_names,
                             )
@@ -268,6 +272,7 @@ class ImportService:
         digest: str | None = None,
         auto_scrape: bool = True,
         timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
         category_ids: list[int] | None = None,
         tag_names: list[str] | None = None,
     ) -> None:
@@ -316,6 +321,9 @@ class ImportService:
                     timeline_visible=(
                         None if timeline_visible is None else bool(timeline_visible)
                     ),
+                    map_visible=(
+                        None if map_visible is None else bool(map_visible)
+                    ),
                 ),
                 commit=False,
             )
@@ -355,6 +363,11 @@ class ImportService:
                     exif_taken_at=probed.exif_taken_at,
                     exif_lat=probed.exif_lat,
                     exif_lng=probed.exif_lng,
+                    exif_camera=probed.exif_camera,
+                    exif_lens=probed.exif_lens,
+                    exif_iso=probed.exif_iso,
+                    exif_aperture=probed.exif_aperture,
+                    exif_shutter=probed.exif_shutter,
                     commit=False,
                 )
             cover = package.resolve_cover(role_paths)

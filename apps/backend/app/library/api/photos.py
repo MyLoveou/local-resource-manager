@@ -35,6 +35,8 @@ async def photo_timeline(
     date_from: str | None = Query(default=None, alias="dateFrom"),
     date_to: str | None = Query(default=None, alias="dateTo"),
     include_untimed: bool = Query(default=False, alias="includeUntimed"),
+    map_visible: bool | None = Query(default=None, alias="mapVisible"),
+    map_only: bool = Query(default=False, alias="mapOnly"),
     service: PhotoTimelineService = Depends(_service),
 ) -> PhotoTimeline:
     """Timeline by scope (image/video/media); per-type include/exclude rules."""
@@ -66,6 +68,8 @@ async def photo_timeline(
         date_from=date_from,
         date_to=date_to,
         include_untimed=include_untimed,
+        map_visible=map_visible,
+        map_only=map_only,
     )
 
 

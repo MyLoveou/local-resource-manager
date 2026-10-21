@@ -220,14 +220,32 @@ async def recent_consumption(session: AsyncSession, limit: int = 10) -> list[dic
         .limit(limit)
     )
     found = (await session.execute(stmt)).all()
-    return [
-        {
-            "id": event.id,
-            "resource_id": event.resource_id,
-            "title": resource.title,
-            "type": resource.type,
-            "action": event.action,
-            "created_at": event.created_at,
-        }
-        for event, resource in found
-    ]
+    repo = ResourceRepository(session)
+    resources = await repo.attach_listed([_row(resource) for _event, resource in found])
+    await repo.attach_primary_files(resources)
+    by_id = {
+        resource.id: resource
+        for resource in resources
+        if resource.id is not None
+    }
+    items: list[dict] = []
+    for event, resource_row in found:
+        resource = by_id.get(resource_row.id)
+        primary = next(
+            (file for file in (resource.files if resource else []) if file.role == FILE_ROLE_PRIMARY),
+            None,
+        )
+        items.append(
+            {
+                "id": event.id,
+                "resource_id": event.resource_id,
+                "title": resource_row.title,
+                "type": resource_row.type,
+                "action": event.action,
+                "thumbnail_path": resource.thumbnail_path if resource else None,
+                "duration": primary.duration if primary else None,
+                "format": primary.format if primary else None,
+                "created_at": event.created_at,
+            }
+        )
+    return items

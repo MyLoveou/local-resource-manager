@@ -14,14 +14,16 @@ from app.library.domain.models import (
     SavedViewFilters,
     StorageKind,
     Tag,
+    TimelineNote,
 )
 from app.shared.value_objects import Rating
 
 
 class ResourceStats(ApiModel):
-    """资源统计。"""
+    """?????"""
 
     by_type: dict[str, int] = Field(default_factory=dict)
+    previews_by_type: dict[str, list[str]] = Field(default_factory=dict)
     total_size_bytes: int = 0
     trashed_count: int = 0
     lost_count: int = 0
@@ -36,13 +38,16 @@ class TaskSummary(ApiModel):
 
 
 class ConsumptionItem(ApiModel):
-    """一次打开/播放记录。"""
+    """????/?????"""
 
     id: int
     resource_id: int
     title: str
     type: str
     action: str
+    thumbnail_path: str | None = None
+    duration: float | None = None
+    format: str | None = None
     created_at: str | None = None
 
 
@@ -162,6 +167,7 @@ class ResourcePatch(ApiModel):
     tag_names: list[str] | None = None
     exif_taken_at: str | None = None
     timeline_visible: bool | None = None
+    map_visible: bool | None = None
 
 
 class PhotoTile(ApiModel):
@@ -173,6 +179,8 @@ class PhotoTile(ApiModel):
     duration: float | None = None
     thumbnail_path: str | None = None
     taken_at: str | None = None
+    lat: float | None = None
+    lng: float | None = None
 
 
 class PhotoTimelineDay(ApiModel):
@@ -192,6 +200,13 @@ class PhotoBackfillResult(ApiModel):
     scanned: int = 0
     taken_at_updated: int = 0
     gps_updated: int = 0
+    skipped: int = 0
+    failed: int = 0
+
+
+class ThumbnailBackfillResult(ApiModel):
+    scanned: int = 0
+    repaired: int = 0
     skipped: int = 0
     failed: int = 0
 
@@ -251,8 +266,18 @@ class CategoryPatch(ApiModel):
     sort: int | None = None
 
 
+class TimelineNoteUpsert(ApiModel):
+    title: str = Field(default="", max_length=200)
+    body: str | None = Field(default=None, max_length=5000)
+    location_name: str | None = Field(default=None, max_length=200)
+
+
+class TimelineNoteList(ApiModel):
+    items: list[TimelineNote] = Field(default_factory=list)
+
+
 class SavedViewCreate(ApiModel):
-    kind: Literal["timeline"] = "timeline"
+    kind: Literal["timeline", "map"] = "timeline"
     scope: Literal["image", "video", "media"] = "image"
     # 兼容旧客户端；新客户端只发 scope
     type: ResourceType | None = None
@@ -286,6 +311,7 @@ class ImportCreate(ApiModel):
     paths: list[str] = Field(min_length=1)
     storage_kind: StorageKind | None = None
     timeline_visible: bool | None = None
+    map_visible: bool | None = None
     category_ids: list[int] | None = None
     tag_names: list[str] | None = None
 

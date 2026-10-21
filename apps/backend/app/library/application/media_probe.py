@@ -34,6 +34,11 @@ class ProbeFields:
     exif_taken_at: str | None = None
     exif_lat: float | None = None
     exif_lng: float | None = None
+    exif_camera: str | None = None
+    exif_lens: str | None = None
+    exif_iso: int | None = None
+    exif_aperture: str | None = None
+    exif_shutter: str | None = None
 
 
 def _parse_frame_rate(raw: str | None) -> float | None:
@@ -59,6 +64,14 @@ def _parse_frame_rate(raw: str | None) -> float | None:
 _EXIF_DT_ORIGINAL = 36867
 _EXIF_DT_DIGITIZED = 36868
 _EXIF_DT = 306
+_EXIF_MAKE = 271
+_EXIF_MODEL = 272
+_EXIF_EXPOSURE = 33434
+_EXIF_FNUMBER = 33437
+_EXIF_ISO = 34855
+_EXIF_ISO_SENSITIVITY = 34864
+_EXIF_LENS_MAKE = 42035
+_EXIF_LENS_MODEL = 42036
 _EXIF_IFD = 0x8769
 _EXIF_GPS_IFD = 0x8825
 _TAKEN_AT_RE = re.compile(r"^(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?")
@@ -129,6 +142,109 @@ def _gps_coord(values, ref) -> float | None:
     return result
 
 
+def _exif_text(raw: object) -> str | None:
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace").rstrip("\x00")
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    return text or None
+
+
+def _exif_number(raw: object) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (list, tuple)) and len(raw) == 2 and not isinstance(raw[0], (list, tuple)):
+        try:
+            num, den = float(raw[0]), float(raw[1])
+        except (TypeError, ValueError):
+            return None
+        if den == 0:
+            return None
+        return num / den
+    numerator = getattr(raw, "numerator", None)
+    denominator = getattr(raw, "denominator", None)
+    if isinstance(numerator, (int, float)) and isinstance(denominator, (int, float)):
+        if denominator == 0:
+            return None
+        return float(numerator) / float(denominator)
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    return None
+
+
+def _exif_iso(raw: object) -> int | None:
+    if isinstance(raw, (list, tuple)) and raw:
+        raw = raw[0]
+    value = _exif_number(raw)
+    if value is None or value <= 0:
+        return None
+    return int(round(value))
+
+
+def _format_camera(make: object, model: object) -> str | None:
+    make_s = _exif_text(make)
+    model_s = _exif_text(model)
+    if make_s and model_s:
+        if model_s.lower().startswith(make_s.lower()):
+            return model_s
+        return f"{make_s} {model_s}"
+    return model_s or make_s
+
+
+def _format_lens(make: object, model: object) -> str | None:
+    return _format_camera(make, model)
+
+
+def _format_aperture(raw: object) -> str | None:
+    value = _exif_number(raw)
+    if value is None or value <= 0:
+        return None
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"f/{text}"
+
+
+def _format_shutter(raw: object) -> str | None:
+    value = _exif_number(raw)
+    if value is None or value <= 0:
+        return None
+    if value >= 1:
+        if abs(value - round(value)) < 1e-6:
+            return f"{int(round(value))}s"
+        return f"{value:.1f}".rstrip("0").rstrip(".") + "s"
+    denom = int(round(1 / value))
+    if denom < 1:
+        return None
+    return f"1/{denom}"
+
+
+def _exif_lookup(exif, nested: dict, tag: int):
+    return nested.get(tag) or exif.get(tag)
+
+
+def _exif_camera_fields(image) -> tuple[str | None, str | None, int | None, str | None, str | None]:
+    try:
+        exif = image.getexif()
+    except Exception:
+        return None, None, None, None, None
+    if not exif:
+        return None, None, None, None, None
+    nested: dict = {}
+    try:
+        nested = dict(exif.get_ifd(_EXIF_IFD) or {})
+    except Exception:
+        nested = {}
+    camera = _format_camera(_exif_lookup(exif, nested, _EXIF_MAKE), _exif_lookup(exif, nested, _EXIF_MODEL))
+    lens = _format_lens(
+        _exif_lookup(exif, nested, _EXIF_LENS_MAKE),
+        _exif_lookup(exif, nested, _EXIF_LENS_MODEL),
+    )
+    iso = _exif_iso(_exif_lookup(exif, nested, _EXIF_ISO) or _exif_lookup(exif, nested, _EXIF_ISO_SENSITIVITY))
+    aperture = _format_aperture(_exif_lookup(exif, nested, _EXIF_FNUMBER))
+    shutter = _format_shutter(_exif_lookup(exif, nested, _EXIF_EXPOSURE))
+    return camera, lens, iso, aperture, shutter
+
+
 def _exif_gps(image) -> tuple[float | None, float | None]:
     try:
         exif = image.getexif()
@@ -146,7 +262,7 @@ def _exif_gps(image) -> tuple[float | None, float | None]:
 
 
 def probe_image(path: Path) -> ProbeFields:
-    """Pillow 读宽高、EXIF 拍摄时间与 GPS。"""
+    """Pillow 读宽高、EXIF 拍摄时间/GPS/机身光圈等。失败不抛。"""
     try:
         from PIL import Image
     except ImportError:
@@ -157,8 +273,18 @@ def probe_image(path: Path) -> ProbeFields:
             width, height = image.size
             taken = _exif_taken_at(image)
             lat, lng = _exif_gps(image)
+            camera, lens, iso, aperture, shutter = _exif_camera_fields(image)
         return ProbeFields(
-            width=width, height=height, exif_taken_at=taken, exif_lat=lat, exif_lng=lng
+            width=width,
+            height=height,
+            exif_taken_at=taken,
+            exif_lat=lat,
+            exif_lng=lng,
+            exif_camera=camera,
+            exif_lens=lens,
+            exif_iso=iso,
+            exif_aperture=aperture,
+            exif_shutter=shutter,
         )
     except Exception as exc:
         logger.warning("图片探测失败 %s: %s", path, exc)
@@ -166,7 +292,7 @@ def probe_image(path: Path) -> ProbeFields:
 
 
 def _video_taken_at(raw: str | None) -> str | None:
-    """ffprobe creation_time（通常 UTC）→ 本地日历 YYYY-MM-DDTHH:MM:SS。"""
+    """ffprobe creation_time(?? UTC) ???? YYYY-MM-DDTHH:MM:SS?"""
     if not isinstance(raw, str) or not raw.strip():
         return None
     text = raw.strip()
@@ -177,6 +303,45 @@ def _video_taken_at(raw: str | None) -> str | None:
         return parsed.strftime("%Y-%m-%dT%H:%M:%S")
     except ValueError:
         return normalize_taken_at(text)
+
+
+def _parse_iso6709(raw: str | None) -> tuple[float | None, float | None]:
+    """Parse ISO 6709 / QuickTime location tags into WGS84 lat/lng."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None, None
+    text = raw.strip()
+    match = re.search(r"([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)", text)
+    if match is None:
+        parts = text.split(",")
+        if len(parts) < 2:
+            return None, None
+        try:
+            lat, lng = float(parts[0]), float(parts[1])
+        except ValueError:
+            return None, None
+    else:
+        lat, lng = float(match.group(1)), float(match.group(2))
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return None, None
+    if lat == 0 and lng == 0:
+        return None, None
+    return lat, lng
+
+
+def _video_gps(tags: dict) -> tuple[float | None, float | None]:
+    keys = (
+        "location",
+        "location-eng",
+        "com.apple.quicktime.location.iso6709",
+        "gpsposition",
+        "xyz",
+    )
+    normalized = {str(key).lower(): value for key, value in tags.items()}
+    for key in keys:
+        lat, lng = _parse_iso6709(normalized.get(key))
+        if lat is not None and lng is not None:
+            return lat, lng
+    return None, None
 
 
 def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
@@ -231,8 +396,11 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
     except (TypeError, ValueError):
         bitrate = None
     codec = video.get("codec_name")
-    tags = fmt.get("tags") if isinstance(fmt.get("tags"), dict) else {}
+    format_tags = fmt.get("tags") if isinstance(fmt.get("tags"), dict) else {}
+    stream_tags = video.get("tags") if isinstance(video.get("tags"), dict) else {}
+    tags = {**stream_tags, **format_tags}
     taken_at = _video_taken_at(tags.get("creation_time"))
+    lat, lng = _video_gps(tags)
     return ProbeFields(
         width=int(width) if isinstance(width, int) else None,
         height=int(height) if isinstance(height, int) else None,
@@ -241,6 +409,8 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
         bitrate=bitrate,
         codec=str(codec) if codec else None,
         exif_taken_at=taken_at,
+        exif_lat=lat,
+        exif_lng=lng,
     )
 
 

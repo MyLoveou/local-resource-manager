@@ -76,6 +76,8 @@ async def list_resources(
     untimed: bool = Query(default=False),
     timeline_visible: bool | None = Query(default=None, alias="timelineVisible"),
     timeline_media: bool = Query(default=False, alias="timelineMedia"),
+    map_visible: bool | None = Query(default=None, alias="mapVisible"),
+    map_only: bool = Query(default=False, alias="mapOnly"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
@@ -97,6 +99,8 @@ async def list_resources(
         untimed=untimed,
         timeline_visible=timeline_visible,
         timeline_media=timeline_media,
+        map_visible=map_visible,
+        map_only=map_only,
     )
 
 

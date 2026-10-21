@@ -23,6 +23,7 @@ from app.library.infrastructure.orm import (
     ResourceTodoRow,
     SavedViewRow,
     SeasonRow,
+    TimelineNoteRow,
     TagRow,
 )
 from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
@@ -50,6 +51,7 @@ from app.library.domain.models import (
     SeriesSeason,
     StorageKind,
     Tag,
+    TimelineNote,
 )
 
 
@@ -109,6 +111,9 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
         timeline_visible=(
             None if row.timeline_visible is None else bool(row.timeline_visible)
         ),
+        map_visible=(
+            None if row.map_visible is None else bool(row.map_visible)
+        ),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -148,6 +153,11 @@ def _file_to_domain(f: FileRow) -> ResourceFile:
         exif_taken_at=f.exif_taken_at,
         exif_lat=f.exif_lat,
         exif_lng=f.exif_lng,
+        exif_camera=f.exif_camera,
+        exif_lens=f.exif_lens,
+        exif_iso=f.exif_iso,
+        exif_aperture=f.exif_aperture,
+        exif_shutter=f.exif_shutter,
         created_at=f.created_at,
     )
 
@@ -202,6 +212,9 @@ class ResourceRepository:
             timeline_visible=(
                 None if resource.timeline_visible is None else int(resource.timeline_visible)
             ),
+            map_visible=(
+                None if resource.map_visible is None else int(resource.map_visible)
+            ),
             created_at=ts,
             updated_at=ts,
         )
@@ -229,6 +242,9 @@ class ResourceRepository:
         row.extra = _dump_extra(resource)
         row.timeline_visible = (
             None if resource.timeline_visible is None else int(resource.timeline_visible)
+        )
+        row.map_visible = (
+            None if resource.map_visible is None else int(resource.map_visible)
         )
         row.updated_at = db_now()
 
@@ -563,6 +579,21 @@ class ResourceRepository:
             and_(ResourceRow.timeline_visible.is_(None), ~has_taken),
         )
 
+    def _map_visible_clause(self, visible: bool):
+        if visible:
+            return ResourceRow.map_visible.is_not(0)
+        return ResourceRow.map_visible == 0
+
+    def _map_only_clause(self):
+        return exists(
+            select(FileRow.id).where(
+                FileRow.resource_id == ResourceRow.id,
+                FileRow.role == FILE_ROLE_PRIMARY,
+                FileRow.exif_lat.is_not(None),
+                FileRow.exif_lng.is_not(None),
+            )
+        )
+
     def _filter(
         self,
         stmt,
@@ -579,6 +610,8 @@ class ResourceRepository:
         category_ids: list[int] | None = None,
         uncategorized: bool = False,
         exclude_category_ids: list[int] | None = None,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ):
         if type_ is not None:
             stmt = stmt.where(ResourceRow.type == type_.value)
@@ -630,6 +663,10 @@ class ResourceRepository:
             stmt = stmt.where(~self._taken_date_exists(None))
         if timeline_visible is not None:
             stmt = stmt.where(self._timeline_visible_clause(timeline_visible))
+        if map_visible is not None:
+            stmt = stmt.where(self._map_visible_clause(map_visible))
+        if map_only:
+            stmt = stmt.where(self._map_only_clause())
         return self._search_filter(stmt, q, tag_ids)
 
     async def count(
@@ -646,8 +683,10 @@ class ResourceRepository:
         timeline_media: bool = False,
         category_ids: list[int] | None = None,
         uncategorized: bool = False,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> int:
-        """与 list 相同条件的数量。"""
+        """? list ????????"""
         stmt = self._filter(
             select(func.count()).select_from(ResourceRow),
             type_,
@@ -662,6 +701,9 @@ class ResourceRepository:
             timeline_media,
             category_ids,
             uncategorized,
+            None,
+            map_visible,
+            map_only,
         )
         total = await self._session.scalar(stmt)
         return int(total or 0)
@@ -688,6 +730,8 @@ class ResourceRepository:
         timeline_media: bool = False,
         category_ids: list[int] | None = None,
         uncategorized: bool = False,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> list[Resource]:
         resources, _keys = await self.list_with_sort_keys(
             type_,
@@ -709,6 +753,8 @@ class ResourceRepository:
             timeline_media=timeline_media,
             category_ids=category_ids,
             uncategorized=uncategorized,
+            map_visible=map_visible,
+            map_only=map_only,
         )
         return resources
 
@@ -734,6 +780,8 @@ class ResourceRepository:
         timeline_media: bool = False,
         category_ids: list[int] | None = None,
         uncategorized: bool = False,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> tuple[list[Resource], list[str]]:
         from app.library.application.list_query import serialize_sort_value
 
@@ -742,7 +790,7 @@ class ResourceRepository:
             select(ResourceRow, sort_expr.label("sort_value")),
             type_, status, q, tag_ids, category_id, exclude_collected,
             taken_date, untimed, timeline_visible, timeline_media,
-            category_ids, uncategorized,
+            category_ids, uncategorized, None, map_visible, map_only,
         )
         cursor_key = after_key
         if cursor_key is None and after_created_at is not None and sort == "createdAt":
@@ -874,6 +922,11 @@ class ResourceRepository:
         exif_taken_at: str | None = None,
         exif_lat: float | None = None,
         exif_lng: float | None = None,
+        exif_camera: str | None = None,
+        exif_lens: str | None = None,
+        exif_iso: int | None = None,
+        exif_aperture: str | None = None,
+        exif_shutter: str | None = None,
         commit: bool = True,
     ) -> FileRow:
         """写入库内文件行。"""
@@ -894,6 +947,11 @@ class ResourceRepository:
             exif_taken_at=exif_taken_at,
             exif_lat=exif_lat,
             exif_lng=exif_lng,
+            exif_camera=exif_camera,
+            exif_lens=exif_lens,
+            exif_iso=exif_iso,
+            exif_aperture=exif_aperture,
+            exif_shutter=exif_shutter,
             created_at=ts,
         )
         self._session.add(row)
@@ -1028,14 +1086,24 @@ class ResourceRepository:
         taken_at: str | None,
         lat: float | None,
         lng: float | None,
+        camera: str | None = None,
+        lens: str | None = None,
+        iso: int | None = None,
+        aperture: str | None = None,
+        shutter: str | None = None,
     ) -> bool:
-        """回填：更新拍摄时间与 GPS（只写库，不改原图）。"""
+        """回填：更新拍摄时间、GPS 与相机 EXIF（只写库，不改原图）。"""
         row = await self._session.get(FileRow, file_id)
         if row is None:
             return False
         row.exif_taken_at = taken_at
         row.exif_lat = lat
         row.exif_lng = lng
+        row.exif_camera = camera
+        row.exif_lens = lens
+        row.exif_iso = iso
+        row.exif_aperture = aperture
+        row.exif_shutter = shutter
         return True
 
     async def delete_file_row(self, file_id: int, *, commit: bool = True) -> None:
@@ -1306,7 +1374,7 @@ class ResourceRepository:
         return (await self._session.execute(stmt)).scalars().first()
 
     async def recent(self, limit: int = 12) -> list[Resource]:
-        """最近入库的活跃资源。"""
+        """??????????"""
         stmt = (
             select(ResourceRow)
             .where(ResourceRow.status == ResourceStatus.ACTIVE.value)
@@ -1318,6 +1386,28 @@ class ResourceRepository:
         await self.attach_categories(resources)
         await self.attach_scrape_pending(resources)
         return resources
+
+    async def previews_by_type(self, limit: int = 3) -> dict[str, list[str]]:
+        """Recent thumbnail stack per media type for the home overview."""
+        previews: dict[str, list[str]] = {}
+        for type_ in (ResourceType.IMAGE, ResourceType.VIDEO):
+            stmt = (
+                select(ResourceRow.id, FileRow.id)
+                .join(FileRow, FileRow.resource_id == ResourceRow.id)
+                .where(
+                    ResourceRow.status == ResourceStatus.ACTIVE.value,
+                    ResourceRow.type == type_.value,
+                    FileRow.role == FILE_ROLE_THUMBNAIL,
+                )
+                .order_by(ResourceRow.created_at.desc(), ResourceRow.id.desc())
+                .limit(limit)
+            )
+            rows = (await self._session.execute(stmt)).all()
+            previews[type_.value] = [
+                _file_content_url(int(resource_id), int(file_id))
+                for resource_id, file_id in rows
+            ]
+        return previews
 
     async def stats(self) -> dict[str, Any]:
         """资源统计：一次 GROUP BY status+type，再 SUM 体积。
@@ -1392,6 +1482,8 @@ class ResourceRepository:
         date_from: str | None = None,
         date_to: str | None = None,
         include_untimed: bool = False,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
         """Single-type timeline tiles; unknown time optional."""
         primary = aliased(FileRow)
@@ -1404,6 +1496,8 @@ class ResourceRepository:
             exclude_category_ids=exclude_category_ids,
             tag_ids=tag_ids,
             timeline_visible=None if include_all else True,
+            map_visible=map_visible,
+            map_only=map_only,
         )
         join = (
             select(
@@ -1412,6 +1506,8 @@ class ResourceRepository:
                 ResourceRow.type,
                 primary.id.label("file_id"),
                 primary.exif_taken_at,
+                primary.exif_lat,
+                primary.exif_lng,
                 primary.width,
                 primary.height,
                 primary.duration,
@@ -1436,7 +1532,7 @@ class ResourceRepository:
         )
 
         def to_tile(row) -> dict[str, Any]:
-            rid, title, type_, file_id, taken_at, width, height, duration, thumb_id = row
+            rid, title, type_, file_id, taken_at, lat, lng, width, height, duration, thumb_id = row
             content_id = thumb_id if thumb_id is not None else file_id
             return {
                 "id": int(rid),
@@ -1446,6 +1542,8 @@ class ResourceRepository:
                 "height": int(height) if height is not None else None,
                 "duration": float(duration) if duration is not None else None,
                 "taken_at": taken_at,
+                "lat": float(lat) if lat is not None else None,
+                "lng": float(lng) if lng is not None else None,
                 "thumbnail_path": _file_content_url(int(rid), int(content_id)),
             }
 
@@ -2176,3 +2274,112 @@ class CollectionRepository:
 
     async def _attach_thumbnails(self, resources: list[Resource]) -> list[Resource]:
         return await ResourceRepository(self._session).attach_listed(resources)
+
+class TimelineNoteRepository:
+    """日期备注 / 保存时间线备注。"""
+
+    def __init__(self, session: AsyncSession):
+        self._session = session
+
+    def _to_domain(self, row: TimelineNoteRow) -> TimelineNote:
+        return TimelineNote(
+            id=row.id,
+            scope=row.scope,
+            date=row.date,
+            saved_view_id=row.saved_view_id,
+            title=row.title,
+            body=row.body,
+            location_name=row.location_name,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    async def get_date(self, date: str) -> TimelineNote | None:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "date", TimelineNoteRow.date == date
+            )
+        )).scalars().first()
+        return self._to_domain(row) if row is not None else None
+
+    async def get_saved_view(self, saved_view_id: int) -> TimelineNote | None:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "saved_view",
+                TimelineNoteRow.saved_view_id == saved_view_id,
+            )
+        )).scalars().first()
+        return self._to_domain(row) if row is not None else None
+
+    async def list_dates(self, date_from: str | None, date_to: str | None) -> list[TimelineNote]:
+        stmt = select(TimelineNoteRow).where(TimelineNoteRow.scope == "date")
+        if date_from:
+            stmt = stmt.where(TimelineNoteRow.date >= date_from[:10])
+        if date_to:
+            stmt = stmt.where(TimelineNoteRow.date <= date_to[:10])
+        rows = (await self._session.execute(stmt.order_by(TimelineNoteRow.date))).scalars().all()
+        return [self._to_domain(row) for row in rows]
+
+    async def upsert_date(
+        self, date: str, title: str, body: str | None, location_name: str | None
+    ) -> TimelineNote:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "date", TimelineNoteRow.date == date
+            )
+        )).scalars().first()
+        if row is None:
+            row = TimelineNoteRow(scope="date", date=date, title="")
+            self._session.add(row)
+        row.title = title
+        row.body = body
+        row.location_name = location_name
+        row.updated_at = db_now()
+        await self._session.commit()
+        await self._session.refresh(row)
+        return self._to_domain(row)
+
+    async def upsert_saved_view(
+        self, saved_view_id: int, title: str, body: str | None, location_name: str | None
+    ) -> TimelineNote:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "saved_view",
+                TimelineNoteRow.saved_view_id == saved_view_id,
+            )
+        )).scalars().first()
+        if row is None:
+            row = TimelineNoteRow(scope="saved_view", saved_view_id=saved_view_id, title="")
+            self._session.add(row)
+        row.title = title
+        row.body = body
+        row.location_name = location_name
+        row.updated_at = db_now()
+        await self._session.commit()
+        await self._session.refresh(row)
+        return self._to_domain(row)
+
+    async def delete_date(self, date: str) -> bool:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "date", TimelineNoteRow.date == date
+            )
+        )).scalars().first()
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True
+
+    async def delete_saved_view(self, saved_view_id: int) -> bool:
+        row = (await self._session.execute(
+            select(TimelineNoteRow).where(
+                TimelineNoteRow.scope == "saved_view",
+                TimelineNoteRow.saved_view_id == saved_view_id,
+            )
+        )).scalars().first()
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.commit()
+        return True

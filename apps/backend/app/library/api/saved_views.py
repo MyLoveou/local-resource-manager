@@ -1,5 +1,5 @@
 """保存的时间线筛选器 API。"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.schemas import (
@@ -21,11 +21,14 @@ def _service(session: AsyncSession = Depends(get_session)) -> SavedViewService:
 
 @router.get("", response_model=SavedViewList)
 async def list_saved_views(
+    kind: str = Query(default="timeline"),
     scope: str | None = Query(default=None),
     type_: ResourceType | None = Query(default=None, alias="type"),
     service: SavedViewService = Depends(_service),
 ) -> SavedViewList:
-    return SavedViewList(items=await service.list(scope or (type_.value if type_ else None)))
+    if kind not in ("timeline", "map"):
+        raise HTTPException(status_code=422, detail="invalid kind")
+    return SavedViewList(items=await service.list(scope or (type_.value if type_ else None), kind))
 
 
 @router.get("/{view_id}", response_model=SavedView)

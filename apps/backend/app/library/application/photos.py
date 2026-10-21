@@ -6,20 +6,36 @@ import asyncio
 from pathlib import Path
 
 from app.library.application.media_probe import ProbeFields, probe_media
+from app.library.application.packages import ResourcePackage, layout_for
+from app.library.application.packages.resource_package import default_library_store
 from app.library.application.schemas import (
     PhotoBackfillResult,
     PhotoTile,
     PhotoTimeline,
     PhotoTimelineDay,
+    ThumbnailBackfillResult,
 )
-from app.library.domain.models import CategoryRule, ResourceType
+from app.library.application.thumbnails import source_for_grid_thumbnail
+from app.library.domain.media_types import FILE_ROLE_THUMBNAIL
+from app.library.domain.models import CategoryRule, ResourceStatus, ResourceType
 from app.library.infrastructure.repositories import CategoryRepository, ResourceRepository
+from app.shared.config import settings
+from app.shared.fs.file_ops import FileOps
 
 
 class PhotoTimelineService:
-    def __init__(self, resources: ResourceRepository, categories: CategoryRepository | None = None):
+    def __init__(
+        self,
+        resources: ResourceRepository,
+        categories: CategoryRepository | None = None,
+        *,
+        store_root: Path | None = None,
+        file_ops: FileOps | None = None,
+    ):
         self._resources = resources
         self._categories = categories or CategoryRepository(resources.session)
+        self._store_root = store_root or default_library_store(settings.db_path)
+        self._ops = file_ops or FileOps()
 
     async def timeline(
         self,
@@ -36,6 +52,8 @@ class PhotoTimelineService:
         include_untimed: bool = False,
         type_: ResourceType | None = None,
         category_ids: list[int] | None = None,
+        map_visible: bool | None = None,
+        map_only: bool = False,
     ) -> PhotoTimeline:
         if scope is None:
             scope = (type_ or ResourceType.IMAGE).value
@@ -63,6 +81,8 @@ class PhotoTimelineService:
                 date_from=date_from,
                 date_to=date_to,
                 include_untimed=include_untimed,
+                map_visible=map_visible,
+                map_only=map_only,
             ))
 
         days_by_date: dict[str, list[dict]] = {}
@@ -144,16 +164,45 @@ class PhotoTimelineService:
             taken = result.exif_taken_at if result.exif_taken_at is not None else row.exif_taken_at
             lat = result.exif_lat if result.exif_lat is not None else row.exif_lat
             lng = result.exif_lng if result.exif_lng is not None else row.exif_lng
-            if taken is None and lat is None and lng is None:
+            camera = result.exif_camera if result.exif_camera is not None else row.exif_camera
+            lens = result.exif_lens if result.exif_lens is not None else row.exif_lens
+            iso = result.exif_iso if result.exif_iso is not None else row.exif_iso
+            aperture = result.exif_aperture if result.exif_aperture is not None else row.exif_aperture
+            shutter = result.exif_shutter if result.exif_shutter is not None else row.exif_shutter
+            camera_changed = (
+                camera != row.exif_camera
+                or lens != row.exif_lens
+                or iso != row.exif_iso
+                or aperture != row.exif_aperture
+                or shutter != row.exif_shutter
+            )
+            if (
+                taken is None
+                and lat is None
+                and lng is None
+                and camera is None
+                and lens is None
+                and iso is None
+                and aperture is None
+                and shutter is None
+            ):
                 skipped += 1
                 continue
             if taken != row.exif_taken_at:
                 taken_updated += 1
             if lat != row.exif_lat or lng != row.exif_lng:
                 gps_updated += 1
-            if taken != row.exif_taken_at or lat != row.exif_lat or lng != row.exif_lng:
+            if taken != row.exif_taken_at or lat != row.exif_lat or lng != row.exif_lng or camera_changed:
                 await self._resources.update_file_exif(
-                    file_id, taken_at=taken, lat=lat, lng=lng
+                    file_id,
+                    taken_at=taken,
+                    lat=lat,
+                    lng=lng,
+                    camera=camera,
+                    lens=lens,
+                    iso=iso,
+                    aperture=aperture,
+                    shutter=shutter,
                 )
         await self._resources.commit()
         return PhotoBackfillResult(
