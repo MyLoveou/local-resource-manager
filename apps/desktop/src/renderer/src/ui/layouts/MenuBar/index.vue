@@ -33,6 +33,7 @@ const activeKey = computed(() => {
   if (route.path.startsWith('/library/')) return '/library'
   if (route.path.startsWith('/collections/')) return '/collections'
   if (route.path.startsWith('/timelines/')) return '/timelines'
+  if (route.path.startsWith('/maps/')) return '/maps'
   return route.path
 })
 

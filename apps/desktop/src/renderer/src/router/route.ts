@@ -55,6 +55,24 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/maps',
+    name: 'Maps',
+    component: () => import('@/views/Maps/index.vue'),
+    meta: {
+      title: '地图',
+      icon: 'map',
+    },
+  },
+  {
+    path: '/maps/:id',
+    name: 'MapDetail',
+    component: () => import('@/views/MapDetail/index.vue'),
+    meta: {
+      title: '地图',
+      hideMenu: true,
+    },
+  },
+  {
     path: '/timelines/:id',
     name: 'TimelineDetail',
     component: () => import('@/views/TimelineDetail/index.vue'),

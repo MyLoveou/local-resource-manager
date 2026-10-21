@@ -1,9 +1,12 @@
 import client from './client'
 import type { SavedView, SavedViewFilters, TimelineScope } from '@/domain'
 
-export async function listSavedViews(scope?: TimelineScope): Promise<SavedView[]> {
+export async function listSavedViews(
+  scope?: TimelineScope,
+  kind: 'timeline' | 'map' = 'timeline',
+): Promise<SavedView[]> {
   const { data } = await client.get<{ items: SavedView[] }>('/library/saved-views', {
-    params: scope ? { scope } : undefined,
+    params: { scope, kind },
   })
   return data.items
 }
@@ -14,13 +17,14 @@ export async function getSavedView(id: number): Promise<SavedView> {
 }
 
 export async function createSavedView(body: {
+  kind?: 'timeline' | 'map'
   scope: TimelineScope
   name: string
   filters: SavedViewFilters
   sort?: string
 }): Promise<SavedView> {
   const { data } = await client.post<SavedView>('/library/saved-views', {
-    kind: 'timeline',
+    kind: body.kind ?? 'timeline',
     ...body,
   })
   return data

@@ -2,13 +2,13 @@
   <n-modal
     :show="show"
     preset="card"
-    :title="view ? '编辑时间线' : '新建时间线'"
+    :title="dialogTitle"
     style="width: 620px"
     :mask-closable="!busy"
     @update:show="(value: boolean) => $emit('update:show', value)"
   >
     <div class="timeline-editor">
-      <n-input v-model:value="name" placeholder="时间线名称，例如 2026 漫展" />
+      <n-input v-model:value="name" :placeholder="namePlaceholder" />
       <n-radio-group v-model:value="scope">
         <n-space>
           <n-radio value="image">图片</n-radio>
@@ -101,8 +101,17 @@ const props = defineProps<{
   show: boolean
   view?: SavedView | null
   initialScope?: TimelineScope
+  kind?: 'timeline' | 'map'
 }>()
 const library = useLibraryStore()
+const kind = computed(() => props.kind ?? 'timeline')
+const kindLabel = computed(() => kind.value === 'map' ? '地图' : '时间线')
+const namePlaceholder = computed(() =>
+  kind.value === 'map' ? '地图规则名称，例如 2026 旅行' : '时间线名称，例如 2026 漫展'
+)
+const dialogTitle = computed(() => {
+  return props.view ? `编辑${kindLabel.value}` : `新建${kindLabel.value}`
+})
 const emit = defineEmits<{
   'update:show': [value: boolean]
   saved: [view: SavedView]
@@ -190,13 +199,13 @@ async function save(): Promise<void> {
   try {
     const saved = props.view
       ? await patchSavedView(props.view.id, { scope: scope.value, name: title, filters })
-      : await createSavedView({ scope: scope.value, name: title, filters })
+      : await createSavedView({ kind: kind.value, scope: scope.value, name: title, filters })
     library.invalidate({ savedViews: true, home: true })
     emit('saved', saved)
     emit('update:show', false)
-    notify.toast.success(props.view ? '时间线已保存' : '时间线已创建')
+    notify.toast.success(props.view ? `${kindLabel.value}已保存` : `${kindLabel.value}已创建`)
   } catch (error) {
-    notify.fromError(error, { context: '保存时间线' })
+    notify.fromError(error, { context: `保存${kindLabel.value}` })
   } finally {
     busy.value = false
   }

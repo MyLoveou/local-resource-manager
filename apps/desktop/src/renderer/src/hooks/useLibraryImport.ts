@@ -32,6 +32,7 @@ export function useLibraryImport() {
   const sourceKind = ref<ImportSourceKind>(SourceKind.FILE)
   const storageKind = ref<StorageKind>('owned')
   const timelineVisible = ref(true)
+  const mapVisible = ref(true)
   const categoryIds = ref<number[]>([])
   const tagIds = ref<number[]>([])
   const categoryOptions = ref<{ label: string; value: number }[]>([])
@@ -52,6 +53,8 @@ export function useLibraryImport() {
     errorMessage.value = ''
     categoryIds.value = []
     tagIds.value = []
+    timelineVisible.value = true
+    mapVisible.value = true
     busy.value = false
   }
 
@@ -130,6 +133,11 @@ export function useLibraryImport() {
           !timelineVisible.value
             ? false
             : undefined,
+        mapVisible:
+          (resourceType.value === 'image' || resourceType.value === 'video') &&
+          !mapVisible.value
+            ? false
+            : undefined,
         categoryIds: categoryIds.value.length ? categoryIds.value : undefined,
         tagNames: tagIds.value.length
           ? tagIds.value.flatMap((id) => {
@@ -176,6 +184,7 @@ export function useLibraryImport() {
     sourceKind,
     storageKind,
     timelineVisible,
+    mapVisible,
     categoryIds,
     tagIds,
     categoryOptions,

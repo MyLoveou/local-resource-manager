@@ -9,6 +9,8 @@ export interface PhotoTile {
   duration?: number | null
   thumbnailPath?: string | null
   takenAt?: string | null
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface PhotoTimelineDay {

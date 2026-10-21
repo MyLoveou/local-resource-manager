@@ -48,6 +48,15 @@
           计入时间线（默认按拍摄时间）
         </n-checkbox>
       </div>
+      <div v-if="isMapMedia" class="timeline-toggle">
+        <n-checkbox
+          :checked="mapVisible"
+          :disabled="busy"
+          @update:checked="(checked: boolean) => (mapVisible = checked)"
+        >
+          加入地图（需要 GPS）
+        </n-checkbox>
+      </div>
       <p class="hint">整理信息（可选，应用整批）</p>
       <n-select
         v-model:value="categoryIds"
@@ -112,6 +121,7 @@ const {
   sourceKind,
   storageKind,
   timelineVisible,
+  mapVisible,
   categoryIds,
   tagIds,
   categoryOptions,
@@ -128,6 +138,9 @@ const {
 } = useLibraryImport()
 
 const isTimelineMedia = computed(
+  () => resourceType.value === 'image' || resourceType.value === 'video'
+)
+const isMapMedia = computed(
   () => resourceType.value === 'image' || resourceType.value === 'video'
 )
 

@@ -50,6 +50,7 @@ export interface Resource {
   scrapePending?: boolean
   /** 照片时间线：null/undefined=按 EXIF 自动；true/false=手动 */
   timelineVisible?: boolean | null
+  mapVisible?: boolean | null
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -128,6 +129,15 @@ export interface ResourceFile {
   exifLat?: number | null
   /** WGS84 经度 */
   exifLng?: number | null
+  /** 机身 */
+  exifCamera?: string | null
+  /** 镜头 */
+  exifLens?: string | null
+  exifIso?: number | null
+  /** 光圈，如 f/2.8 */
+  exifAperture?: string | null
+  /** 快门，如 1/125 */
+  exifShutter?: string | null
   createdAt?: string | null
 }
 
@@ -204,6 +214,8 @@ export interface ResourcePageQuery {
   untimed?: boolean
   timelineVisible?: boolean
   timelineMedia?: boolean
+  mapVisible?: boolean
+  mapOnly?: boolean
   /** 主库默认隐藏合集成员；true 时一并返回 */
   includeCollected?: boolean
   sort?: string

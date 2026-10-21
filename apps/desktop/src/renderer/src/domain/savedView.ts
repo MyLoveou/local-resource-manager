@@ -16,7 +16,7 @@ export interface SavedViewFilters {
 
 export interface SavedView {
   id: number
-  kind: 'timeline'
+  kind: 'timeline' | 'map'
   scope: TimelineScope
   name: string
   filters: SavedViewFilters
