@@ -52,6 +52,11 @@
           <template v-if="isImage">
             <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
             <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div v-if="shown(cameraLabel)" class="info-panel-meta">机身 {{ cameraLabel }}</div>
+            <div v-if="shown(lensLabel)" class="info-panel-meta">镜头 {{ lensLabel }}</div>
+            <div v-if="shown(isoLabel)" class="info-panel-meta">ISO {{ isoLabel }}</div>
+            <div v-if="shown(apertureLabel)" class="info-panel-meta">光圈 {{ apertureLabel }}</div>
+            <div v-if="shown(shutterLabel)" class="info-panel-meta">快门 {{ shutterLabel }}</div>
             <div class="info-panel-meta">
               <n-checkbox
                 :checked="timelineEffective"
@@ -59,6 +64,15 @@
                 @update:checked="toggleTimeline"
               >
                 计入时间线
+              </n-checkbox>
+            </div>
+            <div v-if="hasGps || resource.mapVisible === true" class="info-panel-meta">
+              <n-checkbox
+                :checked="mapEffective"
+                :disabled="mapBusy"
+                @update:checked="toggleMap"
+              >
+                加入地图
               </n-checkbox>
             </div>
           </template>
@@ -77,6 +91,15 @@
                 @update:checked="toggleTimeline"
               >
                 计入时间线
+              </n-checkbox>
+            </div>
+            <div v-if="hasGps || resource.mapVisible === true" class="info-panel-meta">
+              <n-checkbox
+                :checked="mapEffective"
+                :disabled="mapBusy"
+                @update:checked="toggleMap"
+              >
+                加入地图
               </n-checkbox>
             </div>
             <div v-if="subtitleNames.length" class="info-panel-meta">
@@ -405,6 +428,7 @@ const todoInput = ref('')
 const todoBusy = ref(false)
 const subtitleBusy = ref(false)
 const timelineBusy = ref(false)
+const mapBusy = ref(false)
 
 const draft = reactive<MetadataDraft>({
   title: '',
@@ -573,6 +597,19 @@ const timelineEffective = computed(() => {
   return Boolean(primaryTakenAt(row))
 })
 
+const hasGps = computed(() => {
+  const file = primaryFile()
+  return file?.exifLat != null && file?.exifLng != null
+})
+
+const mapEffective = computed(() => {
+  const row = resource.value
+  if (!row || (row.type !== 'image' && row.type !== 'video')) return false
+  if (row.mapVisible === true) return true
+  if (row.mapVisible === false) return false
+  return hasGps.value
+})
+
 async function toggleTimeline(checked: boolean): Promise<void> {
   const id = selectedId.value
   if (id === null) return
@@ -586,6 +623,22 @@ async function toggleTimeline(checked: boolean): Promise<void> {
     notify.fromError(error, { context: '?????' })
   } finally {
     timelineBusy.value = false
+  }
+}
+
+async function toggleMap(checked: boolean): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  mapBusy.value = true
+  try {
+    const patched = await patchResource(id, { mapVisible: checked })
+    resource.value = patched
+    applyResourceToDraft(patched)
+    library.invalidate({ resources: [patched.type], savedViews: true, home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新地图状态失败' })
+  } finally {
+    mapBusy.value = false
   }
 }
 
@@ -605,6 +658,14 @@ const takenAtLabel = computed(() => {
   const local = takenAtToLocalInput(primaryFile()?.exifTakenAt)
   return local ? local.replace('T', ' ') : '—'
 })
+const cameraLabel = computed(() => primaryFile()?.exifCamera || '—')
+const lensLabel = computed(() => primaryFile()?.exifLens || '—')
+const isoLabel = computed(() => {
+  const iso = primaryFile()?.exifIso
+  return iso != null && iso > 0 ? String(iso) : '—'
+})
+const apertureLabel = computed(() => primaryFile()?.exifAperture || '—')
+const shutterLabel = computed(() => primaryFile()?.exifShutter || '—')
 const durationLabel = computed(() => formatDuration(primaryFile()?.duration))
 const fpsLabel = computed(() => formatFps(primaryFile()?.fps))
 const bitrateLabel = computed(() => formatBitrate(primaryFile()?.bitrate))
