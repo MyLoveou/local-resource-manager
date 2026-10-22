@@ -7,7 +7,6 @@ from app.shared.db.base import Base, _SQLITE_NOW
 
 class ResourceRow(Base):
     __tablename__ = "resources"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False, default="")
@@ -30,6 +29,87 @@ class ResourceRow(Base):
     sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
     timeline_visible: Mapped[int | None] = mapped_column(Integer)
     map_visible: Mapped[int | None] = mapped_column(Integer)
+
+
+class WorkRow(Base):
+    __tablename__ = "works"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
+class PersonRow(Base):
+    __tablename__ = "persons"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    cover_resource_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
+class PersonAliasRow(Base):
+    __tablename__ = "person_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("persons.id", ondelete="CASCADE"), nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class ResourcePersonRow(Base):
+    __tablename__ = "resource_persons"
+
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    person_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("persons.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
+class CharacterRow(Base):
+    __tablename__ = "characters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    work_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("works.id", ondelete="SET NULL")
+    )
+    description: Mapped[str | None] = mapped_column(Text)
+    cover_resource_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
+class CharacterAliasRow(Base):
+    __tablename__ = "character_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    character_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("characters.id", ondelete="CASCADE"), nullable=False
+    )
+    alias: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class ResourceCharacterRow(Base):
+    __tablename__ = "resource_characters"
+
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), primary_key=True
+    )
+    character_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("characters.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class CategoryRow(Base):

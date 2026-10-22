@@ -3,11 +3,13 @@ from fastapi import APIRouter
 
 from app.library.api import (
     categories,
+    characters,
     collections,
     health,
     home,
     imports,
     overview,
+    persons,
     photos,
     resources,
     saved_views,
@@ -34,3 +36,5 @@ router.include_router(saved_views.router)
 router.include_router(home.router)
 router.include_router(tags.router)
 router.include_router(timeline_notes.router)
+router.include_router(characters.router)
+router.include_router(persons.router)

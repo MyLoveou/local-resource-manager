@@ -90,6 +90,52 @@ class WorkCatalog(ApiModel):
     source_id: str | None = None
 
 
+class PersonBrief(ApiModel):
+    id: int
+    name: str
+
+
+class Person(ApiModel):
+    id: int | None = None
+    name: str
+    description: str | None = None
+    cover_resource_id: int | None = None
+    cover_path: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    resource_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CharacterBrief(ApiModel):
+    id: int
+    name: str
+    work_id: int | None = None
+    work_name: str | None = None
+
+
+class Character(ApiModel):
+    id: int | None = None
+    name: str
+    work_id: int | None = None
+    work_name: str | None = None
+    description: str | None = None
+    cover_resource_id: int | None = None
+    cover_path: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    resource_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class Work(ApiModel):
+    id: int | None = None
+    name: str
+    description: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class Resource(ApiModel):
     """库内一条资源。图片/视频是单文件作品；anime/av 是整部作品，集在 seasons/episodes。"""
 
@@ -112,6 +158,8 @@ class Resource(ApiModel):
     scrape_pending: bool = False  # 有未确认的 search 候选
     timeline_visible: bool | None = None  # 照片时间线：None=按 EXIF 自动
     map_visible: bool | None = None  # 地图：None=有 GPS 自动纳入
+    characters: list[CharacterBrief] = Field(default_factory=list)
+    persons: list[PersonBrief] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     categories: list["Category"] = Field(default_factory=list)
@@ -239,6 +287,8 @@ class SavedViewFilters(ApiModel):
     image: CategoryRule = Field(default_factory=CategoryRule)
     video: CategoryRule = Field(default_factory=CategoryRule)
     tag_ids: list[int] = Field(default_factory=list)
+    character_ids: list[int] = Field(default_factory=list)
+    person_ids: list[int] = Field(default_factory=list)
     date_from: str | None = None
     date_to: str | None = None
     include_untimed: bool = False

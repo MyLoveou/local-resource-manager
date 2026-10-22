@@ -37,6 +37,8 @@ async def photo_timeline(
     include_untimed: bool = Query(default=False, alias="includeUntimed"),
     map_visible: bool | None = Query(default=None, alias="mapVisible"),
     map_only: bool = Query(default=False, alias="mapOnly"),
+    character_ids: list[int] | None = Query(default=None, alias="characterIds"),
+    person_ids: list[int] | None = Query(default=None, alias="personIds"),
     service: PhotoTimelineService = Depends(_service),
 ) -> PhotoTimeline:
     """Timeline by scope (image/video/media); per-type include/exclude rules."""
@@ -70,6 +72,8 @@ async def photo_timeline(
         include_untimed=include_untimed,
         map_visible=map_visible,
         map_only=map_only,
+        character_ids=character_ids,
+        person_ids=person_ids,
     )
 
 

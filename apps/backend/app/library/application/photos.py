@@ -55,6 +55,8 @@ class PhotoTimelineService:
         category_ids: list[int] | None = None,
         map_visible: bool | None = None,
         map_only: bool = False,
+        character_ids: list[int] | None = None,
+        person_ids: list[int] | None = None,
     ) -> PhotoTimeline:
         if scope is None:
             scope = (type_ or ResourceType.IMAGE).value
@@ -84,6 +86,8 @@ class PhotoTimelineService:
                 include_untimed=include_untimed,
                 map_visible=map_visible,
                 map_only=map_only,
+                character_ids=character_ids,
+                person_ids=person_ids,
             ))
 
         days_by_date: dict[str, list[dict]] = {}

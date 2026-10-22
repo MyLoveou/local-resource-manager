@@ -8,6 +8,8 @@ from app.library.domain.models import SourceKind
 from app.shared.models import ApiModel
 from app.library.domain.models import (
     Category,
+    Character,
+    Person,
     Resource,
     ResourceType,
     SavedView,
@@ -15,6 +17,7 @@ from app.library.domain.models import (
     StorageKind,
     Tag,
     TimelineNote,
+    Work,
 )
 from app.shared.value_objects import Rating
 
@@ -168,6 +171,8 @@ class ResourcePatch(ApiModel):
     exif_taken_at: str | None = None
     timeline_visible: bool | None = None
     map_visible: bool | None = None
+    character_ids: list[int] | None = None
+    person_ids: list[int] | None = None
 
 
 class PhotoTile(ApiModel):
@@ -297,6 +302,56 @@ class SavedViewList(ApiModel):
     items: list[SavedView]
 
 
+class CharacterCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=200)
+    work_name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    cover_resource_id: int | None = None
+    aliases: list[str] = Field(default_factory=list)
+
+
+class CharacterPatch(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    work_name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    cover_resource_id: int | None = None
+    aliases: list[str] | None = None
+
+
+class CharacterMergeRequest(ApiModel):
+    source_id: int
+
+
+class CharacterList(ApiModel):
+    items: list[Character] = Field(default_factory=list)
+
+
+class PersonCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    cover_resource_id: int | None = None
+    aliases: list[str] = Field(default_factory=list)
+
+
+class PersonPatch(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    cover_resource_id: int | None = None
+    aliases: list[str] | None = None
+
+
+class PersonMergeRequest(ApiModel):
+    source_id: int
+
+
+class PersonList(ApiModel):
+    items: list[Person] = Field(default_factory=list)
+
+
+class WorkList(ApiModel):
+    items: list[Work] = Field(default_factory=list)
+
+
 class TagList(ApiModel):
     """标签词表只读列表。"""
 
@@ -325,10 +380,23 @@ class ImportJobCreated(ApiModel):
 class ResourceBatchRequest(ApiModel):
     """批量操作（移回收站/恢复/彻底删除/批量打标）；ids 去重后逐条处理，200 返回每项结果。"""
 
-    action: Literal["trash", "restore", "purge", "add_tags", "add_categories", "remove_categories"]
+    action: Literal[
+        "trash",
+        "restore",
+        "purge",
+        "add_tags",
+        "add_categories",
+        "remove_categories",
+        "add_characters",
+        "remove_characters",
+        "add_persons",
+        "remove_persons",
+    ]
     ids: list[int] = Field(min_length=1, max_length=200)
     tag_names: list[str] | None = None
     category_ids: list[int] | None = None
+    character_ids: list[int] | None = None
+    person_ids: list[int] | None = None
 
 
 class CollectionExportRequest(ApiModel):

@@ -78,6 +78,8 @@ async def list_resources(
     timeline_media: bool = Query(default=False, alias="timelineMedia"),
     map_visible: bool | None = Query(default=None, alias="mapVisible"),
     map_only: bool = Query(default=False, alias="mapOnly"),
+    character_ids: list[int] | None = Query(default=None, alias="characterIds"),
+    person_ids: list[int] | None = Query(default=None, alias="personIds"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
@@ -101,6 +103,8 @@ async def list_resources(
         timeline_media=timeline_media,
         map_visible=map_visible,
         map_only=map_only,
+        character_ids=character_ids,
+        person_ids=person_ids,
     )
 
 
@@ -112,7 +116,7 @@ async def batch_resources(
     """批量 trash / restore / purge / add_tags；逐条处理，失败项返回明细。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).batch(
-        body.action, body.ids, body.tag_names, body.category_ids
+        body.action, body.ids, body.tag_names, body.category_ids, body.character_ids, body.person_ids
     )
 
 

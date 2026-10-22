@@ -147,6 +147,8 @@ class LibraryQueryService:
         timeline_media: bool = False,
         map_visible: bool | None = None,
         map_only: bool = False,
+        character_ids: list[int] | None = None,
+        person_ids: list[int] | None = None,
     ) -> ResourcePage:
         """分页列表。q/tagIds/categoryId/sort 服务端过滤；非法 sort 422。
 
@@ -181,6 +183,8 @@ class LibraryQueryService:
             and not timeline_media
             and map_visible is None
             and not map_only
+            and not character_ids
+            and not person_ids
         )
         if mixed_ok:
             items, total = await self._resources.list_mixed(
@@ -219,6 +223,8 @@ class LibraryQueryService:
             timeline_media=timeline_media,
             map_visible=map_visible,
             map_only=map_only,
+            character_ids=character_ids,
+            person_ids=person_ids,
         )
         has_more = len(items) > limit
         items = items[:limit]
@@ -238,6 +244,8 @@ class LibraryQueryService:
             timeline_media=timeline_media,
             map_visible=map_visible,
             map_only=map_only,
+            character_ids=character_ids,
+            person_ids=person_ids,
         )
         last = items[-1] if items else None
         next_key = keys[-1] if has_more and keys else None
@@ -262,6 +270,8 @@ class LibraryQueryService:
         data.pop("tag_names", None)
         data.pop("category_ids", None)
         data.pop("exif_taken_at", None)
+        data.pop("character_ids", None)
+        data.pop("person_ids", None)
         if "author" in data:
             raw_author = data["author"]
             data["author"] = raw_author.strip() if isinstance(raw_author, str) and raw_author.strip() else None
@@ -295,6 +305,22 @@ class LibraryQueryService:
             if primary is None:
                 raise ValueError("primary file missing")
             await self._resources.update_file_exif_taken_at(primary.id, normalized, commit=False)
+        if "character_ids" in body.model_fields_set:
+            ids = list(dict.fromkeys(body.character_ids or []))
+            from app.library.infrastructure.repositories import CharacterRepository
+            character_repo = CharacterRepository(self._resources.session)
+            selected = [await character_repo.get(character_id) for character_id in ids]
+            if any(character is None for character in selected):
+                raise HTTPException(status_code=422, detail="character not found")
+            await character_repo.set_resources(resource_id, ids)
+        if "person_ids" in body.model_fields_set:
+            ids = list(dict.fromkeys(body.person_ids or []))
+            from app.library.infrastructure.repositories import PersonRepository
+            person_repo = PersonRepository(self._resources.session)
+            selected = [await person_repo.get(person_id) for person_id in ids]
+            if any(person is None for person in selected):
+                raise HTTPException(status_code=422, detail="person not found")
+            await person_repo.set_resources(resource_id, ids)
         await self._resources.commit()
         return await self._resources.get(resource_id)
 
@@ -448,6 +474,8 @@ class LibraryQueryService:
         ids: list[int],
         tag_names: list[str] | None = None,
         category_ids: list[int] | None = None,
+        character_ids: list[int] | None = None,
+        person_ids: list[int] | None = None,
     ) -> ResourceBatchResult:
         """逐条独立提交；部分失败不影响已成功项。"""
         unique: list[int] = []
@@ -461,6 +489,11 @@ class LibraryQueryService:
         failed: list[ResourceBatchFailedItem] = []
         names = [name.strip() for name in (tag_names or []) if name.strip()]
         category_ids = list(dict.fromkeys(category_ids or []))
+        character_ids = list(dict.fromkeys(character_ids or []))
+        person_ids = list(dict.fromkeys(person_ids or []))
+        from app.library.infrastructure.repositories import CharacterRepository, PersonRepository
+        character_repo = CharacterRepository(self._resources.session)
+        person_repo = PersonRepository(self._resources.session)
         for rid in unique:
             try:
                 if action == "trash":
@@ -507,6 +540,32 @@ class LibraryQueryService:
                     else:
                         current.difference_update(int(cid) for cid in category_ids)
                     await self._resources.set_categories(rid, sorted(current))
+                    ok.append(rid)
+                elif action in ("add_characters", "remove_characters"):
+                    if not character_ids:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="empty characters"))
+                        continue
+                    selected = [await character_repo.get(cid) for cid in character_ids]
+                    if any(item is None for item in selected):
+                        failed.append(ResourceBatchFailedItem(id=rid, message="character not found"))
+                        continue
+                    if action == "add_characters":
+                        await character_repo.add_resources([rid], character_ids)
+                    else:
+                        await character_repo.remove_resources([rid], character_ids)
+                    ok.append(rid)
+                elif action in ("add_persons", "remove_persons"):
+                    if not person_ids:
+                        failed.append(ResourceBatchFailedItem(id=rid, message="empty persons"))
+                        continue
+                    selected = [await person_repo.get(pid) for pid in person_ids]
+                    if any(item is None for item in selected):
+                        failed.append(ResourceBatchFailedItem(id=rid, message="person not found"))
+                        continue
+                    if action == "add_persons":
+                        await person_repo.add_resources([rid], person_ids)
+                    else:
+                        await person_repo.remove_resources([rid], person_ids)
                     ok.append(rid)
                 else:
                     failed.append(ResourceBatchFailedItem(id=rid, message="invalid action"))
