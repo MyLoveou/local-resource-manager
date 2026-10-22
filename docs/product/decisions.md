@@ -805,6 +805,16 @@
 - **落点**：`0021_map_visibility.sql`、`PhotoMap`、`Maps`、`MapDetail`、`ImportWizard`、`InfoPanel`、`saved_views`
 - 状态：有效（2026-10-21；204 tests，typecheck/build/lint 通过，Electron 手验待跑）
 
+### D-20261022-01 · 角色 + 作品维度第一刀
+
+- 日期：2026-10-22
+- 场景：cosplay/漫展照片需要按角色和作品组织；现有分类/标签无法提供角色聚合页和角色筛选
+- **决定**：先建立 `works`、`characters`、`character_aliases`、`resource_characters`；角色支持名称/别名/作品/简介/封面（默认取最近关联资源），资源多角色关联，支持批量设置、合并；角色页聚合图片/视频、时间线和所在合集；类型页/时间线/地图支持按角色筛选；扮演者暂用标签过渡，不建一等实体
+- **为何**：角色和作品是 cosplay 内容的核心维度；先把内容维度做通，再决定扮演者实体和人脸识别
+- **不选**：把 coser 塞进 characters；把角色当普通标签；本轮做人脸识别/自动人物聚类；把作品做成复杂系列模型
+- **落点**：`0023_character_dimension.sql`、`characters.py`、`CharacterEditorModal`、`Characters`、`CharacterDetail`、`InfoPanel`、`BrowseControls`、`PhotoTimeline`
+- 状态：有效（2026-10-22；后端 213 tests，前端 typecheck/build/lint 通过，UI 手验待跑）
+
 ---
 
 ## 已撤销 / 被取代
