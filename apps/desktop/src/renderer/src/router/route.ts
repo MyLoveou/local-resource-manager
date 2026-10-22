@@ -46,6 +46,42 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/characters',
+    name: 'Characters',
+    component: () => import('@/views/Characters/index.vue'),
+    meta: {
+      title: '角色',
+      icon: 'account-group',
+    },
+  },
+  {
+    path: '/characters/:id',
+    name: 'CharacterDetail',
+    component: () => import('@/views/CharacterDetail/index.vue'),
+    meta: {
+      title: '角色',
+      hideMenu: true,
+    },
+  },
+  {
+    path: '/persons',
+    name: 'Persons',
+    component: () => import('@/views/Persons/index.vue'),
+    meta: {
+      title: '扮演者',
+      icon: 'account-star',
+    },
+  },
+  {
+    path: '/persons/:id',
+    name: 'PersonDetail',
+    component: () => import('@/views/PersonDetail/index.vue'),
+    meta: {
+      title: '扮演者',
+      hideMenu: true,
+    },
+  },
+  {
     path: '/timelines',
     name: 'Timelines',
     component: () => import('@/views/Timelines/index.vue'),

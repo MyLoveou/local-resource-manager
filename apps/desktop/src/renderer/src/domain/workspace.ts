@@ -7,6 +7,8 @@ export interface LibraryContext {
   view: ViewMode
   categoryIds: number[]
   tagIds: number[]
+  characterIds: number[]
+  personIds: number[]
   q: string
   sort: string
   order: 'asc' | 'desc'
@@ -20,6 +22,8 @@ export function defaultLibraryContext(type?: ResourceType): LibraryContext {
     view: 'grid',
     categoryIds: [],
     tagIds: [],
+    characterIds: [],
+    personIds: [],
     q: '',
     sort: 'createdAt',
     order: 'desc',

@@ -32,6 +32,28 @@
       :value="session.tagIds"
       @update:value="(value: number[]) => patch({ tagIds: value ?? [] })"
     />
+    <n-select
+      size="small"
+      class="browse-controls__characters"
+      multiple
+      filterable
+      clearable
+      placeholder="角色"
+      :options="characterOptions"
+      :value="session.characterIds"
+      @update:value="(value: number[]) => patch({ characterIds: value ?? [] })"
+    />
+    <n-select
+      size="small"
+      class="browse-controls__characters"
+      multiple
+      filterable
+      clearable
+      placeholder="扮演者"
+      :options="personOptions"
+      :value="session.personIds"
+      @update:value="(value: number[]) => patch({ personIds: value ?? [] })"
+    />
     <n-checkbox
       v-if="props.status !== 'trashed' && !session.q"
       size="small"
@@ -46,7 +68,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton, NCheckbox, NInput, NSelect } from 'naive-ui'
-import { getTags } from '@/infrastructure/http'
+import { getTags, listCharacters, listPersons } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useViewOptionsStore } from '@/application/stores/viewOptions'
@@ -64,6 +86,8 @@ const library = useLibraryStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const localQ = ref(session.value.q)
 const tagOptions = ref<{ label: string; value: number }[]>([])
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personOptions = ref<{ label: string; value: number }[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined
 
 const sortOptions = computed(() =>
@@ -82,6 +106,8 @@ watch(
 
 onMounted(() => {
   void loadTags()
+  void loadCharacters()
+  void loadPersons()
 })
 
 watch(
@@ -97,6 +123,27 @@ watch(
     void loadTags()
   }
 )
+
+async function loadCharacters(): Promise<void> {
+  try {
+    const characters = await listCharacters()
+    characterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} · ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch {
+    characterOptions.value = []
+  }
+}
+
+async function loadPersons(): Promise<void> {
+  try {
+    const persons = await listPersons()
+    personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
+  } catch {
+    personOptions.value = []
+  }
+}
 
 async function loadTags(): Promise<void> {
   // 本类标签：给类型时只拉该类型实际打过的标签；全库页不传类型（全部标签）
@@ -115,6 +162,8 @@ function patch(partial: {
   sort?: string
   order?: 'asc' | 'desc'
   tagIds?: number[]
+  characterIds?: number[]
+  personIds?: number[]
   categoryIds?: number[]
   uncategorized?: boolean
   includeCollected?: boolean
@@ -156,6 +205,11 @@ function toggleOrder(): void {
 
 .browse-controls__tags {
   min-width: 160px;
+  flex: 1;
+}
+
+.browse-controls__characters {
+  min-width: 150px;
   flex: 1;
 }
 </style>

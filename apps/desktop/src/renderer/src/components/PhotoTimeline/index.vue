@@ -30,6 +30,28 @@
         class="photo-timeline__tags"
         @update:value="(value: number[]) => (tagIds = value ?? [])"
       />
+      <n-select
+        size="small"
+        multiple
+        clearable
+        filterable
+        placeholder="角色"
+        :options="characterOptions"
+        :value="characterIds"
+        class="photo-timeline__characters"
+        @update:value="(value: number[]) => (characterIds = value ?? [])"
+      />
+      <n-select
+        size="small"
+        multiple
+        clearable
+        filterable
+        placeholder="扮演者"
+        :options="personOptions"
+        :value="personIds"
+        class="photo-timeline__characters"
+        @update:value="(value: number[]) => (personIds = value ?? [])"
+      />
       <n-checkbox
         size="small"
         :checked="includeAll"
@@ -173,6 +195,8 @@ import {
   getDateNotes,
   getPhotoTimeline,
   getTags,
+  listCharacters,
+  listPersons,
   type TimelineNote,
 } from '@/infrastructure/http'
 import type {
@@ -189,6 +213,8 @@ const props = withDefaults(defineProps<{
   type?: ResourceType
   categoryIds?: number[]
   tagIds?: number[]
+  characterIds?: number[]
+  personIds?: number[]
   scope?: TimelineScope
   rules?: SavedViewFilters
   hideFilters?: boolean
@@ -198,11 +224,15 @@ const props = withDefaults(defineProps<{
   type: 'image',
   categoryIds: () => [],
   tagIds: () => [],
+  characterIds: () => [],
+  personIds: () => [],
   scope: undefined,
   rules: () => ({
     image: { include: [], exclude: [] },
     video: { include: [], exclude: [] },
     tagIds: [],
+    characterIds: [],
+    personIds: [],
     includeUntimed: false,
   }),
   hideFilters: false,
@@ -229,8 +259,12 @@ const includeUntimed = ref(false)
 const year = ref<number | null>(null)
 const month = ref<number | null>(null)
 const tagIds = ref<number[]>([...props.tagIds])
+const characterIds = ref<number[]>([...props.characterIds])
+const personIds = ref<number[]>([...props.personIds])
 
 const tagOptions = ref<{ label: string; value: number }[]>([])
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personOptions = ref<{ label: string; value: number }[]>([])
 const scrollRef = ref<HTMLElement | null>(null)
 const { width: scrollWidth } = useElementSize(scrollRef)
 const layoutWidth = computed(() => Math.max(1, scrollWidth.value - 32))
@@ -409,6 +443,16 @@ async function load(): Promise<void> {
     const videoRule: CategoryRule = props.scope ? props.rules.video : { include: [], exclude: [] }
     timeline.value = await getPhotoTimeline({
       scope,
+      characterIds: props.characterIds.length
+        ? props.characterIds
+        : props.hideFilters
+          ? (props.rules.characterIds.length ? props.rules.characterIds : undefined)
+          : (characterIds.value.length ? characterIds.value : undefined),
+      personIds: props.personIds.length
+        ? props.personIds
+        : props.hideFilters
+          ? (props.rules.personIds?.length ? props.rules.personIds : undefined)
+          : (personIds.value.length ? personIds.value : undefined),
       includeAll: includeAll.value,
       year: year.value ?? undefined,
       month: month.value ?? undefined,
@@ -460,6 +504,8 @@ watch(
     year,
     month,
     tagIds,
+    characterIds,
+    personIds,
     () => props.type,
     () => props.categoryIds,
     () => props.scope,
@@ -476,6 +522,20 @@ watch(
   () => props.tagIds,
   (value) => {
     tagIds.value = [...value]
+  },
+)
+
+watch(
+  () => props.characterIds,
+  (value) => {
+    characterIds.value = [...value]
+  },
+)
+
+watch(
+  () => props.personIds,
+  (value) => {
+    personIds.value = [...value]
   },
 )
 
@@ -527,9 +587,32 @@ watch(
   }
 )
 
+async function loadPersons(): Promise<void> {
+  try {
+    const persons = await listPersons()
+    personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
+  } catch {
+    personOptions.value = []
+  }
+}
+
+async function loadCharacters(): Promise<void> {
+  try {
+    const characters = await listCharacters()
+    characterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} ? ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch {
+    characterOptions.value = []
+  }
+}
+
 onMounted(() => {
   readQuery()
   void load()
+  void loadCharacters()
+  void loadPersons()
   void getTags(props.type).then((tags) => {
     tagOptions.value = tags.flatMap((tag) =>
       tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]

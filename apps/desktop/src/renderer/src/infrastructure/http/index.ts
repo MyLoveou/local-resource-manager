@@ -6,6 +6,25 @@ export { default as client } from './client'
 export { getOverview } from './overview'
 export { getHome } from './home'
 export {
+  listCharacters,
+  getCharacter,
+  createCharacter,
+  patchCharacter,
+  deleteCharacter,
+  mergeCharacter,
+  getCharacterCollections,
+  listWorks,
+} from './characters'
+export {
+  listPersons,
+  getPerson,
+  createPerson,
+  patchPerson,
+  deletePerson,
+  mergePerson,
+  getPersonCharacters,
+} from './persons'
+export {
   getCategoryTree,
   createCategory,
   patchCategory,

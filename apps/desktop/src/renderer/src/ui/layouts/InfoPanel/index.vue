@@ -355,12 +355,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
-import { getResource, getCategoryTree, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import {
@@ -429,6 +429,10 @@ const todoBusy = ref(false)
 const subtitleBusy = ref(false)
 const timelineBusy = ref(false)
 const mapBusy = ref(false)
+const characterBusy = ref(false)
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personBusy = ref(false)
+const personOptions = ref<{ label: string; value: number }[]>([])
 
 const draft = reactive<MetadataDraft>({
   title: '',
@@ -602,6 +606,64 @@ const hasGps = computed(() => {
   return file?.exifLat != null && file?.exifLng != null
 })
 
+const characterIds = computed(() =>
+  (resource.value?.characters ?? []).map((character) => character.id),
+)
+const personIds = computed(() =>
+  (resource.value?.persons ?? []).map((person) => person.id),
+)
+
+async function loadCharacterOptions(): Promise<void> {
+  try {
+    const characters = await listCharacters()
+    characterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} ? ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch {
+    characterOptions.value = []
+  }
+}
+
+async function loadPersonOptions(): Promise<void> {
+  try {
+    const persons = await listPersons()
+    personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
+  } catch {
+    personOptions.value = []
+  }
+}
+
+async function updatePersons(ids: number[]): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  personBusy.value = true
+  try {
+    const patched = await patchResource(id, { personIds: ids })
+    resource.value = patched
+    library.invalidate({ resources: [patched.type], home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '???????' })
+  } finally {
+    personBusy.value = false
+  }
+}
+
+async function updateCharacters(ids: number[]): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  characterBusy.value = true
+  try {
+    const patched = await patchResource(id, { characterIds: ids })
+    resource.value = patched
+    library.invalidate({ resources: [patched.type], home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新角色失败' })
+  } finally {
+    characterBusy.value = false
+  }
+}
+
 const mapEffective = computed(() => {
   const row = resource.value
   if (!row || (row.type !== 'image' && row.type !== 'video')) return false
@@ -620,7 +682,7 @@ async function toggleTimeline(checked: boolean): Promise<void> {
     applyResourceToDraft(patched)
     library.invalidate({ resources: [patched.type], home: true })
   } catch (error) {
-    notify.fromError(error, { context: '?????' })
+    notify.fromError(error, { context: '更新地图状态失败' })
   } finally {
     timelineBusy.value = false
   }
@@ -1316,6 +1378,10 @@ async function handlePurge(): Promise<void> {
     deleting.value = false
   }
 }
+onMounted(() => {
+  void loadCharacterOptions()
+  void loadPersonOptions()
+})
 </script>
 
 <style scoped lang="less">
@@ -1388,6 +1454,10 @@ async function handlePurge(): Promise<void> {
   &--open {
     cursor: zoom-in;
   }
+}
+
+.info-panel-characters {
+  margin-top: 8px;
 }
 
 .info-panel-title {

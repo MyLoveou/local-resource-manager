@@ -62,6 +62,8 @@ function mapQuery(filters?: {
   image?: { include: number[]; exclude: number[] }
   video?: { include: number[]; exclude: number[] }
   tagIds?: number[]
+  characterIds?: number[]
+  personIds?: number[]
   dateFrom?: string | null
   dateTo?: string | null
 }) {
@@ -71,6 +73,8 @@ function mapQuery(filters?: {
     imageRule: filters?.image,
     videoRule: filters?.video,
     tagIds: filters?.tagIds?.length ? filters.tagIds : undefined,
+    characterIds: filters?.characterIds?.length ? filters.characterIds : undefined,
+    personIds: filters?.personIds?.length ? filters.personIds : undefined,
     dateFrom: filters?.dateFrom,
     dateTo: filters?.dateTo,
     includeUntimed: true,

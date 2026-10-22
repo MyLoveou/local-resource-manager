@@ -50,6 +50,8 @@ export interface ResourcePatch {
   exifTakenAt?: string | null
   timelineVisible?: boolean | null
   mapVisible?: boolean | null
+  characterIds?: number[]
+  personIds?: number[]
 }
 
 /** 分页获取资源 */
@@ -77,6 +79,8 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       timelineMedia: query.timelineMedia,
       mapVisible: query.mapVisible,
       mapOnly: query.mapOnly,
+      characterIds: query.characterIds,
+      personIds: query.personIds,
       sort: query.sort,
       order: query.order,
     },
@@ -157,6 +161,10 @@ export type ResourceBatchAction =
   | 'add_tags'
   | 'add_categories'
   | 'remove_categories'
+  | 'add_characters'
+  | 'remove_characters'
+  | 'add_persons'
+  | 'remove_persons'
 
 export interface ResourceBatchFailedItem {
   id: number
@@ -173,12 +181,16 @@ export async function batchResources(
   ids: number[],
   tagNames?: string[],
   categoryIds?: number[],
+  characterIds?: number[],
+  personIds?: number[],
 ): Promise<ResourceBatchResult> {
   const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', {
     action,
     ids,
     ...(tagNames ? { tagNames } : {}),
     ...(categoryIds ? { categoryIds } : {}),
+    ...(characterIds ? { characterIds } : {}),
+    ...(personIds ? { personIds } : {}),
   })
   for (const id of ids) invalidateResourceCache(id)
   if (action === 'add_tags') invalidateTags()

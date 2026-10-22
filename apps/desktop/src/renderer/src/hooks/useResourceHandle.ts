@@ -55,8 +55,10 @@ export function useResourceHandle() {
     ids: number[],
     tagNames?: string[],
     categoryIds?: number[],
+    characterIds?: number[],
+    personIds?: number[],
   ): Promise<ResourceBatchResult> => {
-    return batchResourcesApi(action, ids, tagNames, categoryIds)
+    return batchResourcesApi(action, ids, tagNames, categoryIds, characterIds, personIds)
   }
 
   return {

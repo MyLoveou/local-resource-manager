@@ -17,6 +17,8 @@ export async function getPhotoTimeline(params: {
   includeUntimed?: boolean
   mapVisible?: boolean
   mapOnly?: boolean
+  characterIds?: number[]
+  personIds?: number[]
   type?: 'image' | 'video'
   categoryIds?: number[]
 }): Promise<PhotoTimeline> {
@@ -38,6 +40,8 @@ export async function getPhotoTimeline(params: {
       includeUntimed: params.includeUntimed,
       mapVisible: params.mapVisible,
       mapOnly: params.mapOnly,
+      characterIds: params.characterIds,
+      personIds: params.personIds,
     },
   })
   return data

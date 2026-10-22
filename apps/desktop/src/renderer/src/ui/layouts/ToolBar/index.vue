@@ -64,6 +64,12 @@
         <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCategories">
           设置分类
         </n-button>
+        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCharacters">
+          设置角色
+        </n-button>
+        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchPersons">
+          设置扮演者
+        </n-button>
         <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="startScrape">
           获取元数据
         </n-button>
@@ -186,6 +192,72 @@
         </div>
       </template>
     </n-modal>
+    <n-modal
+      v-model:show="batchCharacterOpen"
+      preset="card"
+      title="设置角色"
+      style="width: 420px"
+      :mask-closable="!batchCharacterBusy"
+    >
+      <n-select
+        v-model:value="batchCharacterIds"
+        multiple
+        filterable
+        clearable
+        placeholder="选择角色（AND）"
+        :options="batchCharacterOptions"
+        :disabled="batchCharacterBusy"
+      />
+      <template #footer>
+        <div class="tool-bar__collection-actions">
+          <n-button size="small" :disabled="batchCharacterBusy" @click="batchCharacterOpen = false">
+            取消
+          </n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="batchCharacterBusy"
+            :disabled="batchCharacterBusy || batchCharacterIds.length === 0"
+            @click="confirmBatchCharacters"
+          >
+            加入角色
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+    <n-modal
+      v-model:show="batchPersonOpen"
+      preset="card"
+      title="设置扮演者"
+      style="width: 420px"
+      :mask-closable="!batchPersonBusy"
+    >
+      <n-select
+        v-model:value="batchPersonIds"
+        multiple
+        filterable
+        clearable
+        placeholder="选择扮演者（AND）"
+        :options="batchPersonOptions"
+        :disabled="batchPersonBusy"
+      />
+      <template #footer>
+        <div class="tool-bar__collection-actions">
+          <n-button size="small" :disabled="batchPersonBusy" @click="batchPersonOpen = false">
+            取消
+          </n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="batchPersonBusy"
+            :disabled="batchPersonBusy || batchPersonIds.length === 0"
+            @click="confirmBatchPersons"
+          >
+            加入扮演者
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </header>
 </template>
 
@@ -204,7 +276,7 @@ import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useCategoryTreeStore } from '@/application/stores/categoryTree'
-import { getCategoryTree, getResource } from '@/infrastructure/http'
+import { getCategoryTree, getResource, listCharacters, listPersons } from '@/infrastructure/http'
 import { flattenCategoryTree } from '@/domain'
 import { addCollectionItems, createCollection, listCollections } from '@/infrastructure/http/collections'
 import { createWorkDirectory } from '@/infrastructure/http/workbench'
@@ -390,6 +462,88 @@ async function confirmBatchCategories(mode: 'add' | 'remove'): Promise<void> {
     batchCategoryOpen.value = false
   } finally {
     batchCategoryBusy.value = false
+  }
+}
+
+const batchCharacterOpen = ref(false)
+const batchCharacterBusy = ref(false)
+const batchCharacterIds = ref<number[]>([])
+const batchCharacterOptions = ref<{ label: string; value: number }[]>([])
+
+async function openBatchCharacters(): Promise<void> {
+  if (selectedCount.value === 0) return
+  batchCharacterOpen.value = true
+  batchCharacterIds.value = []
+  batchCharacterBusy.value = false
+  try {
+    const characters = await listCharacters()
+    batchCharacterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} · ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch (error) {
+    notify.fromError(error, { context: '读取角色' })
+  }
+}
+
+async function confirmBatchCharacters(): Promise<void> {
+  if (batchCharacterIds.value.length === 0) return
+  batchCharacterBusy.value = true
+  try {
+    const ok = await shellBatch.runBatch(
+      'add_characters',
+      undefined,
+      undefined,
+      [...batchCharacterIds.value],
+    )
+    if (!ok) {
+      notify.toast.error('设置角色未完全成功，请查看批量提示')
+      return
+    }
+    batchCharacterOpen.value = false
+  } finally {
+    batchCharacterBusy.value = false
+  }
+}
+
+const batchPersonOpen = ref(false)
+const batchPersonBusy = ref(false)
+const batchPersonIds = ref<number[]>([])
+const batchPersonOptions = ref<{ label: string; value: number }[]>([])
+
+async function openBatchPersons(): Promise<void> {
+  if (selectedCount.value === 0) return
+  batchPersonOpen.value = true
+  batchPersonIds.value = []
+  batchPersonBusy.value = false
+  try {
+    batchPersonOptions.value = (await listPersons()).map((person) => ({
+      label: person.name,
+      value: person.id,
+    }))
+  } catch (error) {
+    notify.fromError(error, { context: '读取扮演者' })
+  }
+}
+
+async function confirmBatchPersons(): Promise<void> {
+  if (batchPersonIds.value.length === 0) return
+  batchPersonBusy.value = true
+  try {
+    const ok = await shellBatch.runBatch(
+      'add_persons',
+      undefined,
+      undefined,
+      undefined,
+      [...batchPersonIds.value],
+    )
+    if (!ok) {
+      notify.toast.error('设置扮演者未完全成功，请查看批量提示')
+      return
+    }
+    batchPersonOpen.value = false
+  } finally {
+    batchPersonBusy.value = false
   }
 }
 

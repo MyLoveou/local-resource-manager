@@ -15,6 +15,8 @@ export function useResourcePage(options: {
   sort?: MaybeRefOrGetter<string>
   order?: MaybeRefOrGetter<'asc' | 'desc'>
   tagIds?: MaybeRefOrGetter<number[]>
+  characterIds?: MaybeRefOrGetter<number[]>
+  personIds?: MaybeRefOrGetter<number[]>
   categoryIds?: MaybeRefOrGetter<number[]>
   uncategorized?: MaybeRefOrGetter<boolean>
   includeCollected?: MaybeRefOrGetter<boolean>
@@ -43,6 +45,8 @@ export function useResourcePage(options: {
   const sort = computed(() => toValue(options.sort) ?? 'createdAt')
   const order = computed(() => toValue(options.order) ?? 'desc')
   const tagIds = computed(() => toValue(options.tagIds) ?? [])
+  const characterIds = computed(() => toValue(options.characterIds) ?? [])
+  const personIds = computed(() => toValue(options.personIds) ?? [])
   const categoryIds = computed(() => toValue(options.categoryIds) ?? [])
   const uncategorized = computed(() => toValue(options.uncategorized) ?? false)
   const includeCollected = computed(() => toValue(options.includeCollected) ?? false)
@@ -79,6 +83,8 @@ export function useResourcePage(options: {
         order: order.value,
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
+        characterIds: characterIds.value.length ? characterIds.value : undefined,
+        personIds: personIds.value.length ? personIds.value : undefined,
         categoryIds: categoryIds.value.length ? categoryIds.value : undefined,
         uncategorized: uncategorized.value,
         includeCollected: includeCollected.value,
@@ -141,6 +147,8 @@ export function useResourcePage(options: {
         order: order.value,
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
+        characterIds: characterIds.value.length ? characterIds.value : undefined,
+        personIds: personIds.value.length ? personIds.value : undefined,
         categoryIds: categoryIds.value.length ? categoryIds.value : undefined,
         uncategorized: uncategorized.value,
         includeCollected: includeCollected.value,
@@ -203,7 +211,7 @@ export function useResourcePage(options: {
     }
   )
 
-  watch([type, q, sort, order, tagIds, categoryIds, uncategorized, includeCollected, takenDate, untimed, timelineVisible, timelineMedia], () => {
+  watch([type, q, sort, order, tagIds, characterIds, personIds, categoryIds, uncategorized, includeCollected, takenDate, untimed, timelineVisible, timelineMedia], () => {
     void reset()
   })
 

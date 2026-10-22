@@ -32,6 +32,8 @@ const router = useRouter()
 const activeKey = computed(() => {
   if (route.path.startsWith('/library/')) return '/library'
   if (route.path.startsWith('/collections/')) return '/collections'
+  if (route.path.startsWith('/characters/')) return '/characters'
+  if (route.path.startsWith('/persons/')) return '/persons'
   if (route.path.startsWith('/timelines/')) return '/timelines'
   if (route.path.startsWith('/maps/')) return '/maps'
   return route.path

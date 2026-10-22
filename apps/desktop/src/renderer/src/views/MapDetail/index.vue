@@ -63,6 +63,8 @@ const rules = computed<SavedViewFilters>(() => savedView.value?.filters ?? {
   image: { include: [], exclude: [] },
   video: { include: [], exclude: [] },
   tagIds: [],
+  characterIds: [],
+  personIds: [],
   includeUntimed: true,
 })
 const title = computed(() => savedView.value?.name ?? '全部地图')

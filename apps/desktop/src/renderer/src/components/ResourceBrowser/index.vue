@@ -137,6 +137,8 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   sort: () => session.value.sort,
   order: () => session.value.order,
   tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
+  characterIds: () => session.value.characterIds,
+  personIds: () => session.value.personIds,
   categoryIds: () => props.categoryIdsOverride ?? session.value.categoryIds,
   uncategorized: () =>
     props.ignoreUncategorized === true ? false : session.value.uncategorized,
@@ -231,7 +233,13 @@ function ids(type: ResourceType): number[] {
   )
 }
 
-async function runBatch(action: ResourceBatchAction, tagNames?: string[], categoryIds?: number[]): Promise<boolean> {
+async function runBatch(
+  action: ResourceBatchAction,
+  tagNames?: string[],
+  categoryIds?: number[],
+  characterIds?: number[],
+  personIds?: number[],
+): Promise<boolean> {
   const ids = [...selectedIds.value]
   if (ids.length === 0) {
     batchMessage.value = '没有选中的资源'
@@ -249,6 +257,8 @@ async function runBatch(action: ResourceBatchAction, tagNames?: string[], catego
         ids.slice(index, index + BATCH_LIMIT),
         tagNames,
         categoryIds,
+        characterIds,
+        personIds,
       )
       ok += result.ok.length
       failed += result.failed.length
@@ -261,6 +271,12 @@ async function runBatch(action: ResourceBatchAction, tagNames?: string[], catego
       scope.categories = props.type ? [props.type] : true
     }
     if (action === 'add_tags') scope.tags = true
+    if (
+      action === 'add_characters' ||
+      action === 'remove_characters' ||
+      action === 'add_persons' ||
+      action === 'remove_persons'
+    ) scope.savedViews = true
     if (action === 'trash' || action === 'restore' || action === 'purge') {
       scope.collections = true
     }

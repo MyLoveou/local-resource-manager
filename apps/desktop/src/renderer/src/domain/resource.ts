@@ -4,6 +4,8 @@
  */
 
 import type { StorageKind } from './libraryTypes'
+import type { CharacterBrief } from './character'
+import type { PersonBrief } from './person'
 
 /** 资源类型。anime/av 是作品，不是单集。 */
 export type ResourceType =
@@ -51,6 +53,8 @@ export interface Resource {
   /** 照片时间线：null/undefined=按 EXIF 自动；true/false=手动 */
   timelineVisible?: boolean | null
   mapVisible?: boolean | null
+  characters?: CharacterBrief[]
+  persons?: PersonBrief[]
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -216,6 +220,8 @@ export interface ResourcePageQuery {
   timelineMedia?: boolean
   mapVisible?: boolean
   mapOnly?: boolean
+  characterIds?: number[]
+  personIds?: number[]
   /** 主库默认隐藏合集成员；true 时一并返回 */
   includeCollected?: boolean
   sort?: string

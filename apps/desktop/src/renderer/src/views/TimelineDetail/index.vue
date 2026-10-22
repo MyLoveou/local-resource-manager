@@ -97,6 +97,8 @@ const rules = computed<SavedViewFilters>(() => savedView.value?.filters ?? {
   image: { include: [], exclude: [] },
   video: { include: [], exclude: [] },
   tagIds: [],
+  characterIds: [],
+  personIds: [],
   includeUntimed: false,
 })
 const title = computed(() => savedView.value?.name ?? '全部媒体')

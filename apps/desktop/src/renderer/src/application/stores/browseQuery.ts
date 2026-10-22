@@ -13,6 +13,8 @@ export type BrowseSession = {
   sort: string
   order: 'asc' | 'desc'
   tagIds: number[]
+  characterIds: number[]
+  personIds: number[]
   categoryIds: number[]
   uncategorized: boolean
   view: ViewMode
@@ -27,6 +29,8 @@ export function defaultSession(): BrowseSession {
     sort: 'createdAt',
     order: 'desc',
     tagIds: [],
+    characterIds: [],
+    personIds: [],
     categoryIds: [],
     uncategorized: false,
     view: 'grid',
@@ -54,6 +58,8 @@ export const useBrowseQueryStore = defineStore(
       const current = sessions.value[key]
       // 兼容旧持久化数据
       if (!Array.isArray(current.categoryIds)) current.categoryIds = []
+      if (!Array.isArray(current.characterIds)) current.characterIds = []
+      if (!Array.isArray(current.personIds)) current.personIds = []
       if (current.uncategorized === undefined) current.uncategorized = false
       if (!current.view) current.view = 'grid'
       if (current.savedViewId === undefined) current.savedViewId = null

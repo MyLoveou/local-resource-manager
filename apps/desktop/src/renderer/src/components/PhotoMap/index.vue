@@ -400,6 +400,8 @@ async function loadPoints(): Promise<void> {
       includeUntimed: true,
       mapVisible: true,
       mapOnly: true,
+      characterIds: props.rules.characterIds.length ? props.rules.characterIds : undefined,
+      personIds: props.rules.personIds.length ? props.rules.personIds : undefined,
     })
     points.value = collectPoints(timeline)
     imageIds = points.value.filter((point) => point.kind === 'image').map((point) => point.id)

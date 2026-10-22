@@ -63,6 +63,22 @@
         placeholder="标签（AND）"
         :options="tagOptions"
       />
+      <n-select
+        v-model:value="characterIds"
+        multiple
+        filterable
+        clearable
+        placeholder="角色（AND）"
+        :options="characterOptions"
+      />
+      <n-select
+        v-model:value="personIds"
+        multiple
+        filterable
+        clearable
+        placeholder="扮演者（AND）"
+        :options="personOptions"
+      />
       <n-checkbox v-model:checked="includeUntimed">包含未知时间</n-checkbox>
       <div class="timeline-editor__actions">
         <n-button @click="$emit('update:show', false)">取消</n-button>
@@ -88,7 +104,7 @@ import {
   NSpace,
 } from 'naive-ui'
 import { notify } from '@/application/notify'
-import { createSavedView, getCategoryTree, getTags, patchSavedView } from '@/infrastructure/http'
+import { createSavedView, getCategoryTree, getTags, listCharacters, listPersons, patchSavedView } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type {
   CategoryNode,
@@ -124,12 +140,16 @@ const imageExclude = ref<number[]>([])
 const videoInclude = ref<number[]>([])
 const videoExclude = ref<number[]>([])
 const tagIds = ref<number[]>([])
+const characterIds = ref<number[]>([])
+const personIds = ref<number[]>([])
 const dateRange = ref<[number, number] | null>(null)
 const includeUntimed = ref(false)
 const busy = ref(false)
 const imageTree = ref<CategoryNode[]>([])
 const videoTree = ref<CategoryNode[]>([])
 const tagOptions = ref<{ label: string; value: number }[]>([])
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personOptions = ref<{ label: string; value: number }[]>([])
 
 const imageOptions = computed(() => flatten(imageTree.value))
 const videoOptions = computed(() => flatten(videoTree.value))
@@ -165,6 +185,8 @@ function resetForm(): void {
   videoInclude.value = [...(view?.filters.video.include ?? [])]
   videoExclude.value = [...(view?.filters.video.exclude ?? [])]
   tagIds.value = [...(view?.filters.tagIds ?? [])]
+  characterIds.value = [...(view?.filters.characterIds ?? [])]
+  personIds.value = [...(view?.filters.personIds ?? [])]
   const from = isoToTs(view?.filters.dateFrom)
   const to = isoToTs(view?.filters.dateTo)
   dateRange.value = from !== null && to !== null ? [from, to] : null
@@ -172,16 +194,23 @@ function resetForm(): void {
 }
 
 async function loadOptions(): Promise<void> {
-  const [images, videos, tags] = await Promise.all([
+  const [images, videos, tags, characters, persons] = await Promise.all([
     getCategoryTree('image'),
     getCategoryTree('video'),
     getTags(),
+    listCharacters(),
+    listPersons(),
   ])
   imageTree.value = images
   videoTree.value = videos
   tagOptions.value = tags.flatMap((tag) =>
     tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
   )
+  characterOptions.value = characters.map((character) => ({
+    label: character.workName ? `${character.name} ? ${character.workName}` : character.name,
+    value: character.id,
+  }))
+  personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
 }
 
 async function save(): Promise<void> {
@@ -191,6 +220,8 @@ async function save(): Promise<void> {
     image: { include: imageInclude.value, exclude: imageExclude.value },
     video: { include: videoInclude.value, exclude: videoExclude.value },
     tagIds: tagIds.value,
+    characterIds: characterIds.value,
+    personIds: personIds.value,
     dateFrom: dateRange.value ? tsToIso(dateRange.value[0]) : null,
     dateTo: dateRange.value ? tsToIso(dateRange.value[1]) : null,
     includeUntimed: includeUntimed.value,

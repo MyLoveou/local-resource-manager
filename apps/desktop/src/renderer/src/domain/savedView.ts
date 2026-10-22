@@ -9,6 +9,8 @@ export interface SavedViewFilters {
   image: CategoryRule
   video: CategoryRule
   tagIds: number[]
+  characterIds: number[]
+  personIds: number[]
   dateFrom?: string | null
   dateTo?: string | null
   includeUntimed: boolean
