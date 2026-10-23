@@ -20,6 +20,7 @@
 | [`../requirements/features/lrm-ui.md`](../requirements/features/lrm-ui.md) | 主需求：三栏布局与页面结构（已定稿） |
 | [`../requirements/features/wch-ui.md`](../requirements/features/wch-ui.md) | 工作台增量 UI（草案） |
 | [`../requirements/features/scrape-confirm-ux/界面方向.md`](../requirements/features/scrape-confirm-ux/界面方向.md) | 刮削确认分栏 |
+| [`../requirements/features/ui-shell-redesign/设计.md`](../requirements/features/ui-shell-redesign/设计.md) | Shell、导航分组、顶部工具组、选中态操作栏、AI 中心入口 |
 
 ## 待补规格
 

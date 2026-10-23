@@ -4,10 +4,17 @@
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_all
+
 BACKEND = Path(SPECPATH).parent
 
 # Conda 发行版把 OpenSSL/ffi/sqlite 等运行库放在 Library/bin（PyInstaller 默认不收集）
-binaries = []
+binaries, datas, hiddenimports = [], [], []
+for package in ("onnxruntime", "tokenizers"):
+    _datas, _binaries, _hidden = collect_all(package)
+    datas += _datas
+    binaries += _binaries
+    hiddenimports += _hidden
 _conda_bin = Path(sys.base_prefix) / "Library" / "bin"
 for _name in (
     "libssl-3-x64.dll",
@@ -28,13 +35,13 @@ a = Analysis(
     [str(BACKEND / "run_server.py")],
     pathex=[str(BACKEND)],
     binaries=binaries,
-    datas=[
+    datas=datas + [
         (
             str(BACKEND / "app" / "shared" / "db" / "migrations"),
             "app/shared/db/migrations",
         )
     ],
-    hiddenimports=[
+    hiddenimports=hiddenimports + [
         # uvicorn 动态导入的 loop/protocol/lifespan 实现
         "uvicorn.logging",
         "uvicorn.loops.auto",

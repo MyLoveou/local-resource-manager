@@ -5,6 +5,7 @@ import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 import UpdateBanner from '@/components/UpdateBanner/index.vue'
 import InfoPanel from '@/ui/layouts/InfoPanel/index.vue'
+import AppShell from '@/ui/layouts/AppShell/index.vue'
 import ImageViewerOverlay from '@/components/ImageViewerOverlay/index.vue'
 import VideoPlayerOverlay from '@/components/VideoPlayerOverlay/index.vue'
 import AudioPlayerOverlay from '@/components/AudioPlayerOverlay/index.vue'
@@ -32,44 +33,28 @@ useWatchAutoRefresh()
     :theme-overrides="themeOverrides"
   >
     <n-message-provider>
-      <div class="container">
-        <ToolBar />
-        <UpdateBanner />
-        <div class="app-container">
+      <AppShell>
+        <template #top>
+          <ToolBar />
+        </template>
+        <template #banner>
+          <UpdateBanner />
+        </template>
+        <template #sidebar>
           <MenuBar :items="menuItems" />
-          <main class="main-content">
-            <router-view />
-            <ImageViewerOverlay />
-            <VideoPlayerOverlay />
-            <AudioPlayerOverlay />
-            <ModelPreviewOverlay />
-          </main>
+        </template>
+        <router-view />
+        <ImageViewerOverlay />
+        <VideoPlayerOverlay />
+        <AudioPlayerOverlay />
+        <ModelPreviewOverlay />
+        <template #inspector>
           <InfoPanel />
-        </div>
-      </div>
+        </template>
+      </AppShell>
     </n-message-provider>
   </n-config-provider>
 </template>
 
 <style scoped lang="less">
-.container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-
-  .app-container {
-    display: flex;
-    flex-direction: row;
-    flex: 1;
-    min-height: 0;
-  }
-}
-
-.main-content {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
 </style>

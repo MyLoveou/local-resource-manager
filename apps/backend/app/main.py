@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.ai.api.router import router as ai_router
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
@@ -119,6 +120,7 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
+app.include_router(ai_router, prefix="/ai")
 app.include_router(scrape_router, prefix="/scrape")
 app.include_router(settings_router, prefix="/settings")
 

@@ -8,3 +8,6 @@ pefile
 pypdfium2
 httpx
 watchdog
+numpy
+onnxruntime
+tokenizers

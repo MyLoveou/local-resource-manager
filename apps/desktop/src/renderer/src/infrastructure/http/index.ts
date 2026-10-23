@@ -83,3 +83,16 @@ export {
   selectScrapeCandidate,
   getLatestScrapeJob,
 } from './scrape'
+export {
+  getAIStatus,
+  installAIModel,
+  buildAIIndex,
+  getAIJob,
+  searchAI,
+  getAISimilar,
+  type AIModelInfo,
+  type AIStatus,
+  type AIJob,
+  type AISearchResult,
+  type AISimilarResult,
+} from './ai'

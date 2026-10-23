@@ -1,19 +1,31 @@
 <template>
   <header class="tool-bar">
-    <n-button size="small" type="primary" @click="wizardRef?.open()">导入</n-button>
-    <n-button v-if="isWork" size="small" :loading="addingWork" @click="addWorkDirectory">添加工作目录</n-button>
-    <n-button size="small" @click="openSettings()">设置</n-button>
     <n-input
       class="tool-bar__search"
       size="small"
       clearable
-      placeholder="全库搜索"
+      placeholder="搜索资源、命令或 AI"
       :value="globalQ"
       @update:value="onGlobalQ"
       @keydown.enter.prevent="flushGlobalQ"
     />
+    <n-button size="small" type="primary" @click="wizardRef?.open()">导入</n-button>
+    <n-dropdown
+      v-if="showCluster && !isTrash"
+      trigger="click"
+      :options="organizeOptions"
+      @select="onOrganizeSelect"
+    >
+      <n-button size="small">整理</n-button>
+    </n-dropdown>
+    <n-dropdown trigger="click" :options="aiOptions" @select="onAISelect">
+      <n-button size="small">AI</n-button>
+    </n-dropdown>
+    <n-dropdown trigger="click" :options="settingsOptions" @select="onSettingsSelect">
+      <n-button size="small">设置</n-button>
+    </n-dropdown>
     <div class="tool-bar__spacer" />
-    <div v-if="showCluster" class="tool-bar__batch">
+    <div v-if="showCluster && batchMode" class="tool-bar__batch">
       <template v-if="!batchMode">
         <span v-if="isTrash">回收站 {{ total }} 项</span>
         <n-popconfirm v-if="isTrash" positive-text="清空" negative-text="取消" @positive-click="emptyTrash">
@@ -58,21 +70,14 @@
           </template>
           确定将所选资源移入回收站？可稍后恢复。
         </n-popconfirm>
-        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCollections">
-          加入合集
-        </n-button>
-        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCategories">
-          设置分类
-        </n-button>
-        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchCharacters">
-          设置角色
-        </n-button>
-        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="openBatchPersons">
-          设置扮演者
-        </n-button>
-        <n-button v-if="!isTrash" size="tiny" :disabled="busy || selectedCount === 0" @click="startScrape">
-          获取元数据
-        </n-button>
+        <n-dropdown
+          v-if="!isTrash"
+          trigger="click"
+          :options="batchOrganizeOptions"
+          @select="onOrganizeSelect"
+        >
+          <n-button size="tiny" :disabled="busy || selectedCount === 0">整理</n-button>
+        </n-dropdown>
         <template v-if="!isTrash">
           <n-input
             class="tool-bar__tag-input"
@@ -92,12 +97,12 @@
             打标
           </n-button>
         </template>
-        <n-button size="tiny" :disabled="busy" @click="exit">取消</n-button>
+        <n-button size="tiny" :disabled="busy" @click="exit">退出</n-button>
       </template>
     </div>
-    <n-dropdown trigger="click" :options="themeOptions" @select="onThemeSelect">
-      <n-button size="small">主题</n-button>
-    </n-dropdown>
+    <n-button text class="tool-bar__ai-status" @click="router.push('/ai')">
+      {{ aiStatusLabel }}
+    </n-button>
     <ImportWizard ref="wizardRef" />
     <SettingsModal v-model:show="settingsOpen" :tab="settingsTab" />
     <ScrapeConfirmQueue v-model:show="scrapeOpen" :resource-ids="scrapeIds" />
@@ -272,6 +277,8 @@ import SettingsModal from '@/components/SettingsModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { useThemeStore } from '@/application/stores/theme'
+import { useUpdateStore } from '@/application/stores/update'
+import { useAIStore } from '@/application/stores/ai'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
@@ -279,11 +286,12 @@ import { useCategoryTreeStore } from '@/application/stores/categoryTree'
 import { getCategoryTree, getResource, listCharacters, listPersons } from '@/infrastructure/http'
 import { flattenCategoryTree } from '@/domain'
 import { addCollectionItems, createCollection, listCollections } from '@/infrastructure/http/collections'
-import { createWorkDirectory } from '@/infrastructure/http/workbench'
 import type { CategoryNode, Collection, ResourceType } from '@/domain'
 
 const wizardRef = ref<{ open: () => void } | null>(null)
 const theme = useThemeStore()
+const update = useUpdateStore()
+const ai = useAIStore()
 const shellBatch = useShellBatchStore()
 const selection = useSelectionStore()
 const library = useLibraryStore()
@@ -293,7 +301,6 @@ const scrapeOpen = ref(false)
 const scrapeIds = ref<number[]>([])
 const settingsOpen = ref(false)
 const settingsTab = ref('scrape')
-const addingWork = ref(false)
 const route = useRoute()
 const router = useRouter()
 const globalQ = ref(String(route.query.q ?? ''))
@@ -302,22 +309,48 @@ const { showCluster, batchMode, total, busy, selectedCount, context } = storeToR
 const { enter, exit, emptyTrash, runBatch } = shellBatch
 
 const isTrash = computed(() => context.value === 'trash')
-const isWork = computed(() => route.path === '/work')
+const aiStatusLabel = computed(() => {
+  if (ai.jobActive) return 'AI 处理中'
+  if (!ai.modelInstalled) return 'AI 未启用'
+  if (!ai.status?.dependencyReady) return 'AI 依赖缺失'
+  return ai.indexed > 0 ? 'AI 就绪' : 'AI 待索引'
+})
+const organizeOptions = computed<DropdownOption[]>(() => [
+  { label: '批量选择', key: 'select' },
+  { label: '加入合集', key: 'collections', disabled: selectedCount.value === 0 },
+  { label: '设置分类', key: 'categories', disabled: selectedCount.value === 0 },
+  { label: '设置角色', key: 'characters', disabled: selectedCount.value === 0 },
+  { label: '设置扮演者', key: 'persons', disabled: selectedCount.value === 0 },
+  { label: '获取元数据', key: 'scrape', disabled: selectedCount.value === 0 },
+])
 
-async function addWorkDirectory(): Promise<void> {
-  const dir = await window.electron?.selectDirectory()
-  if (!dir) return
-  addingWork.value = true
-  try {
-    const created = await createWorkDirectory(dir)
-    library.invalidate({ resources: ['work_directory'], home: true })
-    if (created.id != null) selection.select(created.id)
-    notify.toast.success('已添加工作目录')
-  } catch (error) {
-    notify.fromError(error, { context: '添加工作目录' })
-  } finally {
-    addingWork.value = false
-  }
+const batchOrganizeOptions = computed<DropdownOption[]>(() =>
+  organizeOptions.value.filter((option) => option.key !== 'select'),
+)
+
+const aiOptions: DropdownOption[] = [
+  { label: 'AI 中心', key: 'ai-center' },
+  { label: '智能搜图', key: 'ai-search' },
+  { label: '模型管理', key: 'ai-models' },
+  { label: 'AI 任务', key: 'ai-jobs' },
+  { label: 'AI 建议', key: 'ai-suggestions' },
+]
+
+function onOrganizeSelect(key: string): void {
+  if (key === 'select') enter()
+  else if (key === 'collections') void openBatchCollections()
+  else if (key === 'categories') void openBatchCategories()
+  else if (key === 'characters') void openBatchCharacters()
+  else if (key === 'persons') void openBatchPersons()
+  else if (key === 'scrape') void startScrape()
+}
+
+function onAISelect(key: string): void {
+  if (key === 'ai-center') void router.push('/ai')
+  else if (key === 'ai-search') void router.push({ path: '/ai', query: { tab: 'search' } })
+  else if (key === 'ai-models') void router.push({ path: '/ai', query: { tab: 'models' } })
+  else if (key === 'ai-jobs') void router.push({ path: '/ai', query: { tab: 'jobs' } })
+  else if (key === 'ai-suggestions') void router.push({ path: '/ai', query: { tab: 'suggestions' } })
 }
 
 function enterScrape(): void {
@@ -605,6 +638,27 @@ const themeOptions: DropdownOption[] = [
   { label: '恢复默认', key: 'reset' },
 ]
 
+const settingsOptions: DropdownOption[] = [
+  { label: '设置', key: 'settings' },
+  { label: '主题', key: 'theme', children: themeOptions },
+  { label: '检查更新', key: 'update' },
+]
+
+function onSettingsSelect(key: string): void {
+  if (key === 'settings') openSettings()
+  else if (key === 'update') {
+    openSettings('update')
+    void update
+      .check()
+      .then(() => {
+        if (update.status.phase === 'unsupported') {
+          notify.toast.warning(update.status.message || '当前版本不支持自动更新，请手动下载')
+        }
+      })
+      .catch((error) => notify.fromError(error, { context: '检查更新' }))
+  } else void onThemeSelect(key)
+}
+
 function openSettings(name = 'scrape'): void {
   settingsTab.value = name
   settingsOpen.value = true
@@ -616,6 +670,7 @@ function onOpenSettings(event: Event): void {
 }
 
 onMounted(() => {
+  void ai.refresh()
   window.addEventListener('sm:open-settings', onOpenSettings)
   const warning = theme.consumeHydrateWarning()
   if (warning) notify.toast.warning(warning)
@@ -663,11 +718,28 @@ async function onThemeSelect(key: string): Promise<void> {
   min-width: 0;
 }
 
+.tool-bar__ai-status {
+  flex-shrink: 0;
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
+}
+
 .tool-bar__batch {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: var(--sm-space-2);
-  flex-shrink: 0;
+  max-width: calc(100vw - 40px);
+  overflow-x: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sm-color-bg-surface) 94%, transparent);
+  box-shadow: var(--sm-shadow-card, 0 8px 24px rgba(0, 0, 0, 0.18));
+  transform: translateX(-50%);
   font-size: 13px;
   color: var(--sm-color-text);
 }

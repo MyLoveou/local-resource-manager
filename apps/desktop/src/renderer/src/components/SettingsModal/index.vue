@@ -283,7 +283,7 @@
           <n-button
             size="small"
             :loading="update.status.phase === 'checking'"
-            @click="update.check()"
+            @click="checkUpdate"
           >
             检查更新
           </n-button>
@@ -399,8 +399,19 @@ const updateProgressDetail = computed(() => {
 })
 
 const showManualDownload = computed(() =>
-  ['available', 'downloading', 'error'].includes(update.status.phase)
+  ['available', 'downloading', 'error', 'unsupported'].includes(update.status.phase)
 )
+
+async function checkUpdate(): Promise<void> {
+  try {
+    await update.check()
+    if (update.status.phase === 'unsupported') {
+      notify.toast.warning(update.status.message || '当前版本不支持自动更新，请手动下载')
+    }
+  } catch (error) {
+    notify.fromError(error, { context: '检查更新' })
+  }
+}
 
 async function openReleasePage(): Promise<void> {
   const api = window.electron
@@ -653,19 +664,12 @@ async function doBackup(): Promise<void> {
 }
 
 watch(
-  () => props.tab,
-  (name) => {
-    if (props.show && name) activeTab.value = name
-  }
-)
-
-watch(
-  () => props.show,
-  (open) => {
-    if (!open) return
-    if (props.tab) activeTab.value = props.tab
-    void load()
-  }
+  [() => props.show, () => props.tab],
+  ([open, tab]) => {
+    if (open && tab) activeTab.value = tab
+    if (open) void load()
+  },
+  { immediate: true },
 )
 </script>
 

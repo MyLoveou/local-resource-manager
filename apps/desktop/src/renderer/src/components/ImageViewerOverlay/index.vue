@@ -10,6 +10,9 @@
       />
       <p v-if="trashed" class="image-viewer-overlay__trash">回收站预览 · 文件仍在，彻底删除前可查看</p>
     </div>
+    <n-button class="image-viewer-overlay__similar" size="small" @click="findSimilar">
+      找相似
+    </n-button>
     <n-button class="image-viewer-overlay__close" size="small" circle aria-label="关闭" @click="close">
       ×
     </n-button>
@@ -26,6 +29,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import { storeToRefs } from 'pinia'
 import ImageViewerHost from '@/components/ImageViewerHost/index.vue'
@@ -37,6 +41,7 @@ import { openPrimaryDefault } from '@/infrastructure/shell/openLibraryFile'
 import { isAnimatedImageFormat } from '@/utils/imageFormat'
 
 const viewer = useImageViewerStore()
+const router = useRouter()
 const { visible, currentId, hasPrev, hasNext, playlistIds } = storeToRefs(viewer)
 const { close, prev, next } = viewer
 const current = ref<Resource | null>(null)
@@ -56,6 +61,13 @@ const trashed = computed(() => current.value?.status === 'trashed')
 async function openExternal(): Promise<void> {
   const message = await openPrimaryDefault(current.value)
   if (message) notify.toast.error(message)
+}
+
+function findSimilar(): void {
+  const id = currentId.value
+  if (id == null) return
+  close()
+  void router.push({ path: '/ai', query: { tab: 'similar', resourceId: String(id) } })
 }
 
 function prefetchNeighbors(id: number): void {
@@ -140,6 +152,13 @@ onUnmounted(() => {
     position: absolute;
     inset: 0;
   }
+}
+
+.image-viewer-overlay__similar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
 }
 
 .image-viewer-overlay__close,

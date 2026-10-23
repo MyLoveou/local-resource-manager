@@ -82,6 +82,16 @@ export const routes: RouteRecordRaw[] = [
     },
   },
   {
+    path: '/ai',
+    name: 'AI',
+    component: () => import('@/views/AI/index.vue'),
+    meta: {
+      title: 'AI 中心',
+      icon: 'robot',
+      menuGroup: 'tools',
+    },
+  },
+  {
     path: '/timelines',
     name: 'Timelines',
     component: () => import('@/views/Timelines/index.vue'),

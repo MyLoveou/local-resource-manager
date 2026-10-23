@@ -42,6 +42,14 @@ const activeKey = computed(() => {
 const menuOptions = computed<MenuOption[]>(() => props.items.map(toMenuOption))
 
 function toMenuOption(item: MenuItem): MenuOption {
+  if (item.type === 'group') {
+    return {
+      type: 'group',
+      key: item.key,
+      label: item.label,
+      children: item.children?.map(toMenuOption),
+    }
+  }
   return {
     key: item.key,
     label: item.label,

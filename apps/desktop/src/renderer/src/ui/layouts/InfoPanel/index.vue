@@ -1,7 +1,20 @@
 <template>
   <aside class="info-panel">
     <div v-if="resource" class="info-panel-content">
+      <div class="info-panel-tabs">
+        <button
+          v-for="tab in inspectorTabs"
+          :key="tab.value"
+          type="button"
+          class="info-panel-tab"
+          :class="{ 'info-panel-tab--active': inspectorTab === tab.value }"
+          @click="inspectorTab = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
       <div class="info-panel-body">
+        <template v-if="inspectorTab === 'detail'">
         <section class="info-panel-section">
           <img v-if="coverUrl" class="info-panel-cover" :class="{ 'info-panel-cover--open': isImage }" :src="coverUrl"
             alt="封面" decoding="async" @click="openViewerFromCover" />
@@ -203,6 +216,11 @@
             />
           </div>
         </template>
+        </section>
+        </template>
+        <template v-else-if="inspectorTab === 'relation'">
+        <section class="info-panel-section">
+        <div class="info-panel-section-title">组织</div>
         <!-- 分类是独立词表，不是 type -->
         <div class="info-panel-label">评分</div>
         <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
@@ -218,8 +236,19 @@
             @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
         </div>
         </section>
+        </template>
+        <template v-else>
+        <section class="info-panel-section info-panel-ai-empty">
+          <div class="info-panel-section-title">AI</div>
+          <p>文字搜图、以图搜图和近似重复可以在 AI 中心使用；标签建议和描述会在后续接入。</p>
+          <div class="info-panel-ai-actions">
+            <n-button v-if="resource?.type === 'image'" size="small" @click="openSimilar">找相似</n-button>
+            <n-button size="small" @click="openAICenter">打开 AI 中心</n-button>
+          </div>
+        </section>
+        </template>
       </div>
-      <div class="info-panel-footer">
+      <div v-if="inspectorTab !== 'ai'" class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
           <n-input
@@ -356,6 +385,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
@@ -416,6 +446,13 @@ const { deleteResource, restoreResource, purgeResource, patchResource, replaceCo
   useResourceHandle()
 
 const resource = ref<Resource | null>(null)
+const inspectorTab = ref<'detail' | 'relation' | 'ai'>('detail')
+const router = useRouter()
+const inspectorTabs = [
+  { value: 'detail', label: '详情' },
+  { value: 'relation', label: '关联' },
+  { value: 'ai', label: 'AI' },
+] as const
 const categories = ref<CategoryNode[]>([])
 const deleting = ref(false)
 const saving = ref(false)
@@ -933,6 +970,18 @@ async function savePanel(): Promise<void> {
   await persist(false)
 }
 
+function openAICenter(): void {
+  void router.push({ path: '/ai', query: { tab: 'search' } })
+}
+
+function openSimilar(): void {
+  if (resource.value?.id == null) return
+  void router.push({
+    path: '/ai',
+    query: { tab: 'similar', resourceId: String(resource.value.id) },
+  })
+}
+
 function openModal(): void {
   modalTextSnapshot.value = {
     title: draft.title,
@@ -1410,11 +1459,58 @@ onMounted(() => {
   flex-direction: column;
 }
 
+.info-panel-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding-bottom: var(--sm-space-2);
+  border-bottom: 1px solid var(--sm-color-border);
+}
+
+.info-panel-tab {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sm-color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.info-panel-tab:hover {
+  background: var(--sm-color-bg-muted);
+  color: var(--sm-color-text);
+}
+
+.info-panel-tab--active {
+  background: var(--sm-color-bg-muted);
+  color: var(--sm-color-text);
+  font-weight: 600;
+}
+
 .info-panel-body {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  padding-top: var(--sm-space-1);
+}
+
+.info-panel-ai-empty {
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+
+  p {
+    margin: 8px 0 12px;
+  }
+}
+
+.info-panel-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .info-panel-body :deep(.n-input),

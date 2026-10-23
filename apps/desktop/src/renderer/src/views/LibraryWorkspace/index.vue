@@ -169,10 +169,17 @@ onMounted(async () => {
 
 .library-workspace__bar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sm-color-border);
+}
+
+.library-workspace__bar :deep(.browse-controls) {
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .library-workspace__body {
