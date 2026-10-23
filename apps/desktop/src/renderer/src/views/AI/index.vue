@@ -26,15 +26,20 @@
         <h3>安装中文 CLIP 模型</h3>
         <p>首次使用需要下载约 195 MB 的本地模型。安装后可离线用文字搜索图片。</p>
         <div class="ai-setup__actions">
-          <n-button type="primary" :loading="ai.jobActive" @click="install">
+          <n-button
+            type="primary"
+            :loading="installJobActive"
+            :disabled="ai.jobActive"
+            @click="install"
+          >
             安装模型
           </n-button>
-          <span v-if="ai.job?.kind === 'install' && ai.jobActive" class="ai-muted">
+          <span v-if="installJobActive" class="ai-muted">
             {{ jobProgressText }}
           </span>
         </div>
         <n-progress
-          v-if="ai.job?.kind === 'install' && ai.jobActive"
+          v-if="installJobActive"
           type="line"
           :percentage="jobPercent"
           :height="6"
@@ -49,15 +54,20 @@
             首次索引只在本机计算向量。
           </p>
           <div class="ai-setup__actions">
-            <n-button type="primary" :loading="ai.jobActive" @click="index">
+            <n-button
+              type="primary"
+              :loading="indexJobActive"
+              :disabled="ai.jobActive"
+              @click="index"
+            >
               {{ ai.indexed > 0 ? '重新建立索引' : '建立索引' }}
             </n-button>
-            <span v-if="ai.job?.kind === 'index' && ai.jobActive" class="ai-muted">
+            <span v-if="indexJobActive" class="ai-muted">
               {{ jobProgressText }}
             </span>
           </div>
           <n-progress
-            v-if="ai.job?.kind === 'index' && ai.jobActive"
+            v-if="indexJobActive"
             type="line"
             :percentage="jobPercent"
             :height="6"
@@ -83,6 +93,21 @@
             >
               搜索
             </n-button>
+          </div>
+          <div v-if="ai.recentQueries.length" class="ai-history">
+            <span class="ai-muted">最近搜索</span>
+            <button
+              v-for="item in ai.recentQueries"
+              :key="item"
+              type="button"
+              class="ai-history__item"
+              @click="useRecentQuery(item)"
+            >
+              {{ item }}
+            </button>
+            <button type="button" class="ai-history__clear" @click="ai.clearRecentQueries()">
+              清除
+            </button>
           </div>
           <p v-if="ai.jobActive" class="ai-muted">索引重建中，完成后即可搜索。</p>
           <p class="ai-muted">
@@ -345,19 +370,21 @@
         <n-button
           v-else
           :loading="ai.jobActive"
+          :disabled="ai.jobActive"
           @click="index"
         >
           {{ ai.indexed > 0 ? '重新建立索引' : '建立索引' }}
         </n-button>
       </div>
+      <p class="ai-muted">建立索引只计算 CLIP/人数/hash，不会自动分析文案。</p>
       <n-progress
-        v-if="ai.jobActive"
+        v-if="installJobActive || indexJobActive"
         class="ai-panel__progress"
         type="line"
         :percentage="jobPercent"
         :height="6"
       />
-      <p v-if="ai.jobActive" class="ai-muted">{{ jobProgressText }}</p>
+      <p v-if="installJobActive || indexJobActive" class="ai-muted">{{ jobProgressText }}</p>
 
       <div class="ai-panel__divider" />
       <div class="ai-panel__row">
@@ -372,17 +399,56 @@
       </p>
       <template v-if="ai.status?.captionReady">
         <div class="ai-panel__actions">
-          <n-button size="small" :loading="captionJobActive" @click="analyzeCaptions">
-            分析图片文案
+          <n-button
+            size="small"
+            :loading="captionJobActive"
+            :disabled="ai.jobActive"
+            @click="analyzeCaptions(true)"
+          >
+            分析未分析图片
+          </n-button>
+          <n-button
+            size="small"
+            quaternary
+            :disabled="ai.jobActive"
+            @click="analyzeCaptions(false)"
+          >
+            重新分析全部
           </n-button>
         </div>
+        <p class="ai-muted">分析文案不会重建中文 CLIP 索引；可单独重跑全部或只补未分析的图片。</p>
       </template>
       <p v-if="!ai.status?.vlmRuntimeReady" class="ai-muted">
-        未检测到 Ollama。启动本地 Ollama 后可在这里选择并下载模型。
+        未检测到 Ollama。请先安装、选择本地 ollama.exe，或手动启动本地服务。
       </p>
+      <template v-if="!ai.status?.vlmRuntimeReady">
+        <div class="ai-panel__actions">
+          <n-button size="small" :loading="runtimeBusy" @click="detectOllama">
+            检测 Ollama
+          </n-button>
+          <n-button size="small" @click="chooseOllama">选择程序</n-button>
+          <n-button size="small" type="primary" @click="installOllama">
+            下载安装
+          </n-button>
+          <n-button
+            v-if="ai.vlmRuntime?.detected"
+            size="small"
+            :loading="runtimeBusy"
+            @click="startOllama"
+          >
+            启动 Ollama
+          </n-button>
+        </div>
+        <p v-if="ai.vlmRuntime?.binaryPath" class="ai-muted">
+          已找到：{{ ai.vlmRuntime.binaryPath }}
+        </p>
+        <p v-if="ai.vlmRuntime?.error" class="ai-center__error">
+          {{ ai.vlmRuntime.error }}
+        </p>
+      </template>
       <template v-else>
         <p class="ai-muted">
-          下载 / 切换模型。推荐 <code>qwen2.5vl:3b</code>（中文、视觉、约 3.2GB）；
+          下载视觉模型。推荐 <code>qwen2.5vl:3b</code>（中文、视觉、约 3.2GB）；
           也可输入其他 Ollama 视觉模型，例如 <code>qwen2.5vl:7b</code>、<code>llava:7b</code>。
         </p>
         <div class="ai-fusionbar">
@@ -396,13 +462,43 @@
             type="primary"
             size="small"
             :loading="vlmPullActive"
-            :disabled="!vlmModel.trim()"
+            :disabled="!vlmModel.trim() || ai.jobActive"
             @click="pullVLM"
           >
-            下载 / 切换
+            下载模型
           </n-button>
         </div>
       </template>
+      <div v-if="ai.vlmModelDetails.length" class="ai-model-list">
+        <p class="ai-muted">已下载模型</p>
+        <div
+          v-for="model in ai.vlmModelDetails"
+          :key="model.name"
+          class="ai-model-row"
+        >
+          <div class="ai-model-row__main">
+            <strong>{{ model.name }}</strong>
+            <p class="ai-muted">
+              {{ formatBytes(model.sizeBytes) }} ·
+              {{ model.supportsVision ? '支持视觉分析' : '不支持视觉分析' }}
+            </p>
+          </div>
+          <n-tag v-if="model.selected" size="small" type="success" :bordered="false">
+            当前
+          </n-tag>
+          <n-button
+            v-else-if="model.supportsVision"
+            size="tiny"
+            :loading="selectingModel === model.name"
+            :disabled="ai.jobActive"
+            @click="switchVLMModel(model.name)"
+          >
+            切换
+          </n-button>
+          <n-tag v-else size="small" type="warning" :bordered="false">不可用于文案</n-tag>
+        </div>
+      </div>
+      <p v-else-if="ai.status?.vlmRuntimeReady" class="ai-muted">尚未下载视觉模型。</p>
       <n-progress
         v-if="captionJobActive || vlmPullActive"
         class="ai-panel__progress"
@@ -415,8 +511,10 @@
 
     <section v-else-if="activeTab === 'jobs'" class="ai-panel">
       <div class="ai-panel__row">
-        <strong>{{ ai.job ? jobTitle(ai.job.kind) : '暂无任务' }}</strong>
-        <n-tag v-if="ai.job" size="small" :bordered="false">{{ jobStatusLabel }}</n-tag>
+        <strong>{{ ai.job ? jobTitle(ai.job.kind) : 'AI 任务' }}</strong>
+        <n-tag v-if="ai.job" size="small" :bordered="false" :type="jobTagType(ai.job.status)">
+          {{ jobStatusText(ai.job.status) }}
+        </n-tag>
       </div>
       <template v-if="ai.job">
         <n-progress
@@ -426,9 +524,31 @@
           :height="6"
         />
         <p class="ai-muted">{{ ai.job.message || jobProgressText }}</p>
+        <p v-if="ai.job.failed" class="ai-muted">失败 {{ ai.job.failed }} 张</p>
         <p v-if="ai.job.status === 'error'" class="ai-center__error">{{ ai.job.message }}</p>
       </template>
-      <p v-else class="ai-muted">安装模型或建立索引后，任务进度会显示在这里。</p>
+      <p v-else class="ai-muted">安装模型、建立索引或分析文案后，任务进度会显示在这里。</p>
+
+      <div class="ai-panel__divider" />
+      <div class="ai-panel__row">
+        <strong>任务历史</strong>
+        <n-tag size="small" :bordered="false">{{ ai.jobHistory.length }}</n-tag>
+      </div>
+      <div v-if="ai.jobHistory.length" class="ai-job-list">
+        <div v-for="item in ai.jobHistory" :key="item.id" class="ai-job-row">
+          <div class="ai-job-row__main">
+            <strong>{{ jobTitle(item.kind) }}</strong>
+            <p class="ai-muted">
+              {{ formatJobTime(item.createdAt) }} · {{ item.message || '无详情' }}
+            </p>
+          </div>
+          <span v-if="item.failed" class="ai-job-row__failed">失败 {{ item.failed }}</span>
+          <n-tag size="small" :bordered="false" :type="jobTagType(item.status)">
+            {{ jobStatusText(item.status) }}
+          </n-tag>
+        </div>
+      </div>
+      <p v-else class="ai-muted">还没有 AI 操作历史。</p>
     </section>
 
     <section v-else class="ai-panel">
@@ -509,17 +629,22 @@ const statusTagType = computed(() => {
 })
 
 const jobPercent = computed(() => ai.job?.percent ?? 0)
+const installJobActive = computed(() => ai.job?.kind === 'install' && ai.jobActive)
+const indexJobActive = computed(() => ai.job?.kind === 'index' && ai.jobActive)
 const captionJobActive = computed(() => ai.job?.kind === 'caption' && ai.jobActive)
 const vlmPullActive = computed(() => ai.job?.kind === 'vlm-pull' && ai.jobActive)
 const vlmModel = ref('qwen2.5vl:3b')
+const selectingModel = ref('')
+const runtimeBusy = ref(false)
 const jobProgressText = computed(() => {
   const job = ai.job
   if (!job) return ''
   if (job.total > 0) return `${job.done}/${job.total}`
   return job.message || ''
 })
-const jobStatusLabel = computed(() => {
-  switch (ai.job?.status) {
+
+function jobStatusText(status: string): string {
+  switch (status) {
     case 'queued':
       return '排队中'
     case 'running':
@@ -529,12 +654,42 @@ const jobStatusLabel = computed(() => {
     case 'error':
       return '失败'
     default:
-      return ai.job?.status ?? ''
+      return status
   }
-})
+}
+
+function jobTagType(status: string): 'default' | 'info' | 'success' | 'warning' | 'error' {
+  switch (status) {
+    case 'running':
+      return 'info'
+    case 'done':
+      return 'success'
+    case 'error':
+      return 'error'
+    case 'queued':
+      return 'warning'
+    default:
+      return 'default'
+  }
+}
 
 function jobTitle(kind: string): string {
-  return kind === 'install' ? '下载模型' : kind === 'index' ? '建立索引' : 'AI 任务'
+  if (kind === 'install') return '下载模型'
+  if (kind === 'index') return '建立索引'
+  if (kind === 'caption') return '分析图片文案'
+  if (kind === 'vlm-pull') return '下载 VLM 模型'
+  return 'AI 任务'
+}
+
+function formatBytes(value: number): string {
+  if (!value) return '0 B'
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(0)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatJobTime(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
 function scoreLabel(score: number): string {
@@ -703,14 +858,60 @@ async function index(): Promise<void> {
   await ai.buildIndex()
 }
 
-async function analyzeCaptions(): Promise<void> {
+async function analyzeCaptions(onlyPending = true): Promise<void> {
   if (ai.jobActive) return
-  await ai.analyze()
+  await ai.analyze(undefined, onlyPending)
+}
+
+async function switchVLMModel(model: string): Promise<void> {
+  if (ai.jobActive || selectingModel.value) return
+  selectingModel.value = model
+  try {
+    await ai.selectVLM(model)
+    vlmModel.value = model
+  } finally {
+    selectingModel.value = ''
+  }
+}
+
+async function useRecentQuery(value: string): Promise<void> {
+  query.value = value
+  await runSearch()
 }
 
 async function pullVLM(): Promise<void> {
   if (ai.jobActive || !vlmModel.value.trim()) return
   await ai.pullVLM(vlmModel.value.trim())
+}
+
+async function detectOllama(): Promise<void> {
+  runtimeBusy.value = true
+  try {
+    await ai.refreshVLMRuntime()
+    await ai.refresh()
+  } finally {
+    runtimeBusy.value = false
+  }
+}
+
+async function chooseOllama(): Promise<void> {
+  const files = await window.electron?.selectFiles([
+    { name: 'Ollama', extensions: ['exe'] },
+  ])
+  if (files?.[0]) await ai.selectOllama(files[0])
+}
+
+async function installOllama(): Promise<void> {
+  await window.electron?.openExternal('https://ollama.com/download/windows')
+}
+
+async function startOllama(): Promise<void> {
+  runtimeBusy.value = true
+  try {
+    await ai.startOllama()
+  } finally {
+    runtimeBusy.value = false
+  }
 }
 
 function openResult(item: Resource): void {
@@ -744,6 +945,13 @@ watch(
   },
 )
 
+watch(
+  () => ai.status?.captionModel,
+  (value) => {
+    if (value) vlmModel.value = value
+  },
+)
+
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste)
   if (externalPreview.value) URL.revokeObjectURL(externalPreview.value)
@@ -752,6 +960,10 @@ onUnmounted(() => {
 onMounted(async () => {
   window.addEventListener('paste', onPaste)
   await ai.refresh()
+  await ai.refreshJobs()
+  await ai.refreshVLMRuntime()
+  const selected = ai.vlmModelDetails.find((model) => model.selected)?.name
+  if (selected) vlmModel.value = selected
   const id = Number(route.query.resourceId)
   if (route.query.tab === 'similar' && Number.isFinite(id) && id > 0) {
     await loadSimilar(id)
@@ -919,6 +1131,83 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.ai-history {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+
+  .ai-muted {
+    margin: 0 4px 0 0;
+  }
+}
+
+.ai-history__item,
+.ai-history__clear {
+  padding: 2px 8px;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 999px;
+  background: var(--sm-color-bg-surface);
+  color: var(--sm-color-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-history__item:hover {
+  border-color: var(--sm-color-accent);
+}
+
+.ai-history__clear {
+  border-color: transparent;
+  color: var(--sm-color-text-muted);
+}
+
+.ai-model-list {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sm-color-border);
+}
+
+.ai-model-row,
+.ai-job-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sm-color-border);
+}
+
+.ai-model-row:last-child,
+.ai-job-row:last-child {
+  border-bottom: 0;
+}
+
+.ai-model-row__main,
+.ai-job-row__main {
+  flex: 1;
+  min-width: 0;
+
+  strong {
+    display: block;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .ai-muted {
+    margin: 4px 0 0;
+  }
+}
+
+.ai-job-list {
+  margin-top: 4px;
+}
+
+.ai-job-row__failed {
+  color: var(--sm-color-danger, #d03050);
+  font-size: 11px;
 }
 
 .ai-results {

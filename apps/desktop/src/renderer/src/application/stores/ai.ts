@@ -5,18 +5,27 @@ import {
   pullVLMModel,
   buildAIIndex,
   getAIJob,
+  getAIJobs,
   getAIStatus,
+  getVLMRuntime,
   installAIModel,
   searchAI,
+  selectOllamaBinary,
+  selectVLMModel,
+  startOllamaRuntime,
   type AIJob,
   type AISearchResult,
   type AIStatus,
+  type AIVLMRuntime,
 } from '@/infrastructure/http'
 
 export const useAIStore = defineStore('ai', () => {
   const status = ref<AIStatus | null>(null)
   const job = ref<AIJob | null>(null)
+  const jobHistory = ref<AIJob[]>([])
   const results = ref<AISearchResult | null>(null)
+  const vlmRuntime = ref<AIVLMRuntime | null>(null)
+  const recentQueries = ref<string[]>(loadRecentQueries())
   const loading = ref(false)
   const searching = ref(false)
   const error = ref('')
@@ -25,13 +34,82 @@ export const useAIStore = defineStore('ai', () => {
   const modelInstalled = computed(() => status.value?.model.installed === true)
   const indexed = computed(() => status.value?.indexed ?? 0)
   const total = computed(() => status.value?.total ?? 0)
+  const pendingIndex = computed(() => Math.max(0, total.value - indexed.value))
   const canSearch = computed(() => modelInstalled.value && indexed.value > 0)
   const jobActive = computed(() => job.value?.status === 'queued' || job.value?.status === 'running')
+  const selectedVLMModel = computed(() => status.value?.captionModel ?? '')
+  const vlmModelDetails = computed(() => status.value?.vlmModelDetails ?? [])
+
+  function loadRecentQueries(): string[] {
+    try {
+      const raw = localStorage.getItem('ai:recent-queries')
+      const value = raw ? JSON.parse(raw) : []
+      return Array.isArray(value) ? value.filter((item) => typeof item === 'string').slice(0, 12) : []
+    } catch {
+      return []
+    }
+  }
+
+  function rememberQuery(query: string): void {
+    const value = query.trim()
+    if (!value) return
+    recentQueries.value = [value, ...recentQueries.value.filter((item) => item !== value)].slice(0, 12)
+    try {
+      localStorage.setItem('ai:recent-queries', JSON.stringify(recentQueries.value))
+    } catch {
+      // ignore local storage failures
+    }
+  }
+
+  function clearRecentQueries(): void {
+    recentQueries.value = []
+    try {
+      localStorage.removeItem('ai:recent-queries')
+    } catch {
+      // ignore local storage failures
+    }
+  }
 
   function stopPolling(): void {
     if (timer) {
       clearTimeout(timer)
       timer = null
+    }
+  }
+
+  async function refreshVLMRuntime(): Promise<void> {
+    try {
+      vlmRuntime.value = await getVLMRuntime()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? Ollama ????'
+    }
+  }
+
+  async function selectOllama(path: string): Promise<void> {
+    error.value = ''
+    try {
+      vlmRuntime.value = await selectOllamaBinary(path)
+      await refresh()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? Ollama ????'
+    }
+  }
+
+  async function startOllama(): Promise<void> {
+    error.value = ''
+    try {
+      vlmRuntime.value = await startOllamaRuntime()
+      await refresh()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? Ollama ??'
+    }
+  }
+
+  async function refreshJobs(): Promise<void> {
+    try {
+      jobHistory.value = await getAIJobs(20)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? AI ??????'
     }
   }
 
@@ -58,6 +136,7 @@ export const useAIStore = defineStore('ai', () => {
       }
       if (next.status === 'error') error.value = next.message || 'AI 任务失败'
       await refresh()
+      await refreshJobs()
     } catch (err) {
       error.value = err instanceof Error ? err.message : '读取 AI 任务失败'
       await refresh()
@@ -96,13 +175,22 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  async function analyze(resourceIds?: number[]): Promise<void> {
+  async function analyze(resourceIds?: number[], onlyPending = true): Promise<void> {
     error.value = ''
     try {
-      job.value = await analyzeAIImages(resourceIds)
+      job.value = await analyzeAIImages(resourceIds, onlyPending)
       await track(job.value.id)
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'AI 分析失败'
+    }
+  }
+
+  async function selectVLM(model: string): Promise<void> {
+    error.value = ''
+    try {
+      status.value = await selectVLMModel(model)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '切换 VLM 模型失败'
     }
   }
 
@@ -120,6 +208,7 @@ export const useAIStore = defineStore('ai', () => {
     error.value = ''
     try {
       results.value = await searchAI(q, limit)
+      rememberQuery(q)
     } catch (err) {
       results.value = null
       error.value = err instanceof Error ? err.message : 'AI 搜索失败'
@@ -137,21 +226,33 @@ export const useAIStore = defineStore('ai', () => {
   return {
     status,
     job,
+    jobHistory,
+    recentQueries,
     results,
+    vlmRuntime,
     loading,
     searching,
     error,
     modelInstalled,
     indexed,
     total,
+    pendingIndex,
     canSearch,
     jobActive,
+    selectedVLMModel,
+    vlmModelDetails,
     refresh,
+    refreshJobs,
+    refreshVLMRuntime,
     installModel,
     buildIndex,
     analyze,
+    selectVLM,
+    selectOllama,
+    startOllama,
     pullVLM,
     search,
+    clearRecentQueries,
     clearResults,
     stopPolling,
   }

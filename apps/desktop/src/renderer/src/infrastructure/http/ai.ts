@@ -9,6 +9,23 @@ export interface AIModelInfo {
   sizeBytes: number
 }
 
+export interface AIVLMRuntime {
+  running: boolean
+  url: string
+  binaryPath: string
+  detected: boolean
+  modelsDir: string
+  error: string
+}
+
+export interface AIVLMModelInfo {
+  name: string
+  sizeBytes: number
+  capabilities: string[]
+  supportsVision: boolean
+  selected: boolean
+}
+
 export interface AIStatus {
   dependencyReady: boolean
   model: AIModelInfo
@@ -20,6 +37,7 @@ export interface AIStatus {
   captionIndexed: number
   vlmRuntimeReady: boolean
   vlmModels: string[]
+  vlmModelDetails: AIVLMModelInfo[]
   indexUpdatedAt: string | null
 }
 
@@ -29,6 +47,7 @@ export interface AIJob {
   status: 'queued' | 'running' | 'done' | 'error' | string
   total: number
   done: number
+  failed: number
   percent: number | null
   message: string
   createdAt: string
@@ -191,10 +210,39 @@ export async function searchAISimilarFile(
 }
 
 
-export async function analyzeAIImages(resourceIds?: number[]): Promise<AIJob> {
+export async function analyzeAIImages(
+  resourceIds?: number[],
+  onlyPending = true,
+): Promise<AIJob> {
   const { data } = await client.post<AIJob>('/ai/analyze', {
     resourceIds: resourceIds ?? null,
+    onlyPending,
   })
+  return data
+}
+
+export async function getVLMRuntime(): Promise<AIVLMRuntime> {
+  const { data } = await client.get<AIVLMRuntime>('/ai/vlm/runtime')
+  return data
+}
+
+export async function selectOllamaBinary(path: string): Promise<AIVLMRuntime> {
+  const { data } = await client.post<AIVLMRuntime>('/ai/vlm/runtime/select', { path })
+  return data
+}
+
+export async function startOllamaRuntime(): Promise<AIVLMRuntime> {
+  const { data } = await client.post<AIVLMRuntime>('/ai/vlm/runtime/start')
+  return data
+}
+
+export async function getAIJobs(limit = 20): Promise<AIJob[]> {
+  const { data } = await client.get<AIJob[]>('/ai/jobs', { params: { limit } })
+  return data
+}
+
+export async function selectVLMModel(model: string): Promise<AIStatus> {
+  const { data } = await client.post<AIStatus>('/ai/vlm/select', { model })
   return data
 }
 
