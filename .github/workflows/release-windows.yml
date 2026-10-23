@@ -70,6 +70,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          NOTES_FILE="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES_ARG="--notes-file=$NOTES_FILE"
+          else
+            NOTES_ARG="--notes=Windows x64 build ${GITHUB_REF_NAME}"
+          fi
           gh release create "${GITHUB_REF_NAME}" \
             release/local-resource-manager-*-setup.exe \
             release/local-resource-manager-*-setup.exe.blockmap \
@@ -77,4 +83,4 @@ jobs:
             release/latest.yml \
             release/SHA256SUMS.txt \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Windows x64 build ${GITHUB_REF_NAME}"
+            "$NOTES_ARG"
