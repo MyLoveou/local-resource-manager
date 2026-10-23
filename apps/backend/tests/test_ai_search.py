@@ -98,6 +98,11 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.id for item in result.items], [first, second])
         self.assertAlmostEqual(result.scores[0], 1.0, places=5)
         self.assertAlmostEqual(result.scores[1], 0.0, places=5)
+        self.assertIsNotNone(result.query_insight)
+        self.assertEqual(result.query_insight.source, "text")
+        self.assertEqual(result.query_insight.semantic_text, "a")
+        self.assertEqual(len(result.explanations), 2)
+        self.assertIn("CLIP 语义相似度", result.explanations[0].reasons[0])
 
     async def test_similar_excludes_self_and_finds_near_duplicate(self) -> None:
         vector = np.zeros(512, dtype="float32")
@@ -135,6 +140,50 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.id for item in result.duplicates], [second])
         self.assertNotIn(first, [item.id for item in result.duplicates])
         self.assertEqual(result.duplicate_scores[0], 1.0 - 1 / 64)
+        self.assertIsNotNone(result.query_insight)
+        self.assertEqual(result.query_insight.source, "image")
+        self.assertEqual(result.duplicate_explanations[0].dhash_distance, 1)
+        self.assertIn("近似重复", result.duplicate_explanations[0].reasons[0])
+
+    async def test_fusion_excludes_source_and_returns_ranked_candidates(self) -> None:
+        source_vec = np.zeros(512, dtype="float32")
+        source_vec[0] = 1
+        other_vec = source_vec.copy()
+        text_vec = np.zeros(512, dtype="float32")
+        text_vec[1] = 1
+
+        async with self.factory() as session:
+            source = await self._resource(session, "source")
+            other = await self._resource(session, "other")
+            third = await self._resource(session, "third")
+            for resource_id, vector in (
+                (source, source_vec),
+                (other, other_vec),
+                (third, text_vec),
+            ):
+                await session.execute(
+                    text(
+                        "INSERT INTO ai_vectors "
+                        "(resource_id, model_id, dim, vector, source_path, updated_at) "
+                        "VALUES (:rid, :model, 512, :vector, '', datetime('now'))"
+                    ),
+                    {"rid": resource_id, "model": MODEL_ID, "vector": vector.tobytes()},
+                )
+            await session.commit()
+
+            with (
+                patch("app.ai.application.service.is_installed", return_value=True),
+                patch("app.ai.application.service.runtime.dependency_ready", return_value=True),
+                patch(
+                    "app.ai.application.service.runtime.encode_text",
+                    return_value=np.stack([text_vec]),
+                ),
+            ):
+                result = await AIService(session).fusion(source, "??", 10)
+
+        self.assertNotIn(source, [item.id for item in result.items])
+        self.assertTrue(result.items)
+        self.assertTrue(result.scores)
 
     async def test_count_filter_excludes_wrong_person_count(self) -> None:
         vector = np.zeros(512, dtype="float32")
@@ -174,3 +223,5 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.matched, 1)
         self.assertEqual(result.returned, 1)
         self.assertEqual(result.filters, ["人数=2"])
+        self.assertEqual(result.query_insight.person_count, 2)
+        self.assertIn("人数=2", result.explanations[0].reasons)
