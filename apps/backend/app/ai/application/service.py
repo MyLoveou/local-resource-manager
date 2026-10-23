@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import tempfile
 from pathlib import Path
 
@@ -23,7 +24,10 @@ from app.ai.application.schemas import (
     AISearchResponse,
     AISimilarResponse,
     AIStatus,
+    AIVLMModelInfo,
+    AIVLMRuntime,
 )
+from app.ai.infrastructure import ollama_runtime
 from app.ai.infrastructure.model_store import (
     MODEL_DIM,
     MODEL_ID,
@@ -39,10 +43,10 @@ from app.ai.infrastructure.runtime import runtime
 from app.library.domain.models import ResourceStatus, ResourceType
 from app.library.infrastructure.orm import FileRow, ResourceRow
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.config import settings
 from app.shared.db.db import get_session_factory
 
 INDEX_BATCH_SIZE = 8
+logger = logging.getLogger(__name__)
 
 
 class AIServiceError(RuntimeError):
@@ -58,6 +62,7 @@ def job_schema(job: Job) -> AIJob:
         status=job.status,
         total=job.total,
         done=job.done,
+        failed=job.failed,
         percent=job.percent,
         message=job.message,
         created_at=job.created_at,
@@ -104,9 +109,16 @@ class AIService:
         caption_indexed = await self.session.scalar(
             text("SELECT COUNT(*) FROM ai_documents")
         )
-        ready = await caption_provider.available()
+        stored_model = await self.session.scalar(
+            text("SELECT value FROM ai_preferences WHERE key = 'vlm_model'")
+        )
+        if stored_model:
+            caption_provider.model = str(stored_model)
         vlm_runtime_ready = await caption_provider.runtime_available()
-        vlm_models = await caption_provider.list_models() if vlm_runtime_ready else []
+        details = (
+            await caption_provider.list_model_details() if vlm_runtime_ready else []
+        )
+        ready = await caption_provider.available()
         return AIStatus(
             dependency_ready=runtime.dependency_ready(),
             model=_model_info(),
@@ -117,15 +129,114 @@ class AIService:
             caption_model=caption_provider.model if ready else "",
             caption_indexed=int(caption_indexed or 0),
             vlm_runtime_ready=vlm_runtime_ready,
-            vlm_models=vlm_models,
+            vlm_models=[str(item["name"]) for item in details],
+            vlm_model_details=[
+                AIVLMModelInfo(
+                    name=str(item["name"]),
+                    size_bytes=int(item.get("size_bytes") or 0),
+                    capabilities=list(item.get("capabilities") or []),
+                    supports_vision=bool(item.get("supports_vision")),
+                    selected=bool(item.get("selected")),
+                )
+                for item in details
+            ],
             index_updated_at=str(updated) if updated else None,
         )
+
+    async def list_jobs(self, limit: int = 20) -> list[AIJob]:
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT id, kind, status, total, done, failed, message, "
+                    "created_at, updated_at FROM ai_jobs "
+                    "ORDER BY created_at DESC LIMIT :limit"
+                ),
+                {"limit": max(1, min(limit, 100))},
+            )
+        ).all()
+        return [
+            AIJob(
+                id=row[0],
+                kind=row[1],
+                status=row[2],
+                total=int(row[3] or 0),
+                done=int(row[4] or 0),
+                failed=int(row[5] or 0),
+                percent=(
+                    max(0, min(100, round(int(row[4] or 0) * 100 / int(row[3]))))
+                    if int(row[3] or 0) > 0
+                    else None
+                ),
+                message=str(row[6] or ""),
+                created_at=str(row[7]),
+                updated_at=str(row[8]),
+            )
+            for row in rows
+        ]
+
+    async def vlm_runtime_status(self) -> AIVLMRuntime:
+        preferred = await self.session.scalar(
+            text("SELECT value FROM ai_preferences WHERE key = 'ollama_bin'")
+        )
+        data = await ollama_runtime.runtime_status(str(preferred or ""))
+        return AIVLMRuntime(**data)
+
+    async def select_ollama_binary(self, path: str) -> AIVLMRuntime:
+        raw = path.strip()
+        candidate = Path(raw).expanduser()
+        if not raw or not candidate.is_file():
+            raise AIServiceError("??? Ollama ???????? ollama.exe", 400)
+        await self.session.execute(
+            text(
+                "INSERT INTO ai_preferences (key, value, updated_at) "
+                "VALUES ('ollama_bin', :value, datetime('now')) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "value = excluded.value, updated_at = datetime('now')"
+            ),
+            {"value": str(candidate.resolve())},
+        )
+        await self.session.commit()
+        return await self.vlm_runtime_status()
+
+    async def start_ollama_runtime(self) -> AIVLMRuntime:
+        preferred = await self.session.scalar(
+            text("SELECT value FROM ai_preferences WHERE key = 'ollama_bin'")
+        )
+        binary = ollama_runtime.detect_binary(str(preferred or ""))
+        if not binary:
+            raise AIServiceError("???? Ollama???????? ollama.exe", 400)
+        try:
+            data = await ollama_runtime.start_runtime(binary)
+        except Exception as exc:
+            raise AIServiceError(str(exc) or "Ollama ????", 400) from exc
+        return AIVLMRuntime(**data)
+
+    async def select_vlm(self, model: str) -> AIStatus:
+        model = model.strip()
+        if not model:
+            raise AIServiceError("模型名称不能为空")
+        try:
+            await caption_provider.select_model(model)
+        except ValueError as exc:
+            raise AIServiceError(str(exc), 400) from exc
+        await self.session.execute(
+            text(
+                "INSERT INTO ai_preferences (key, value, updated_at) "
+                "VALUES ('vlm_model', :value, datetime('now')) "
+                "ON CONFLICT(key) DO UPDATE SET "
+                "value = excluded.value, updated_at = datetime('now')"
+            ),
+            {"value": model},
+        )
+        await self.session.commit()
+        return await self.status()
 
     async def get_job(self, job_id: str) -> AIJob:
         job = jobs.get(job_id)
         if job is None:
             raise AIServiceError("AI 任务不存在", 404)
         return job_schema(job)
+
 
     async def install_model(self) -> AIJob:
         if is_installed():
@@ -241,102 +352,148 @@ class AIService:
             await session.execute(text("DELETE FROM ai_hashes"))
             await session.commit()
 
-            import numpy as np
-
             label_vectors = await asyncio.to_thread(
                 runtime.encode_text, list(PROMPTS)
             )
-            for offset in range(0, len(images), INDEX_BATCH_SIZE):
-                batch = images[offset : offset + INDEX_BATCH_SIZE]
-                paths = [path for _resource_id, path in batch]
-                vectors = await asyncio.to_thread(runtime.encode_images, paths)
-                detections = await asyncio.to_thread(person_detector.count_many, paths)
-                hashes = await asyncio.to_thread(dhash_many, paths)
-                for (resource_id, path), vector, detection, digest in zip(
-                    batch, vectors, detections, hashes, strict=True
-                ):
-                    if digest is not None:
-                        await session.execute(
-                            text(
-                                "INSERT INTO ai_hashes (resource_id, dhash, updated_at) "
-                                "VALUES (:resource_id, :dhash, datetime('now')) "
-                                "ON CONFLICT(resource_id) DO UPDATE SET "
-                                "dhash = excluded.dhash, updated_at = datetime('now')"
-                            ),
-                            {"resource_id": resource_id, "dhash": digest},
-                        )
-                    if vector is not None:
-                        await session.execute(
-                            text(
-                                "INSERT INTO ai_vectors "
-                                "(resource_id, model_id, dim, vector, source_path, updated_at) "
-                                "VALUES (:resource_id, :model, :dim, :vector, :path, datetime('now')) "
-                                "ON CONFLICT(resource_id) DO UPDATE SET "
-                                "model_id = excluded.model_id, dim = excluded.dim, "
-                                "vector = excluded.vector, source_path = excluded.source_path, "
-                                "updated_at = datetime('now')"
-                            ),
-                            {
-                                "resource_id": resource_id,
-                                "model": MODEL_ID,
-                                "dim": int(vector.shape[0]),
-                                "vector": vector.astype("<f4").tobytes(),
-                                "path": str(path),
-                            },
-                        )
-                    if vector is not None:
-                        label_scores = label_vectors @ vector.astype("float32")
-                        selected = select_labels([float(value) for value in label_scores])
-                        for spec, score in selected:
-                            await service._save_attribute(
-                                session,
-                                resource_id,
-                                f"label:{spec.label}",
-                                {"label": spec.label, "score": score},
-                                value_num=score,
-                                value_text=spec.label,
-                                confidence=score,
-                                model="clip-label",
-                            )
-                        caption = "?".join(spec.label for spec, _score in selected)
-                        if caption:
-                            await service._save_attribute(
-                                session,
-                                resource_id,
-                                "caption",
-                                {"text": caption},
-                                value_text=caption,
-                                confidence=1.0,
-                                model="clip-label",
-                            )
-                    if detection is not None:
-                        await service._save_attribute(
-                            session,
-                            resource_id,
-                            "person_count",
-                            detection.count,
-                            value_num=detection.count,
-                            confidence=detection.confidence,
-                            model="yolov8n",
-                        )
-                        orientation = service._orientation(
-                            detection.width, detection.height
-                        )
-                        await service._save_attribute(
-                            session,
-                            resource_id,
-                            "orientation",
-                            orientation,
-                            value_text=orientation,
-                            confidence=1.0,
-                            model="image-dimensions",
-                        )
-                await session.commit()
+            processed: set[int] = set()
+            await service._index_image_batches(
+                session, job, images, label_vectors, processed
+            )
+
+            # Resources can be imported while a full rebuild is running. Do a
+            # bounded catch-up pass so the final count does not silently drop
+            # newly imported images.
+            for _ in range(2):
+                refreshed = await service._collect_images()
+                missing = [
+                    (resource_id, path)
+                    for resource_id, path in refreshed
+                    if resource_id not in processed
+                ]
+                if not missing:
+                    break
                 jobs.update(
                     job,
-                    done=min(len(images), offset + len(batch)),
-                    message=f"已索引 {min(len(images), offset + len(batch))}/{len(images)}",
+                    total=len(processed) + len(missing),
+                    message=f"发现 {len(missing)} 张新增图片，继续补索引",
                 )
+                await service._index_image_batches(
+                    session, job, missing, label_vectors, processed
+                )
+
+            remaining = [
+                (resource_id, path)
+                for resource_id, path in await service._collect_images()
+                if resource_id not in processed
+            ]
+            if remaining:
+                jobs.update(
+                    job,
+                    message=f"索引完成，仍有 {len(remaining)} 张新增图片待索引",
+                )
+            else:
+                jobs.update(job, message=f"索引完成，共 {len(processed)} 张")
+
+    async def _index_image_batches(
+        self,
+        session: AsyncSession,
+        job: Job,
+        images: list[tuple[int, Path]],
+        label_vectors,
+        processed: set[int],
+    ) -> None:
+        for offset in range(0, len(images), INDEX_BATCH_SIZE):
+            batch = images[offset : offset + INDEX_BATCH_SIZE]
+            paths = [path for _resource_id, path in batch]
+            vectors = await asyncio.to_thread(runtime.encode_images, paths)
+            detections = await asyncio.to_thread(person_detector.count_many, paths)
+            hashes = await asyncio.to_thread(dhash_many, paths)
+            for (resource_id, path), vector, detection, digest in zip(
+                batch, vectors, detections, hashes, strict=True
+            ):
+                if digest is not None:
+                    await session.execute(
+                        text(
+                            "INSERT INTO ai_hashes (resource_id, dhash, updated_at) "
+                            "VALUES (:resource_id, :dhash, datetime('now')) "
+                            "ON CONFLICT(resource_id) DO UPDATE SET "
+                            "dhash = excluded.dhash, updated_at = datetime('now')"
+                        ),
+                        {"resource_id": resource_id, "dhash": digest},
+                    )
+                if vector is not None:
+                    await session.execute(
+                        text(
+                            "INSERT INTO ai_vectors "
+                            "(resource_id, model_id, dim, vector, source_path, updated_at) "
+                            "VALUES (:resource_id, :model, :dim, :vector, :path, datetime('now')) "
+                            "ON CONFLICT(resource_id) DO UPDATE SET "
+                            "model_id = excluded.model_id, dim = excluded.dim, "
+                            "vector = excluded.vector, source_path = excluded.source_path, "
+                            "updated_at = datetime('now')"
+                        ),
+                        {
+                            "resource_id": resource_id,
+                            "model": MODEL_ID,
+                            "dim": int(vector.shape[0]),
+                            "vector": vector.astype("<f4").tobytes(),
+                            "path": str(path),
+                        },
+                    )
+                if vector is not None:
+                    label_scores = label_vectors @ vector.astype("float32")
+                    selected = select_labels([float(value) for value in label_scores])
+                    for spec, score in selected:
+                        await self._save_attribute(
+                            session,
+                            resource_id,
+                            f"label:{spec.label}",
+                            {"label": spec.label, "score": score},
+                            value_num=score,
+                            value_text=spec.label,
+                            confidence=score,
+                            model="clip-label",
+                        )
+                    caption = "、".join(spec.label for spec, _score in selected)
+                    if caption:
+                        await self._save_attribute(
+                            session,
+                            resource_id,
+                            "caption",
+                            {"text": caption},
+                            value_text=caption,
+                            confidence=1.0,
+                            model="clip-label",
+                        )
+                if detection is not None:
+                    await self._save_attribute(
+                        session,
+                        resource_id,
+                        "person_count",
+                        detection.count,
+                        value_num=detection.count,
+                        confidence=detection.confidence,
+                        model="yolov8n",
+                    )
+                    orientation = self._orientation(
+                        detection.width, detection.height
+                    )
+                    await self._save_attribute(
+                        session,
+                        resource_id,
+                        "orientation",
+                        orientation,
+                        value_text=orientation,
+                        confidence=1.0,
+                        model="image-dimensions",
+                    )
+                processed.add(resource_id)
+            await session.commit()
+            jobs.update(
+                job,
+                done=len(processed),
+                message=f"已索引 {len(processed)}/{job.total}",
+            )
 
     async def _filter_resource_ids(
         self, filters: list[AttributeFilter]
@@ -405,21 +562,41 @@ class AIService:
             jobs.update(job, done=done, total=total, message=message)
 
         await caption_provider.pull(model, progress)
+        async with get_session_factory()() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO ai_preferences (key, value, updated_at) "
+                    "VALUES ('vlm_model', :value, datetime('now')) "
+                    "ON CONFLICT(key) DO UPDATE SET "
+                    "value = excluded.value, updated_at = datetime('now')"
+                ),
+                {"value": model},
+            )
+            await session.commit()
         jobs.update(job, done=job.total or job.done, message=f"模型 {model} 下载完成")
 
-    async def analyze_images(self, resource_ids: list[int] | None = None) -> AIJob:
+    async def analyze_images(
+        self,
+        resource_ids: list[int] | None = None,
+        only_pending: bool = True,
+    ) -> AIJob:
         if not await caption_provider.available():
             raise AIServiceError(
-                f"尚未安装可用的 VLM 模型，请先运行：ollama pull {settings.vlm_model}"
+                f"尚未安装可用的 VLM 模型，请先运行：ollama pull {caption_provider.model}"
             )
         if jobs.has_active():
             raise AIServiceError("已有 AI 任务在运行")
         job = jobs.create("caption")
-        jobs.start(job, lambda current: self._run_analyze(current, resource_ids))
+        jobs.start(
+            job,
+            lambda current: self._run_analyze(current, resource_ids, only_pending),
+        )
         return job_schema(job)
 
     async def _collect_analysis_images(
-        self, resource_ids: list[int] | None
+        self,
+        resource_ids: list[int] | None,
+        only_pending: bool = True,
     ) -> list[tuple[int, Path]]:
         stmt = (
             select(ResourceRow.id, FileRow.path)
@@ -433,6 +610,15 @@ class AIService:
         )
         if resource_ids:
             stmt = stmt.where(ResourceRow.id.in_(resource_ids))
+        if only_pending:
+            stmt = stmt.where(
+                text(
+                    "NOT EXISTS ("
+                    "SELECT 1 FROM ai_documents d "
+                    "WHERE d.resource_id = resources.id AND d.status = 'ready'"
+                    ")"
+                )
+            )
         rows = (await self.session.execute(stmt)).all()
         chosen: dict[int, Path] = {}
         for resource_id, raw_path in rows:
@@ -444,15 +630,48 @@ class AIService:
         return list(chosen.items())
 
     async def _run_analyze(
-        self, job: Job, resource_ids: list[int] | None
+        self,
+        job: Job,
+        resource_ids: list[int] | None,
+        only_pending: bool = True,
     ) -> None:
         factory = get_session_factory()
         async with factory() as session:
             service = AIService(session)
-            images = await service._collect_analysis_images(resource_ids)
-            jobs.update(job, total=len(images), done=0, message="准备分析文案")
+            images = await service._collect_analysis_images(resource_ids, only_pending)
+            jobs.update(
+                job,
+                total=len(images),
+                done=0,
+                failed=0,
+                message="准备分析文案" if images else "没有待分析图片",
+            )
+            failed = 0
+            consecutive_failures = 0
             for index, (resource_id, path) in enumerate(images, start=1):
-                document = await caption_provider.analyze(path)
+                try:
+                    document = await caption_provider.analyze(path)
+                except Exception as exc:
+                    failed += 1
+                    consecutive_failures += 1
+                    logger.warning(
+                        "Caption analysis failed for resource %s: %s",
+                        resource_id,
+                        exc,
+                        exc_info=True,
+                    )
+                    jobs.update(
+                        job,
+                        done=index,
+                        failed=failed,
+                        message=f"已处理 {index}/{len(images)}，失败 {failed} 张：{exc}",
+                    )
+                    if consecutive_failures >= 3:
+                        raise RuntimeError(
+                            f"连续 {consecutive_failures} 张分析失败，任务已停止：{exc}"
+                        ) from exc
+                    continue
+                consecutive_failures = 0
                 await session.execute(
                     text(
                         "INSERT INTO ai_documents "
@@ -482,10 +701,12 @@ class AIService:
                     text("DELETE FROM ai_tags WHERE resource_id = :id"),
                     {"id": resource_id},
                 )
-                for tag in document.tags:
+                for tag in dict.fromkeys(document.tags):
+                    if not tag:
+                        continue
                     await session.execute(
                         text(
-                            "INSERT INTO ai_tags "
+                            "INSERT OR IGNORE INTO ai_tags "
                             "(resource_id, tag, category, confidence, source, model_id) "
                             "VALUES (:resource_id, :tag, NULL, NULL, 'vlm', :model)"
                         ),
@@ -495,8 +716,18 @@ class AIService:
                 jobs.update(
                     job,
                     done=index,
+                    failed=failed,
                     message=f"已分析 {index}/{len(images)}",
                 )
+            jobs.update(
+                job,
+                failed=failed,
+                message=(
+                    f"完成：成功 {len(images) - failed} 张，失败 {failed} 张"
+                    if images
+                    else "没有待分析图片"
+                ),
+            )
 
     async def _query_image_path(self, resource_id: int) -> Path | None:
         row = (

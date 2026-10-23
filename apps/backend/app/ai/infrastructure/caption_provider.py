@@ -6,6 +6,7 @@ CLIP/YOLO when Ollama is absent.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import re
@@ -91,6 +92,62 @@ class CaptionProvider:
         except Exception:
             return []
 
+    async def list_model_details(self) -> list[dict]:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{settings.vlm_url.rstrip('/')}/api/tags")
+                response.raise_for_status()
+                models = response.json().get("models", [])
+
+                async def describe(item: dict) -> dict:
+                    name = str(item.get("name") or "")
+                    show: dict = {}
+                    if name:
+                        try:
+                            detail = await client.post(
+                                f"{settings.vlm_url.rstrip('/')}/api/show",
+                                json={"name": name},
+                            )
+                            detail.raise_for_status()
+                            show = detail.json()
+                        except Exception:
+                            show = {}
+                    capabilities = show.get("capabilities") or item.get("capabilities") or []
+                    caps = [str(value) for value in capabilities]
+                    model_info = show.get("model_info") or {}
+                    family = str(
+                        (show.get("details") or {}).get("family")
+                        or (item.get("details") or {}).get("family")
+                        or ""
+                    )
+                    supports_vision = (
+                        "vision" in caps
+                        or any("vision" in str(key).lower() for key in model_info)
+                        or "vl" in family.lower()
+                    )
+                    return {
+                        "name": name,
+                        "size_bytes": int(item.get("size") or 0),
+                        "capabilities": caps,
+                        "supports_vision": supports_vision,
+                        "selected": name == self.model,
+                    }
+
+                return await asyncio.gather(*(describe(item) for item in models))
+        except Exception:
+            return []
+
+    async def select_model(self, model: str) -> dict:
+        details = await self.list_model_details()
+        matched = next((item for item in details if item["name"] == model), None)
+        if matched is None:
+            raise ValueError("??????")
+        if not matched["supports_vision"]:
+            raise ValueError("??????????")
+        self.model = model
+        self._ready = None
+        return matched
+
     async def runtime_available(self) -> bool:
         try:
             async with httpx.AsyncClient(timeout=2.0) as client:
@@ -168,7 +225,10 @@ class CaptionProvider:
             response.raise_for_status()
             payload = response.json()
         value = _parse_json(str(payload.get("response", "")))
-        tags = _string_list(value.get("tags"))
+        tags: list[str] = []
+        for item in _string_list(value.get("tags")):
+            if item not in tags:
+                tags.append(item)
         for key in ("scene", "actions", "colors", "clothing"):
             for item in _string_list(value.get(key)):
                 if item not in tags:

@@ -7,7 +7,20 @@ import base64
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.application.schemas import AIAnalyzeRequest, AIFusionRequest, AIFusionResponse, AIJob, AISearchResponse, AISimilarFileRequest, AISimilarResponse, AIStatus, VLMPullRequest
+from app.ai.application.schemas import (
+    AIAnalyzeRequest,
+    AIFusionRequest,
+    AIFusionResponse,
+    AIJob,
+    AISearchResponse,
+    AISimilarFileRequest,
+    AISimilarResponse,
+    AIStatus,
+    AIVLMRuntime,
+    VLMPullRequest,
+    VLMSelectBinaryRequest,
+    VLMSelectRequest,
+)
 from app.ai.application.service import AIService, AIServiceError
 from app.shared.db.db import get_session
 
@@ -31,6 +44,32 @@ async def install_model(session: AsyncSession = Depends(get_session)) -> AIJob:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+@router.get("/vlm/runtime", response_model=AIVLMRuntime)
+async def vlm_runtime(session: AsyncSession = Depends(get_session)) -> AIVLMRuntime:
+    return await _service(session).vlm_runtime_status()
+
+
+@router.post("/vlm/runtime/select", response_model=AIVLMRuntime)
+async def select_ollama_binary(
+    body: VLMSelectBinaryRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AIVLMRuntime:
+    try:
+        return await _service(session).select_ollama_binary(body.path)
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.post("/vlm/runtime/start", response_model=AIVLMRuntime)
+async def start_ollama_runtime(
+    session: AsyncSession = Depends(get_session),
+) -> AIVLMRuntime:
+    try:
+        return await _service(session).start_ollama_runtime()
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.post("/vlm/pull", response_model=AIJob)
 async def pull_vlm(
     body: VLMPullRequest,
@@ -42,13 +81,26 @@ async def pull_vlm(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+@router.post("/vlm/select", response_model=AIStatus)
+async def select_vlm(
+    body: VLMSelectRequest,
+    session: AsyncSession = Depends(get_session),
+) -> AIStatus:
+    try:
+        return await _service(session).select_vlm(body.model)
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.post("/analyze", response_model=AIJob)
 async def analyze(
     body: AIAnalyzeRequest,
     session: AsyncSession = Depends(get_session),
 ) -> AIJob:
     try:
-        return await _service(session).analyze_images(body.resource_ids)
+        return await _service(session).analyze_images(
+            body.resource_ids, body.only_pending
+        )
     except AIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
@@ -59,6 +111,14 @@ async def build_index(session: AsyncSession = Depends(get_session)) -> AIJob:
         return await _service(session).build_index()
     except AIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/jobs", response_model=list[AIJob])
+async def list_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+) -> list[AIJob]:
+    return await _service(session).list_jobs(limit)
 
 
 @router.get("/jobs/{job_id}", response_model=AIJob)

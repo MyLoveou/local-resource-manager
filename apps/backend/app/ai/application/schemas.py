@@ -14,6 +14,23 @@ class AIModelInfo(ApiModel):
     size_bytes: int
 
 
+class AIVLMRuntime(ApiModel):
+    running: bool
+    url: str
+    binary_path: str = ""
+    detected: bool = False
+    models_dir: str = ""
+    error: str = ""
+
+
+class AIVLMModelInfo(ApiModel):
+    name: str
+    size_bytes: int = 0
+    capabilities: list[str] = []
+    supports_vision: bool = False
+    selected: bool = False
+
+
 class AIStatus(ApiModel):
     dependency_ready: bool
     model: AIModelInfo
@@ -25,6 +42,7 @@ class AIStatus(ApiModel):
     caption_indexed: int = 0
     vlm_runtime_ready: bool = False
     vlm_models: list[str] = []
+    vlm_model_details: list[AIVLMModelInfo] = []
     index_updated_at: str | None = None
 
 
@@ -34,6 +52,7 @@ class AIJob(ApiModel):
     status: str
     total: int
     done: int
+    failed: int = 0
     percent: int | None = None
     message: str
     created_at: str
@@ -121,7 +140,16 @@ class AISimilarFileRequest(ApiModel):
 
 class AIAnalyzeRequest(ApiModel):
     resource_ids: list[int] | None = None
+    only_pending: bool = True
 
 
 class VLMPullRequest(ApiModel):
     model: str
+
+
+class VLMSelectRequest(ApiModel):
+    model: str
+
+
+class VLMSelectBinaryRequest(ApiModel):
+    path: str

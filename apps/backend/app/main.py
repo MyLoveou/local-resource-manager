@@ -5,9 +5,11 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai.api.router import router as ai_router
+from app.ai.application.jobs import Job, jobs
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
@@ -29,6 +31,35 @@ from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
 from app.settings.application.service import load_watch_dirs
 from app.library.domain.models import ResourceType
+
+
+async def _persist_ai_job(job: Job) -> None:
+    factory = get_session_factory()
+    async with factory() as session:
+        await session.execute(
+            text(
+                "INSERT INTO ai_jobs "
+                "(id, kind, status, total, done, failed, message, created_at, updated_at) "
+                "VALUES (:id, :kind, :status, :total, :done, :failed, :message, "
+                ":created_at, :updated_at) "
+                "ON CONFLICT(id) DO UPDATE SET "
+                "status = excluded.status, total = excluded.total, done = excluded.done, "
+                "failed = excluded.failed, message = excluded.message, "
+                "updated_at = excluded.updated_at"
+            ),
+            {
+                "id": job.id,
+                "kind": job.kind,
+                "status": job.status,
+                "total": job.total,
+                "done": job.done,
+                "failed": job.failed,
+                "message": job.message,
+                "created_at": job.created_at,
+                "updated_at": job.updated_at,
+            },
+        )
+        await session.commit()
 
 
 def parse_watch_dirs(raw: dict[str, list[str]]) -> dict[ResourceType, list[str]]:
@@ -56,6 +87,17 @@ async def lifespan(_: FastAPI):
         if not settings.token:
             logger.warning("BACKEND_TOKEN 未配置：本次启动不校验鉴权（仅限本机开发）")
         factory = get_session_factory()
+        jobs.set_persister(_persist_ai_job)
+        async with factory() as session:
+            await session.execute(
+                text(
+                    "UPDATE ai_jobs SET status = 'error', "
+                    "message = '???????????', "
+                    "updated_at = datetime('now') "
+                    "WHERE status IN ('queued', 'running')"
+                )
+            )
+            await session.commit()
         async with factory() as session:
             repo = ResourceRepository(session)
             rewritten = 0

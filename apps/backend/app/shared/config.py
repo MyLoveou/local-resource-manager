@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     vlm_url: str = "http://127.0.0.1:11434"
     vlm_model: str = "qwen2.5vl:3b"
     vlm_timeout: int = 120
+    vlm_bin: str = ""
+    vlm_models_dir: str = ""
 
 
 def resolve_log_dir() -> Path:
