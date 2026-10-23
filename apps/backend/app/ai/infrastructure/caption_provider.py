@@ -20,7 +20,7 @@ from PIL import Image, ImageOps
 
 from app.shared.config import settings
 
-PROMPT_VERSION = "caption-v2"
+PROMPT_VERSION = "caption-v3"
 PROMPT = """
 请分析这张图片，只返回一个 JSON 对象，不要 markdown，不要解释。
 描述主体、人物、场景、动作、颜色、物体、服饰；无法判断的字段用 null。
@@ -34,7 +34,7 @@ JSON 格式：
   "objects": [{"name": "物体", "color": "颜色", "confidence": 0.0}],
   "clothing": ["服饰"],
   "people_count": 0,
-  "ocr": ["图中清晰可读的文字"],
+  "ocr": ["图中清晰可读的文字，最多5条，不要重复"],
   "tags": ["3到8个中文标签"]
 }
 """.strip()
@@ -54,10 +54,37 @@ class CaptionDocument:
 def _parse_json(raw: str) -> dict:
     cleaned = re.sub(r"```(?:json)?\s*|```\s*", "", raw).strip()
     start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    if start < 0 or end <= start:
+    if start < 0:
         raise ValueError("VLM 未返回有效 JSON")
-    value = json.loads(cleaned[start : end + 1])
+    end = cleaned.rfind("}")
+    payload = cleaned[start : end + 1] if end > start else cleaned[start:]
+    try:
+        value = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        # A VLM may hit the output limit in the middle of a long OCR list.
+        # Recover fields that were already complete instead of dropping an
+        # otherwise usable caption.
+        def field(name: str) -> str:
+            match = re.search(
+                rf'"{name}"\s*:\s*"((?:\\.|[^"\\])*)"', cleaned, re.S
+            )
+            return str(match.group(1)).strip() if match else ""
+
+        caption = field("caption")
+        short_caption = field("short_caption")
+        tag_block = re.search(r'"tags"\s*:\s*\[(.*?)(?:\]|$)', cleaned, re.S)
+        tags = (
+            re.findall(r'"((?:\\.|[^"\\])*)"', tag_block.group(1))
+            if tag_block
+            else []
+        )
+        if caption or short_caption or tags:
+            return {
+                "caption": caption,
+                "short_caption": short_caption,
+                "tags": tags,
+            }
+        raise exc
     if not isinstance(value, dict):
         raise ValueError("VLM JSON 不是对象")
     return value
@@ -203,7 +230,7 @@ class CaptionProvider:
             "prompt": PROMPT,
             "images": [image_base64],
             "stream": False,
-            "options": {"temperature": 0.2, "num_ctx": 8192},
+            "options": {"temperature": 0.2, "num_ctx": 4096, "num_predict": 512},
         }
 
     async def analyze(self, path: Path) -> CaptionDocument:
@@ -217,14 +244,29 @@ class CaptionProvider:
             buffer = BytesIO()
             image.save(buffer, format="JPEG", quality=86)
         image_base64 = base64.b64encode(buffer.getvalue()).decode("ascii")
-        async with httpx.AsyncClient(timeout=settings.vlm_timeout) as client:
-            response = await client.post(
-                f"{settings.vlm_url.rstrip('/')}/api/generate",
-                json=self._post_body(image_base64),
-            )
-            response.raise_for_status()
-            payload = response.json()
-        value = _parse_json(str(payload.get("response", "")))
+        value: dict | None = None
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=settings.vlm_timeout) as client:
+                    response = await client.post(
+                        f"{settings.vlm_url.rstrip('/')}/api/generate",
+                        json=self._post_body(image_base64),
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                value = _parse_json(str(payload.get("response", "")))
+                break
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+                last_error = exc
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                retryable = isinstance(exc, ValueError) or status is None or status >= 500
+                if attempt == 0 and retryable:
+                    await asyncio.sleep(1.5)
+                    continue
+                raise
+        if value is None:
+            raise RuntimeError(f"VLM ?????{last_error}")
         tags: list[str] = []
         for item in _string_list(value.get("tags")):
             if item not in tags:

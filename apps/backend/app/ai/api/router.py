@@ -121,6 +121,15 @@ async def list_jobs(
     return await _service(session).list_jobs(limit)
 
 
+@router.delete("/jobs")
+async def clear_jobs(session: AsyncSession = Depends(get_session)) -> dict:
+    try:
+        await _service(session).clear_jobs()
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return {"cleared": True}
+
+
 @router.get("/jobs/{job_id}", response_model=AIJob)
 async def get_job(job_id: str, session: AsyncSession = Depends(get_session)) -> AIJob:
     try:

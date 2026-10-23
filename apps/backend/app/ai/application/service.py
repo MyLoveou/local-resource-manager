@@ -211,6 +211,12 @@ class AIService:
             raise AIServiceError(str(exc) or "Ollama ????", 400) from exc
         return AIVLMRuntime(**data)
 
+    async def clear_jobs(self) -> None:
+        if jobs.has_active():
+            raise AIServiceError("? AI ???????????????")
+        await self.session.execute(text("DELETE FROM ai_jobs"))
+        await self.session.commit()
+
     async def select_vlm(self, model: str) -> AIStatus:
         model = model.strip()
         if not model:
