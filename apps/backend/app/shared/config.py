@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # 常驻监视：资源类型("image"/"video"…) → 源目录列表；一个类型可多个目录，同一目录可多类型。
     # env 用 JSON 对象：BACKEND_WATCH_DIRS='{"image":["D:\\Pics"],"video":["D:\\Videos","E:\\Videos"]}'
     watch_dirs: dict[str, list[str]] = {}
+    # 可选本地 VLM：Ollama 地址、默认视觉模型与超时。
+    vlm_url: str = "http://127.0.0.1:11434"
+    vlm_model: str = "qwen2.5vl:3b"
+    vlm_timeout: int = 120
 
 
 def resolve_log_dir() -> Path:
