@@ -241,6 +241,10 @@ export async function getAIJobs(limit = 20): Promise<AIJob[]> {
   return data
 }
 
+export async function clearAIJobs(): Promise<void> {
+  await client.delete('/ai/jobs')
+}
+
 export async function selectVLMModel(model: string): Promise<AIStatus> {
   const { data } = await client.post<AIStatus>('/ai/vlm/select', { model })
   return data

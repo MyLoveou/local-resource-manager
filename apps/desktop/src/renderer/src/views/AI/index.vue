@@ -879,6 +879,11 @@ async function useRecentQuery(value: string): Promise<void> {
   await runSearch()
 }
 
+async function clearJobHistory(): Promise<void> {
+  if (!window.confirm('???? AI ?????')) return
+  await ai.clearJobHistory()
+}
+
 async function pullVLM(): Promise<void> {
   if (ai.jobActive || !vlmModel.value.trim()) return
   await ai.pullVLM(vlmModel.value.trim())

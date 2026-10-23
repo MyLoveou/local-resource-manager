@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
   analyzeAIImages,
+  clearAIJobs,
   pullVLMModel,
   buildAIIndex,
   getAIJob,
@@ -74,6 +75,16 @@ export const useAIStore = defineStore('ai', () => {
     if (timer) {
       clearTimeout(timer)
       timer = null
+    }
+  }
+
+  async function clearJobHistory(): Promise<void> {
+    error.value = ''
+    try {
+      await clearAIJobs()
+      jobHistory.value = []
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? AI ??????'
     }
   }
 
@@ -244,6 +255,7 @@ export const useAIStore = defineStore('ai', () => {
     refresh,
     refreshJobs,
     refreshVLMRuntime,
+    clearJobHistory,
     installModel,
     buildIndex,
     analyze,

@@ -93,6 +93,7 @@ export {
   searchAISimilarFile,
   searchAIFusion,
   analyzeAIImages,
+  clearAIJobs,
   getAIJobs,
   getVLMRuntime,
   selectOllamaBinary,
