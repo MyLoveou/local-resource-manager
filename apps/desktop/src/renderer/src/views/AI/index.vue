@@ -97,6 +97,8 @@
             </n-tag>
           </div>
 
+          <AIInsightPanel :insight="ai.results?.queryInsight ?? null" />
+
           <div v-if="ai.searching" class="ai-empty">
             <n-spin size="small" /> 正在计算相似度
           </div>
@@ -106,6 +108,7 @@
               :key="item.id"
               type="button"
               class="ai-result"
+              :title="matchReason(ai.results.explanations[index])"
               @click="openResult(item)"
             >
               <img :src="resolveCardImageUrl(item)" :alt="item.title" loading="lazy" />
@@ -113,6 +116,9 @@
                 {{ scoreLabel(ai.results.scores[index] ?? 0) }}
               </span>
               <span class="ai-result__title">{{ item.title }}</span>
+              <span v-if="matchReason(ai.results.explanations[index])" class="ai-result__why">
+                {{ matchReason(ai.results.explanations[index]) }}
+              </span>
             </button>
           </div>
           <div v-else-if="ai.results && ai.results.matched === 0" class="ai-empty">
@@ -129,19 +135,44 @@
     </template>
 
     <template v-else-if="activeTab === 'similar'">
-      <section v-if="!similarSource" class="ai-setup">
+      <input
+        ref="fileInput"
+        class="ai-file-input"
+        type="file"
+        accept="image/*"
+        @change="onFileChange"
+      />
+      <section
+        v-if="!similarSource && !externalPreview"
+        class="ai-setup"
+        @dragover.prevent
+        @drop.prevent="onDrop"
+      >
         <h3>以图搜图</h3>
-        <p>从图片查看器或 Inspector 的「找相似」进入，选择一张查询图片。</p>
+        <p>选择本地图片，或从图片查看器 / Inspector 的「找相似」进入。也可以把图片拖到这里，或按 Ctrl/Cmd+V 粘贴。</p>
+        <div class="ai-setup__actions">
+          <n-button type="primary" size="small" @click="chooseFile">选择本地图片</n-button>
+        </div>
       </section>
 
       <template v-else>
-        <section class="ai-similar-source">
-          <img :src="resolveCardImageUrl(similarSource)" :alt="similarSource.title" />
+        <section
+          class="ai-similar-source"
+          @dragover.prevent
+          @drop.prevent="onDrop"
+        >
+          <img
+            :src="similarSource ? resolveCardImageUrl(similarSource) : externalPreview"
+            :alt="similarSource?.title ?? externalName"
+          />
           <div>
-            <strong>{{ similarSource.title }}</strong>
-            <p class="ai-muted">查询图不会出现在结果中。</p>
+            <strong>{{ similarSource?.title ?? externalName }}</strong>
+            <p class="ai-muted">查询图不会出现在结果中。可拖入或粘贴另一张图片。</p>
+            <n-button size="tiny" quaternary @click="chooseFile">选择其他图片</n-button>
           </div>
         </section>
+
+        <AIInsightPanel :insight="similar?.queryInsight ?? null" />
 
         <div class="ai-similar-modes">
           <n-button-group size="small">
@@ -160,12 +191,70 @@
           </span>
         </div>
 
-        <p v-if="similarError" class="ai-center__error">{{ similarError }}</p>
-        <div v-if="similarLoading" class="ai-empty">
+        <div v-if="similarSource" class="ai-fusionbar">
+          <n-input
+            v-model:value="fusionText"
+            size="small"
+            clearable
+            placeholder="像这张图，但要有红帽子 / 室内 / 两个人"
+            :disabled="ai.jobActive"
+            @keydown.enter.prevent="runFusion"
+          />
+          <n-checkbox v-model:checked="fusionStrict" :disabled="ai.jobActive">严格匹配</n-checkbox>
+          <n-button
+            type="primary"
+            size="small"
+            :loading="fusionLoading"
+            :disabled="ai.jobActive || !fusionText.trim()"
+            @click="runFusion"
+          >
+            图文融合
+          </n-button>
+        </div>
+
+        <p v-if="fusionError" class="ai-center__error">{{ fusionError }}</p>
+        <p v-if="similarError && !fusion" class="ai-center__error">{{ similarError }}</p>
+        <div v-if="similarLoading && !fusionLoading" class="ai-empty">
           <n-spin size="small" /> 正在计算相似度
         </div>
 
-        <template v-else-if="similar">
+        <div v-if="fusionLoading" class="ai-empty">
+          <n-spin size="small" /> 正在融合图片和文字
+        </div>
+
+        <section v-if="fusion" class="ai-panel">
+          <div class="ai-panel__row">
+            <strong>图文融合</strong>
+            <n-tag size="small" :bordered="false">{{ fusionText }}</n-tag>
+          </div>
+          <p class="ai-muted">
+            已索引 {{ fusion.indexed }} 张 · 匹配 {{ fusion.matched }} 张
+            · 显示 {{ fusion.returned }} 张
+          </p>
+          <div v-if="fusion.filters.length" class="ai-filters">
+            <n-tag v-for="filter in fusion.filters" :key="filter" size="small" :bordered="false">
+              {{ filter }}
+            </n-tag>
+          </div>
+          <div v-if="fusion.items.length" class="ai-results">
+            <button
+              v-for="(item, index) in fusion.items"
+              :key="`fusion-${item.id}`"
+              type="button"
+              class="ai-result"
+              @click="openFusionResult(item)"
+            >
+              <img :src="resolveCardImageUrl(item)" :alt="item.title" loading="lazy" />
+              <span class="ai-result__score">
+                {{ scoreLabel(fusion.scores[index] ?? 0) }}
+              </span>
+              <span class="ai-result__title">{{ item.title }}</span>
+            </button>
+          </div>
+          <div v-else class="ai-empty">没有同时满足图片和文字条件的结果。</div>
+        </section>
+
+        <template v-else-if="similar && !fusionLoading">
           <section v-if="similar.duplicates.length" class="ai-panel">
             <div class="ai-panel__row">
               <strong>近似重复</strong>
@@ -182,6 +271,12 @@
                 <img :src="resolveCardImageUrl(item)" :alt="item.title" loading="lazy" />
                 <span class="ai-result__score">重复 {{ ((similar.duplicateScores[index] ?? 0) * 100).toFixed(0) }}%</span>
                 <span class="ai-result__title">{{ item.title }}</span>
+                <span
+                  v-if="matchReason(similar.duplicateExplanations[index])"
+                  class="ai-result__why"
+                >
+                  {{ matchReason(similar.duplicateExplanations[index]) }}
+                </span>
               </button>
             </div>
           </section>
@@ -204,6 +299,12 @@
                   {{ scoreLabel(similar.scores[index] ?? 0) }}
                 </span>
                 <span class="ai-result__title">{{ item.title }}</span>
+                <span
+                  v-if="matchReason(similar.explanations[index])"
+                  class="ai-result__why"
+                >
+                  {{ matchReason(similar.explanations[index]) }}
+                </span>
               </button>
             </div>
           </section>
@@ -257,6 +358,59 @@
         :height="6"
       />
       <p v-if="ai.jobActive" class="ai-muted">{{ jobProgressText }}</p>
+
+      <div class="ai-panel__divider" />
+      <div class="ai-panel__row">
+        <strong>文案 / 标签</strong>
+        <n-tag size="small" :bordered="false" :type="ai.status?.captionReady ? 'success' : 'warning'">
+          {{ ai.status?.captionReady ? 'VLM 可用' : '未配置 VLM' }}
+        </n-tag>
+      </div>
+      <p class="ai-muted">
+        已分析 {{ ai.status?.captionIndexed ?? 0 }} 张
+        <template v-if="ai.status?.captionReady"> · {{ ai.status?.captionModel }}</template>
+      </p>
+      <template v-if="ai.status?.captionReady">
+        <div class="ai-panel__actions">
+          <n-button size="small" :loading="captionJobActive" @click="analyzeCaptions">
+            分析图片文案
+          </n-button>
+        </div>
+      </template>
+      <p v-if="!ai.status?.vlmRuntimeReady" class="ai-muted">
+        未检测到 Ollama。启动本地 Ollama 后可在这里选择并下载模型。
+      </p>
+      <template v-else>
+        <p class="ai-muted">
+          下载 / 切换模型。推荐 <code>qwen2.5vl:3b</code>（中文、视觉、约 3.2GB）；
+          也可输入其他 Ollama 视觉模型，例如 <code>qwen2.5vl:7b</code>、<code>llava:7b</code>。
+        </p>
+        <div class="ai-fusionbar">
+          <n-input
+            v-model:value="vlmModel"
+            size="small"
+            placeholder="qwen2.5vl:3b"
+            :disabled="vlmPullActive"
+          />
+          <n-button
+            type="primary"
+            size="small"
+            :loading="vlmPullActive"
+            :disabled="!vlmModel.trim()"
+            @click="pullVLM"
+          >
+            下载 / 切换
+          </n-button>
+        </div>
+      </template>
+      <n-progress
+        v-if="captionJobActive || vlmPullActive"
+        class="ai-panel__progress"
+        type="line"
+        :percentage="jobPercent"
+        :height="6"
+      />
+      <p v-if="captionJobActive || vlmPullActive" class="ai-muted">{{ jobProgressText }}</p>
     </section>
 
     <section v-else-if="activeTab === 'jobs'" class="ai-panel">
@@ -290,14 +444,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NButtonGroup, NInput, NProgress, NSpin, NTag } from 'naive-ui'
+import { NButton, NButtonGroup, NCheckbox, NInput, NProgress, NSpin, NTag } from 'naive-ui'
 import { useAIStore } from '@/application/stores/ai'
 import { openResource } from '@/infrastructure/consume/consumeResource'
-import { getAISimilar, getResource, resolveCardImageUrl } from '@/infrastructure/http'
-import type { AISimilarResult } from '@/infrastructure/http'
+import { getAISimilar, getResource, resolveCardImageUrl, searchAIFusion, searchAISimilarFile } from '@/infrastructure/http'
+import type { AIFusionResult, AIMatchExplanation, AISimilarResult } from '@/infrastructure/http'
 import type { Resource } from '@/domain'
+import AIInsightPanel from '@/components/AIInsightPanel/index.vue'
 
 const tabs = [
   { value: 'search', label: '搜索' },
@@ -325,6 +480,15 @@ const similarSource = ref<Resource | null>(null)
 const similarLoading = ref(false)
 const similarMode = ref<'auto' | 'semantic' | 'duplicate'>('auto')
 const similarError = ref('')
+const fusionText = ref('')
+const fusionStrict = ref(false)
+const fusion = ref<AIFusionResult | null>(null)
+const fusionLoading = ref(false)
+const fusionError = ref('')
+const externalFile = ref<File | null>(null)
+const externalPreview = ref('')
+const externalName = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 function readTab(value: unknown): TabValue {
   return tabs.some((tab) => tab.value === value) ? (value as TabValue) : 'search'
@@ -345,6 +509,9 @@ const statusTagType = computed(() => {
 })
 
 const jobPercent = computed(() => ai.job?.percent ?? 0)
+const captionJobActive = computed(() => ai.job?.kind === 'caption' && ai.jobActive)
+const vlmPullActive = computed(() => ai.job?.kind === 'vlm-pull' && ai.jobActive)
+const vlmModel = ref('qwen2.5vl:3b')
 const jobProgressText = computed(() => {
   const job = ai.job
   if (!job) return ''
@@ -374,6 +541,10 @@ function scoreLabel(score: number): string {
   return `相似度 ${score.toFixed(2)}`
 }
 
+function matchReason(explanation?: AIMatchExplanation | null): string {
+  return explanation?.reasons?.slice(0, 3).join(' · ') ?? ''
+}
+
 async function runSearch(): Promise<void> {
   if (!ai.canSearch) return
   await ai.search(query.value)
@@ -382,11 +553,18 @@ async function runSearch(): Promise<void> {
 async function loadSimilar(resourceId: number): Promise<void> {
   similarLoading.value = true
   similarError.value = ''
+  fusion.value = null
+  fusionText.value = ''
+  fusionError.value = ''
+  externalFile.value = null
+  externalName.value = ''
+  if (externalPreview.value) URL.revokeObjectURL(externalPreview.value)
+  externalPreview.value = ''
   try {
     similarSource.value = await getResource(resourceId)
     similar.value = await getAISimilar(resourceId, similarMode.value)
   } catch (error) {
-    similarError.value = error instanceof Error ? error.message : '????????'
+    similarError.value = error instanceof Error ? error.message : '相似搜索失败'
     similar.value = null
   } finally {
     similarLoading.value = false
@@ -395,12 +573,98 @@ async function loadSimilar(resourceId: number): Promise<void> {
 
 async function changeSimilarMode(mode: 'auto' | 'semantic' | 'duplicate'): Promise<void> {
   similarMode.value = mode
+  fusion.value = null
+  fusionText.value = ''
+  fusionError.value = ''
+  if (externalFile.value) {
+    await loadExternal(externalFile.value)
+    return
+  }
   const id = Number(route.query.resourceId)
   if (Number.isFinite(id) && id > 0) await loadSimilar(id)
 }
 
+function chooseFile(): void {
+  fileInput.value?.click()
+}
+
+async function loadExternal(file: File): Promise<void> {
+  externalFile.value = file
+  externalName.value = file.name
+  similarSource.value = null
+  if (externalPreview.value) URL.revokeObjectURL(externalPreview.value)
+  externalPreview.value = URL.createObjectURL(file)
+  similarLoading.value = true
+  similarError.value = ''
+  fusion.value = null
+  fusionError.value = ''
+  try {
+    similar.value = await searchAISimilarFile(file, similarMode.value)
+  } catch (error) {
+    similar.value = null
+    similarError.value = error instanceof Error ? error.message : '相似搜索失败'
+  } finally {
+    similarLoading.value = false
+  }
+}
+
+function onFileChange(event: Event): void {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (file) void loadExternal(file)
+  ;(event.target as HTMLInputElement).value = ''
+}
+
+function onDrop(event: DragEvent): void {
+  const file = event.dataTransfer?.files?.[0]
+  if (file && file.type.startsWith('image/')) void loadExternal(file)
+}
+
+function onPaste(event: ClipboardEvent): void {
+  if (activeTab.value !== 'similar') return
+  const target = event.target
+  if (target instanceof HTMLElement && target.closest('input, textarea, [contenteditable="true"]')) {
+    return
+  }
+  const item = [...(event.clipboardData?.items ?? [])].find((entry) =>
+    entry.type.startsWith('image/'),
+  )
+  const file = item?.getAsFile()
+  if (!file) return
+  event.preventDefault()
+  void loadExternal(file)
+}
+
+async function runFusion(): Promise<void> {
+  if (!similarSource.value?.id || !fusionText.value.trim() || ai.jobActive) return
+  fusionLoading.value = true
+  fusionError.value = ''
+  try {
+    fusion.value = await searchAIFusion(similarSource.value.id, fusionText.value, {
+      strict: fusionStrict.value,
+    })
+  } catch (error) {
+    fusion.value = null
+    fusionError.value = error instanceof Error ? error.message : '融合搜索失败'
+  } finally {
+    fusionLoading.value = false
+  }
+}
+
 function openSimilarResult(item: Resource): void {
   const ids = (similar.value?.items ?? []).flatMap((row) => (row.id == null ? [] : [row.id]))
+  void openResource(item, {
+    playlist: ids,
+    pager: {
+      hasMore: () => false,
+      loadingMore: () => false,
+      loadMore: async () => undefined,
+      imageIds: () => ids,
+    },
+  })
+}
+
+function openFusionResult(item: Resource): void {
+  const ids = (fusion.value?.items ?? []).flatMap((row) => (row.id == null ? [] : [row.id]))
   void openResource(item, {
     playlist: ids,
     pager: {
@@ -439,6 +703,16 @@ async function index(): Promise<void> {
   await ai.buildIndex()
 }
 
+async function analyzeCaptions(): Promise<void> {
+  if (ai.jobActive) return
+  await ai.analyze()
+}
+
+async function pullVLM(): Promise<void> {
+  if (ai.jobActive || !vlmModel.value.trim()) return
+  await ai.pullVLM(vlmModel.value.trim())
+}
+
 function openResult(item: Resource): void {
   const ids = (ai.results?.items ?? []).flatMap((row) => (row.id == null ? [] : [row.id]))
   void openResource(item, {
@@ -470,7 +744,13 @@ watch(
   },
 )
 
+onUnmounted(() => {
+  window.removeEventListener('paste', onPaste)
+  if (externalPreview.value) URL.revokeObjectURL(externalPreview.value)
+})
+
 onMounted(async () => {
+  window.addEventListener('paste', onPaste)
   await ai.refresh()
   const id = Number(route.query.resourceId)
   if (route.query.tab === 'similar' && Number.isFinite(id) && id > 0) {
@@ -544,6 +824,12 @@ onMounted(async () => {
 }
 
 .ai-setup__actions,
+.ai-panel__divider {
+  height: 1px;
+  margin: 16px 0;
+  background: var(--sm-color-border);
+}
+
 .ai-panel__actions {
   display: flex;
   align-items: center;
@@ -563,6 +849,10 @@ onMounted(async () => {
 
 .ai-panel__actions {
   margin-top: 16px;
+}
+
+.ai-file-input {
+  display: none;
 }
 
 .ai-similar-source {
@@ -590,6 +880,22 @@ onMounted(async () => {
   gap: 14px;
   flex-wrap: wrap;
   margin-top: 14px;
+}
+
+.ai-fusionbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 10px;
+  background: var(--sm-color-bg-surface);
+
+  :deep(.n-input) {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .ai-searchbar {
@@ -665,6 +971,16 @@ onMounted(async () => {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-result__why {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--sm-color-text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .ai-empty {

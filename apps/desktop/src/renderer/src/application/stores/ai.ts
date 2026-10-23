@@ -1,6 +1,8 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
+  analyzeAIImages,
+  pullVLMModel,
   buildAIIndex,
   getAIJob,
   getAIStatus,
@@ -84,6 +86,26 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
+  async function pullVLM(model: string): Promise<void> {
+    error.value = ''
+    try {
+      job.value = await pullVLMModel(model)
+      await track(job.value.id)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '下载 VLM 模型失败'
+    }
+  }
+
+  async function analyze(resourceIds?: number[]): Promise<void> {
+    error.value = ''
+    try {
+      job.value = await analyzeAIImages(resourceIds)
+      await track(job.value.id)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'AI 分析失败'
+    }
+  }
+
   async function search(query: string, limit = 30): Promise<void> {
     const q = query.trim()
     if (!q) {
@@ -91,7 +113,7 @@ export const useAIStore = defineStore('ai', () => {
       return
     }
     if (jobActive.value) {
-      error.value = 'AI ??????????????'
+      error.value = 'AI 索引正在重建，请稍后再试'
       return
     }
     searching.value = true
@@ -127,6 +149,8 @@ export const useAIStore = defineStore('ai', () => {
     refresh,
     installModel,
     buildIndex,
+    analyze,
+    pullVLM,
     search,
     clearResults,
     stopPolling,

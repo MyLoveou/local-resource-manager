@@ -15,6 +15,11 @@ export interface AIStatus {
   indexed: number
   total: number
   personCountIndexed: number
+  captionReady: boolean
+  captionModel: string
+  captionIndexed: number
+  vlmRuntimeReady: boolean
+  vlmModels: string[]
   indexUpdatedAt: string | null
 }
 
@@ -30,6 +35,35 @@ export interface AIJob {
   updatedAt: string
 }
 
+export interface AIQueryInsight {
+  source: 'text' | 'image' | string
+  raw: string
+  semanticText: string
+  strategy: string
+  caption: string
+  shortCaption: string
+  tags: string[]
+  labels: string[]
+  filters: string[]
+  personCount: number | null
+  orientation: string | null
+  notes: string[]
+}
+
+export interface AIMatchExplanation {
+  resourceId: number
+  reasons: string[]
+  semanticScore: number | null
+  duplicateScore: number | null
+  dhashDistance: number | null
+  caption: string
+  shortCaption: string
+  tags: string[]
+  matchedLabels: string[]
+  personCount: number | null
+  orientation: string | null
+}
+
 export interface AISearchResult {
   items: Resource[]
   scores: number[]
@@ -37,6 +71,8 @@ export interface AISearchResult {
   matched: number
   returned: number
   filters: string[]
+  queryInsight: AIQueryInsight | null
+  explanations: AIMatchExplanation[]
 }
 
 export async function getAIStatus(): Promise<AIStatus> {
@@ -76,6 +112,9 @@ export interface AISimilarResult {
   scores: number[]
   duplicates: Resource[]
   duplicateScores: number[]
+  queryInsight: AIQueryInsight | null
+  explanations: AIMatchExplanation[]
+  duplicateExplanations: AIMatchExplanation[]
 }
 
 export async function getAISimilar(
@@ -87,5 +126,80 @@ export async function getAISimilar(
     params: { resourceId, mode, limit },
     timeout: 30000,
   })
+  return data
+}
+
+
+export interface AIFusionResult {
+  mode: string
+  indexed: number
+  matched: number
+  returned: number
+  items: Resource[]
+  scores: number[]
+  filters: string[]
+}
+
+export interface AIFusionOptions {
+  strict?: boolean
+  imageWeight?: number
+  textWeight?: number
+  limit?: number
+}
+
+export async function searchAIFusion(
+  resourceId: number,
+  query: string,
+  options: AIFusionOptions = {},
+): Promise<AIFusionResult> {
+  const { data } = await client.post<AIFusionResult>(
+    '/ai/search/fusion',
+    {
+      resourceId,
+      query,
+      limit: options.limit ?? 30,
+      strict: options.strict ?? false,
+      imageWeight: options.imageWeight ?? 0.5,
+      textWeight: options.textWeight ?? 0.5,
+    },
+    { timeout: 30000 },
+  )
+  return data
+}
+
+
+export async function searchAISimilarFile(
+  file: File,
+  mode = 'auto',
+  limit = 30,
+): Promise<AISimilarResult> {
+  const dataBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? '')
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('读取图片失败'))
+    reader.readAsDataURL(file)
+  })
+  const { data } = await client.post<AISimilarResult>(
+    '/ai/similar/file',
+    { filename: file.name, dataBase64, mode, limit },
+    { timeout: 30000 },
+  )
+  return data
+}
+
+
+export async function analyzeAIImages(resourceIds?: number[]): Promise<AIJob> {
+  const { data } = await client.post<AIJob>('/ai/analyze', {
+    resourceIds: resourceIds ?? null,
+  })
+  return data
+}
+
+
+export async function pullVLMModel(model: string): Promise<AIJob> {
+  const { data } = await client.post<AIJob>('/ai/vlm/pull', { model })
   return data
 }

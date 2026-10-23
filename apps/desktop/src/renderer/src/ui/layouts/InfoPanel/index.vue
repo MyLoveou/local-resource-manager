@@ -680,7 +680,7 @@ async function updatePersons(ids: number[]): Promise<void> {
     resource.value = patched
     library.invalidate({ resources: [patched.type], home: true })
   } catch (error) {
-    notify.fromError(error, { context: '???????' })
+    notify.fromError(error, { context: '更新人物失败' })
   } finally {
     personBusy.value = false
   }
