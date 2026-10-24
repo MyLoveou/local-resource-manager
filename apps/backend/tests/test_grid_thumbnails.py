@@ -77,6 +77,19 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(Path(thumbs[0].path).resolve(), dest.resolve())
             self.assertFalse((dest.parent.parent / "thumbnail.webp").exists())
 
+    async def test_import_rotated_jpeg_thumbnail_orientation(self) -> None:
+        from PIL import Image
+
+        src = self.root / "rotated.jpg"
+        image = Image.new("RGB", (8, 4), (12, 34, 56))
+        exif = image.getexif()
+        exif[274] = 6
+        image.save(src, format="JPEG", exif=exif)
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            with Image.open(self._thumb_path("image", rid)) as thumb:
+                self.assertEqual(thumb.size, (4, 8))
+
     async def test_video_without_cover_skips_thumb(self) -> None:
         video = self.root / "clip.mp4"
         video.write_bytes(b"not-a-real-mp4")
@@ -162,6 +175,21 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             after = await repo.get(rid)
             assert after is not None
             self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in after.files))
+
+    async def test_backfill_force_rebuilds_existing_thumb(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("force.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            result = await PhotoTimelineService(
+                repo, store_root=self.store, file_ops=self.ops
+            ).backfill_thumbnails(force=True)
+            self.assertGreaterEqual(result.repaired, 1)
+            got = await repo.get(rid)
+            assert got is not None
+            self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in got.files))
 
     async def test_backfill_skips_ok_and_does_not_purge_on_fail(self) -> None:
         from app.library.application.photos import PhotoTimelineService

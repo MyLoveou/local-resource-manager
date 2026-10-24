@@ -41,6 +41,9 @@ class AIStatus(ApiModel):
     caption_model: str = ""
     caption_indexed: int = 0
     vlm_runtime_ready: bool = False
+    vlm_provider: str = "ollama"
+    anime_tagger_ready: bool = False
+    anime_tagger_size: int = 0
     vlm_models: list[str] = []
     vlm_model_details: list[AIVLMModelInfo] = []
     index_updated_at: str | None = None
@@ -97,6 +100,12 @@ class AISearchResponse(ApiModel):
     filters: list[str] = []
     query_insight: AIQueryInsight | None = None
     explanations: list[AIMatchExplanation] = []
+    min_score: float = 0.0
+    filtered_low_score: int = 0
+    caption_matched: int = 0
+    feedback_adjusted: int = 0
+    feedback: dict[int, str] = {}
+    explored: bool = False
 
 
 class AISimilarResponse(ApiModel):
@@ -110,6 +119,21 @@ class AISimilarResponse(ApiModel):
     query_insight: AIQueryInsight | None = None
     explanations: list[AIMatchExplanation] = []
     duplicate_explanations: list[AIMatchExplanation] = []
+
+
+class AIEntitySuggestion(ApiModel):
+    id: int
+    name: str
+
+
+class AISuggestionItem(ApiModel):
+    resource_id: int
+    title: str
+    thumbnail_path: str | None = None
+    tags: list[str] = []
+    characters: list[AIEntitySuggestion] = []
+    persons: list[AIEntitySuggestion] = []
+    collections: list[AIEntitySuggestion] = []
 
 
 class AIFusionRequest(ApiModel):
@@ -141,6 +165,20 @@ class AISimilarFileRequest(ApiModel):
 class AIAnalyzeRequest(ApiModel):
     resource_ids: list[int] | None = None
     only_pending: bool = True
+
+
+class AIIndexRequest(ApiModel):
+    full: bool = False
+
+
+class AIFeedbackRequest(ApiModel):
+    query: str
+    resource_id: int
+    action: str
+    source: str = "search"
+    score: float | None = None
+    position: int | None = None
+    features: dict | None = None
 
 
 class VLMPullRequest(ApiModel):

@@ -6,6 +6,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,9 +15,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.settings.application.errors import SettingsError
 from app.settings.application.schemas import ScrapeSettingsPatch, SystemSettingPatch
 from app.settings.application.secrets import invalidate_secret_cache, tmdb_api_key
-from app.settings.application.service import backup_database, get_view, patch_scrape, pathc_system_settings
+from app.settings.application.service import backup_database, backup_library, get_view, patch_scrape, pathc_system_settings
 from app.shared.db.migrations import migrate
 from app.shared import config
+from app.shared.runtime_paths import set_library_root
 
 
 class SettingsTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +44,7 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         self._env.stop()
         self._db_patch.stop()
+        set_library_root(None)
         invalidate_secret_cache()
         await self.engine.dispose()
         self._tmp.cleanup()
@@ -110,3 +113,15 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(count, 0)
         finally:
             conn.close()
+
+    def test_full_backup_contains_database_and_library(self) -> None:
+        thumb = self.root / "library" / "image" / "1" / "thumbs" / "grid.webp"
+        thumb.parent.mkdir(parents=True)
+        thumb.write_bytes(b"thumb")
+        result = backup_library(self.db_path)
+        dest = Path(result.path)
+        self.assertTrue(dest.is_file())
+        with zipfile.ZipFile(dest) as archive:
+            names = set(archive.namelist())
+        self.assertIn("library.db", names)
+        self.assertIn("library/image/1/thumbs/grid.webp", names)

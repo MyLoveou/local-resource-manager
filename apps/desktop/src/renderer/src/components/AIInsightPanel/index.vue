@@ -3,9 +3,16 @@
     <div class="ai-insight__row">
       <strong>AI 检索解读</strong>
       <n-tag size="small" :bordered="false">{{ sourceLabel }}</n-tag>
+      <button type="button" class="ai-insight__toggle" @click="expanded = !expanded">
+        {{ expanded ? '收起' : '展开' }}
+      </button>
     </div>
     <p class="ai-insight__strategy">{{ insight.strategy }}</p>
+    <p v-if="!expanded" class="ai-insight__summary">
+      {{ insight.source === 'text' ? insight.raw : (insight.caption || '尚未生成 VLM 文案') }}
+    </p>
 
+    <template v-if="expanded">
     <div class="ai-insight__grid">
       <div v-if="insight.source === 'text'" class="ai-insight__item">
         <span>原始查询</span>
@@ -49,17 +56,20 @@
 
     <p v-for="note in insight.notes" :key="note" class="ai-insight__note">{{ note }}</p>
     <p class="ai-insight__foot">这里展示的是检索依据，不是模型内部思维链。</p>
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { NTag } from 'naive-ui'
 import type { AIQueryInsight } from '@/infrastructure/http'
 
 const props = defineProps<{
   insight: AIQueryInsight | null
 }>()
+
+const expanded = ref(false)
 
 const sourceLabel = computed(() =>
   props.insight?.source === 'image' ? '图片查询' : '文字查询',
@@ -85,6 +95,23 @@ const peopleText = computed(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.ai-insight__toggle {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sm-color-accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-insight__summary {
+  margin: 6px 0 0;
+  color: var(--sm-color-text);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .ai-insight__strategy {

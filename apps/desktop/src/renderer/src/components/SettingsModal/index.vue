@@ -104,14 +104,29 @@
             {{ row.path }}
           </div>
         </div>
-        <n-button
-          size="small"
-          type="primary"
-          :loading="backing"
-          @click="doBackup"
-        >
-          立即备份
-        </n-button>
+        <p class="set-modal__hint">
+          资源库路径仅在空库时允许修改；已有资源请先备份/迁移。
+        </p>
+        <div class="set-modal__actions">
+          <n-button
+            size="small"
+            type="primary"
+            :loading="backing"
+            @click="doBackup"
+          >
+            备份库和图片
+          </n-button>
+          <n-button
+            size="small"
+            :loading="thumbRepairing"
+            @click="doRepairThumbnails"
+          >
+            重建缩略图
+          </n-button>
+        </div>
+        <p class="set-modal__hint">
+          备份包含数据库和图片文件。恢复需退出应用后运行后端的 restore_backup.py。
+        </p>
       </n-tab-pane>
       <n-tab-pane
         name="consume"
@@ -337,6 +352,7 @@ import {
 } from '@/infrastructure/http/settings'
 import { TYPE_PROFILES } from '@/domain'
 import { patchSystemSettings } from '@/infrastructure/http/settings'
+import { backfillThumbnails } from '@/infrastructure/http/photos'
 import logger from '@/infrastructure/logging/logger'
 import { useUpdateStore } from '@/application/stores/update'
 import { SYSTEM_SETTING_PATH_MAP } from '@/static'
@@ -429,6 +445,7 @@ const emit = defineEmits<{ 'update:show': [boolean] }>()
 const activeTab = ref('scrape')
 const busy = ref(false)
 const backing = ref(false)
+const thumbRepairing = ref(false)
 const view = ref<SettingsView | null>(null)
 const tmdbKey = ref('')
 const bangumiToken = ref('')
@@ -657,9 +674,24 @@ async function doBackup(): Promise<void> {
     notify.toast.success(`已备份到 ${result.path}`)
     await load()
   } catch (error) {
-    notify.fromError(error, { context: '备份数据库' })
+    notify.fromError(error, { context: '备份资源库' })
   } finally {
     backing.value = false
+  }
+}
+
+async function doRepairThumbnails(): Promise<void> {
+  if (!window.confirm('将重建图片缩略图，照片较多时可能需要几分钟。继续？')) return
+  thumbRepairing.value = true
+  try {
+    const result = await backfillThumbnails(true)
+    notify.toast.success(
+      `缩略图完成：修复 ${result.repaired}，跳过 ${result.skipped}，失败 ${result.failed}`,
+    )
+  } catch (error) {
+    notify.fromError(error, { context: '重建缩略图' })
+  } finally {
+    thumbRepairing.value = false
   }
 }
 
@@ -729,6 +761,13 @@ watch(
   display: flex;
   flex-shrink: 0;
   gap: 6px;
+}
+
+.set-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .set-modal__label {

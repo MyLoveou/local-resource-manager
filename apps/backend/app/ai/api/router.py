@@ -12,8 +12,11 @@ from app.ai.application.schemas import (
     AIFusionRequest,
     AIFusionResponse,
     AIJob,
+    AIFeedbackRequest,
+    AIIndexRequest,
     AISearchResponse,
     AISimilarFileRequest,
+    AISuggestionItem,
     AISimilarResponse,
     AIStatus,
     AIVLMRuntime,
@@ -70,6 +73,14 @@ async def start_ollama_runtime(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+@router.post("/anime/install", response_model=AIJob)
+async def install_anime_tagger(session: AsyncSession = Depends(get_session)) -> AIJob:
+    try:
+        return await _service(session).install_anime_tagger()
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.post("/vlm/pull", response_model=AIJob)
 async def pull_vlm(
     body: VLMPullRequest,
@@ -106,11 +117,22 @@ async def analyze(
 
 
 @router.post("/index", response_model=AIJob)
-async def build_index(session: AsyncSession = Depends(get_session)) -> AIJob:
+async def build_index(
+    body: AIIndexRequest | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> AIJob:
     try:
-        return await _service(session).build_index()
+        return await _service(session).build_index(bool(body.full) if body else False)
     except AIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get("/suggestions", response_model=list[AISuggestionItem])
+async def suggestions(
+    limit: int = Query(default=30, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+) -> list[AISuggestionItem]:
+    return await _service(session).suggestions(limit)
 
 
 @router.get("/jobs", response_model=list[AIJob])
@@ -188,13 +210,48 @@ async def similar_file(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+@router.post("/feedback", response_model=dict)
+async def feedback(
+    body: AIFeedbackRequest,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        await _service(session).add_feedback(
+            body.query,
+            body.resource_id,
+            body.action,
+            body.source,
+            body.score,
+            body.position,
+            body.features,
+        )
+        return {"ok": True}
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.delete("/feedback", response_model=dict)
+async def remove_feedback(
+    query: str = Query(min_length=1, max_length=100),
+    resource_id: int = Query(alias="resourceId"),
+    source: str = Query(default="search"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    try:
+        await _service(session).remove_feedback(query, resource_id, source)
+        return {"ok": True}
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 @router.get("/search", response_model=AISearchResponse)
 async def search(
     q: str = Query(min_length=1, max_length=100),
     limit: int = Query(default=30, ge=1, le=100),
+    min_score: float = Query(default=0.0, ge=0.0, le=1.0, alias="minScore"),
     session: AsyncSession = Depends(get_session),
 ) -> AISearchResponse:
     try:
-        return await _service(session).search(q, limit)
+        return await _service(session).search(q, limit, min_score)
     except AIServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

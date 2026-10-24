@@ -62,6 +62,8 @@ const api = {
   },
   selectFiles: (filters?: { name: string; extensions: string[] }[]): Promise<string[]> =>
     ipcRenderer.invoke('dialog:selectFiles', filters),
+  selectImageFile: (): Promise<{ name: string; dataBase64: string } | null> =>
+    ipcRenderer.invoke('dialog:selectImage'),
   selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory'),
   showItemInFolder: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:showItemInFolder', { path }),

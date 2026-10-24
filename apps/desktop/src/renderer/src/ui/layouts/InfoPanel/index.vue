@@ -235,12 +235,32 @@
           <n-input :value="draft.tagInput" placeholder="回车添加" size="small" style="width: 120px"
             @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
         </div>
+        <div class="info-panel-label">角色</div>
+        <n-select
+          multiple
+          filterable
+          clearable
+          :options="characterOptions"
+          :value="characterIds"
+          :loading="characterBusy"
+          @update:value="(value: number[]) => void updateCharacters(value ?? [])"
+        />
+        <div class="info-panel-label">扮演者</div>
+        <n-select
+          multiple
+          filterable
+          clearable
+          :options="personOptions"
+          :value="personIds"
+          :loading="personBusy"
+          @update:value="(value: number[]) => void updatePersons(value ?? [])"
+        />
         </section>
         </template>
         <template v-else>
         <section class="info-panel-section info-panel-ai-empty">
           <div class="info-panel-section-title">AI</div>
-          <p>文字搜图、以图搜图和近似重复可以在 AI 中心使用；标签建议和描述会在后续接入。</p>
+          <p>文字搜图、以图搜图、近似重复和 AI 建议可以在 AI 中心使用。</p>
           <div class="info-panel-ai-actions">
             <n-button v-if="resource?.type === 'image'" size="small" @click="openSimilar">找相似</n-button>
             <n-button size="small" @click="openAICenter">打开 AI 中心</n-button>

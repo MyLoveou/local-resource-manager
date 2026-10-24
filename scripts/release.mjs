@@ -11,6 +11,13 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const IS_WIN = process.platform === 'win32'
 
+// electron-builder downloads Electron from GitHub by default, which is often
+// slow or blocked on Windows. Keep the build reproducible with the mirror used
+// by this project, while allowing an explicit override.
+if (IS_WIN && !process.env.ELECTRON_MIRROR) {
+  process.env.ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+}
+
 function run(label, command, args, opts = {}) {
   console.log(`\n==> ${label}`)
   const result = spawnSync(command, args, {

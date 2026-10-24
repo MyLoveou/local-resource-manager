@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Awaitable, Callable
 
-logger = logging.getLogger(__name__)
+from app.shared.log import logger
 
 
 def _now() -> str:

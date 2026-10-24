@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import re
 import sqlite3
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.packages.resource_package import default_library_store
@@ -47,6 +49,7 @@ from app.shared.config import resolve_log_dir
 from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_PARSE, KEY_TMDB, KEY_WATCH, KEY_SYSTEM
 from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.shared.log import logger
+from app.shared.runtime_paths import set_library_root
 from app.shared.utils.watch_manager import watch_manager
 from app.shared.utils.watch_bridge import watch_bridge
 
@@ -257,9 +260,26 @@ async def pathc_system_settings(
         value = incoming[key]
         if value is None:
             continue
-        text = str(value).strip()
-        if text:
-            merged[key] = text
+        raw_value = str(value).strip()
+        if raw_value:
+            merged[key] = raw_value
+    requested_library = merged.get("library_path")
+    current_library = stored.get("library_path")
+    requested_db = merged.get("db_path")
+    if requested_db and Path(requested_db).resolve() != db_path.resolve():
+        raise SettingsError(
+            "数据库路径不能在线修改；请通过 BACKEND_DB_PATH 或重启迁移", 400
+        )
+    if requested_library and requested_library != current_library:
+        resource_count = int(
+            await session.scalar(text("SELECT COUNT(*) FROM resources")) or 0
+        )
+        if resource_count:
+            raise SettingsError(
+                "已有资源时不能直接切换资源库路径；请先导出/迁移资源库", 400
+            )
+        set_library_root(Path(requested_library))
+        logger.info("library path switched: %s", requested_library)
     logger.info("pathc_system_settings payload %s", merged)
     await save_system_settings(session, merged)
     return await get_view(session, db_path, backend_version)
@@ -294,4 +314,42 @@ def backup_database(db_path: Path) -> BackupResult:
         raise SettingsError(f"备份失败：{exc}", 500) from exc
     dst.close()
     src.close()
+    return BackupResult(path=str(dest))
+
+
+def backup_library(db_path: Path, dest_dir: Path | None = None) -> BackupResult:
+    """Back up SQLite plus the managed library directory into one ZIP."""
+    source = db_path.resolve()
+    if not source.is_file():
+        raise SettingsError("数据库文件不存在", 400)
+    target_dir = (dest_dir or backup_dir(source)).resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = target_dir / f"library-{stamp}.zip"
+    temp_db = target_dir / f".library-{stamp}.db"
+    src = sqlite3.connect(str(source))
+    dst = sqlite3.connect(str(temp_db))
+    try:
+        src.backup(dst)
+    except sqlite3.Error as exc:
+        dst.close()
+        src.close()
+        temp_db.unlink(missing_ok=True)
+        raise SettingsError(f"数据库快照失败:{exc}", 500) from exc
+    dst.close()
+    src.close()
+
+    library = default_library_store(source)
+    try:
+        with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(temp_db, "library.db")
+            if library.is_dir():
+                for path in sorted(library.rglob("*")):
+                    if path.is_file():
+                        archive.write(path, f"library/{path.relative_to(library).as_posix()}")
+    except OSError as exc:
+        dest.unlink(missing_ok=True)
+        raise SettingsError(f"备份资源库失败:{exc}", 500) from exc
+    finally:
+        temp_db.unlink(missing_ok=True)
     return BackupResult(path=str(dest))

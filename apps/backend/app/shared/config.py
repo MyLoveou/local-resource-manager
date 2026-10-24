@@ -28,8 +28,15 @@ class Settings(BaseSettings):
     # 常驻监视：资源类型("image"/"video"…) → 源目录列表；一个类型可多个目录，同一目录可多类型。
     # env 用 JSON 对象：BACKEND_WATCH_DIRS='{"image":["D:\\Pics"],"video":["D:\\Videos","E:\\Videos"]}'
     watch_dirs: dict[str, list[str]] = {}
+    auto_index: bool = True
+    auto_index_interval: int = 30
+    ai_failure_retention_days: int = 30
+    search_exploration_rate: float = 0.15
     # 可选本地 VLM：Ollama 地址、默认视觉模型与超时。
+    vlm_provider: str = "ollama"
     vlm_url: str = "http://127.0.0.1:11434"
+    vlm_base_url: str = ""
+    vlm_api_key: str = ""
     vlm_model: str = "qwen2.5vl:3b"
     vlm_timeout: int = 120
     vlm_bin: str = ""
@@ -50,6 +57,7 @@ class LoggingConfig:
     log_level: str = "INFO"
     log_file_max_size: int = 10 * 1024 * 1024  # 10MB
     log_file_backup_count: int = 5
+    log_retention_days: int = 14
     log_file_encoding: str = "utf-8"
     log_file_format: str = "%(asctime)s - [backend] - %(levelname)s - %(message)s"
     log_file_datefmt: str = "%Y-%m-%d %H:%M:%S"
@@ -66,6 +74,10 @@ class LoggingConfig:
     @staticmethod
     def log_file_error() -> Path:
         return resolve_log_dir() / "backend.error.log"
+
+    @staticmethod
+    def operation_log_file() -> Path:
+        return resolve_log_dir() / "operations.log"
 
 
 settings = Settings()

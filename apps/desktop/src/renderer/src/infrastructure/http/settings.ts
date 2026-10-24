@@ -110,7 +110,7 @@ export async function patchConsumeSettings(body: {
  * @returns BackupResult
  */
 export async function backupLibrary(): Promise<BackupResult> {
-  const { data } = await client.post<BackupResult>('/settings/backup')
+  const { data } = await client.post<BackupResult>('/settings/backup/full')
   return data
 }
 

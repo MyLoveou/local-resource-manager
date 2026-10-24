@@ -2,8 +2,17 @@
   <div class="library-workspace">
     <TypeTabs :type="type" @change="changeType" />
     <div class="library-workspace__bar">
-      <BrowseControls :type="type" placeholder="在资源库中搜索" />
+      <BrowseControls :type="type" placeholder="搜索标题、标签、文件名" />
+      <div v-if="type === 'image'" class="library-workspace__views">
+        <n-button quaternary size="tiny" @click="router.push('/timelines/all')">
+          时间线
+        </n-button>
+        <n-button quaternary size="tiny" @click="router.push('/maps')">
+          地图
+        </n-button>
+      </div>
     </div>
+
     <div class="library-workspace__body">
       <CategoryTreePanel
         :nodes="tree"
@@ -34,6 +43,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { NButton } from 'naive-ui'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
 import { useCategoryTreeStore } from '@/application/stores/categoryTree'
 import { useLibraryStore } from '@/application/stores/library'
@@ -178,8 +188,14 @@ onMounted(async () => {
 }
 
 .library-workspace__bar :deep(.browse-controls) {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.library-workspace__views {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
 }
 
 .library-workspace__body {

@@ -7,16 +7,21 @@ import {
   buildAIIndex,
   getAIJob,
   getAIJobs,
+  getAISuggestions,
   getAIStatus,
   getVLMRuntime,
   installAIModel,
+  installAnimeTagger,
+  removeAIFeedback,
   searchAI,
+  sendAIFeedback,
   selectOllamaBinary,
   selectVLMModel,
   startOllamaRuntime,
   type AIJob,
   type AISearchResult,
   type AIStatus,
+  type AISuggestionItem,
   type AIVLMRuntime,
 } from '@/infrastructure/http'
 
@@ -24,6 +29,8 @@ export const useAIStore = defineStore('ai', () => {
   const status = ref<AIStatus | null>(null)
   const job = ref<AIJob | null>(null)
   const jobHistory = ref<AIJob[]>([])
+  const suggestions = ref<AISuggestionItem[]>([])
+  const suggestionsLoading = ref(false)
   const results = ref<AISearchResult | null>(null)
   const vlmRuntime = ref<AIVLMRuntime | null>(null)
   const recentQueries = ref<string[]>(loadRecentQueries())
@@ -85,6 +92,17 @@ export const useAIStore = defineStore('ai', () => {
       jobHistory.value = []
     } catch (err) {
       error.value = err instanceof Error ? err.message : '?? AI ??????'
+    }
+  }
+
+  async function refreshSuggestions(): Promise<void> {
+    suggestionsLoading.value = true
+    try {
+      suggestions.value = await getAISuggestions(60)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '?? AI ????'
+    } finally {
+      suggestionsLoading.value = false
     }
   }
 
@@ -165,11 +183,21 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  async function buildIndex(): Promise<void> {
+  async function installAnime(): Promise<void> {
+    error.value = ''
+    try {
+      job.value = await installAnimeTagger()
+      await track(job.value.id)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '??????????'
+    }
+  }
+
+  async function buildIndex(full = false): Promise<void> {
     error.value = ''
     results.value = null
     try {
-      job.value = await buildAIIndex()
+      job.value = await buildAIIndex(full)
       await track(job.value.id)
     } catch (err) {
       error.value = err instanceof Error ? err.message : '建立 AI 索引失败'
@@ -205,7 +233,37 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  async function search(query: string, limit = 30): Promise<void> {
+  async function feedback(
+    queryText: string,
+    resourceId: number,
+    action: 'relevant' | 'irrelevant',
+    score?: number,
+    position?: number,
+  ): Promise<void> {
+    try {
+      await sendAIFeedback({
+        query: queryText,
+        resourceId,
+        action,
+        score,
+        position,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'AI 反馈保存失败'
+      throw err
+    }
+  }
+
+  async function removeFeedback(queryText: string, resourceId: number): Promise<void> {
+    try {
+      await removeAIFeedback({ query: queryText, resourceId })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '取消 AI 反馈失败'
+      throw err
+    }
+  }
+
+  async function search(query: string, limit = 30, minScore = 0): Promise<void> {
     const q = query.trim()
     if (!q) {
       results.value = null
@@ -218,7 +276,7 @@ export const useAIStore = defineStore('ai', () => {
     searching.value = true
     error.value = ''
     try {
-      results.value = await searchAI(q, limit)
+      results.value = await searchAI(q, limit, minScore)
       rememberQuery(q)
     } catch (err) {
       results.value = null
@@ -238,6 +296,8 @@ export const useAIStore = defineStore('ai', () => {
     status,
     job,
     jobHistory,
+    suggestions,
+    suggestionsLoading,
     recentQueries,
     results,
     vlmRuntime,
@@ -254,10 +314,14 @@ export const useAIStore = defineStore('ai', () => {
     vlmModelDetails,
     refresh,
     refreshJobs,
+    refreshSuggestions,
     refreshVLMRuntime,
     clearJobHistory,
     installModel,
+    installAnime,
     buildIndex,
+    feedback,
+    removeFeedback,
     analyze,
     selectVLM,
     selectOllama,

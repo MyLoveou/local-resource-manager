@@ -1,13 +1,14 @@
 """设置路由。"""
 
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.settings.application.errors import SettingsError
 from app.settings.application.schemas import ConsumeSettingsPatch, ParseRulesPatch, ScrapeSettingsPatch, SystemSettingPatch, WatchSettingsPatch
-from app.settings.application.service import backup_database, get_view, patch_consume, patch_parse, patch_scrape, patch_watch, pathc_system_settings
+from app.settings.application.service import backup_database, backup_library, get_view, patch_consume, patch_parse, patch_scrape, patch_watch, pathc_system_settings
 from app.shared.config import settings
 from app.shared.db.db import get_session
 from app.shared.log import logger
@@ -48,6 +49,15 @@ async def patch_consume_settings(
 async def post_backup():
     try:
         return backup_database(settings.db_path)
+    except SettingsError as exc:
+        raise _err(exc) from exc
+
+
+@router.post("/backup/full")
+async def post_backup_full(session: AsyncSession = Depends(get_session)):
+    try:
+        view = await get_view(session, settings.db_path, _VERSION)
+        return backup_library(settings.db_path, Path(view.system.backup_dir))
     except SettingsError as exc:
         raise _err(exc) from exc
 

@@ -38,7 +38,7 @@ import { FILE_ROLE, type Resource } from '@/domain'
 import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { notify } from '@/application/notify'
 import { openPrimaryDefault } from '@/infrastructure/shell/openLibraryFile'
-import { isAnimatedImageFormat } from '@/utils/imageFormat'
+import { isAnimatedImageFormat, isWebpFormat, webpUrlIsAnimated } from '@/utils/imageFormat'
 
 const viewer = useImageViewerStore()
 const router = useRouter()
@@ -55,7 +55,30 @@ const format = computed(() => {
   const files = current.value?.files ?? []
   return (files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0])?.format ?? null
 })
-const animated = computed(() => isAnimatedImageFormat(format.value))
+const animated = ref(false)
+let animationCheck = 0
+watch(
+  [imageSrc, format],
+  async ([url, value]) => {
+    const check = ++animationCheck
+    if (!url) {
+      animated.value = false
+      return
+    }
+    if (isAnimatedImageFormat(value) && !isWebpFormat(value)) {
+      animated.value = true
+      return
+    }
+    if (!isWebpFormat(value)) {
+      animated.value = false
+      return
+    }
+    animated.value = true
+    const actual = await webpUrlIsAnimated(url)
+    if (check === animationCheck && actual !== null) animated.value = actual
+  },
+  { immediate: true },
+)
 const trashed = computed(() => current.value?.status === 'trashed')
 
 async function openExternal(): Promise<void> {

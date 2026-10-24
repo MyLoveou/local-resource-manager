@@ -51,3 +51,15 @@ export async function backfillPhotos(): Promise<PhotoBackfillResult> {
   const { data } = await client.post<PhotoBackfillResult>('/library/photos/backfill')
   return data
 }
+
+export async function backfillThumbnails(force = false): Promise<{
+  scanned: number
+  repaired: number
+  skipped: number
+  failed: number
+}> {
+  const { data } = await client.post('/library/photos/backfill-thumbnails', null, {
+    params: { force },
+  })
+  return data
+}

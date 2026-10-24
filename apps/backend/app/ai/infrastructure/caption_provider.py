@@ -106,10 +106,37 @@ class CaptionProvider:
         self._ready: bool | None = None
         self._checked_at = 0.0
 
+    @property
+    def provider(self) -> str:
+        return (settings.vlm_provider or "ollama").strip().lower()
+
+    @property
+    def _is_openai(self) -> bool:
+        return self.provider in {"openai", "openai-compatible", "lmstudio", "llamacpp"}
+
+    @property
+    def _base_url(self) -> str:
+        if self._is_openai:
+            return (settings.vlm_base_url or "http://127.0.0.1:1234/v1").rstrip("/")
+        return settings.vlm_url.rstrip("/")
+
+    def _headers(self) -> dict[str, str]:
+        if settings.vlm_api_key:
+            return {"Authorization": f"Bearer {settings.vlm_api_key}"}
+        return {}
+
     async def list_models(self) -> list[str]:
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(f"{settings.vlm_url.rstrip('/')}/api/tags")
+            async with httpx.AsyncClient(timeout=3.0, headers=self._headers()) as client:
+                if self._is_openai:
+                    response = await client.get(f"{self._base_url}/models")
+                    response.raise_for_status()
+                    return [
+                        str(item.get("id", ""))
+                        for item in response.json().get("data", [])
+                        if item.get("id")
+                    ]
+                response = await client.get(f"{self._base_url}/api/tags")
                 response.raise_for_status()
                 return [
                     str(item.get("name", ""))
@@ -120,9 +147,21 @@ class CaptionProvider:
             return []
 
     async def list_model_details(self) -> list[dict]:
+        if self._is_openai:
+            names = await self.list_models()
+            return [
+                {
+                    "name": name,
+                    "size_bytes": 0,
+                    "capabilities": ["vision"] if self._looks_like_vision(name) else [],
+                    "supports_vision": self._looks_like_vision(name),
+                    "selected": name == self.model,
+                }
+                for name in names
+            ]
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{settings.vlm_url.rstrip('/')}/api/tags")
+                response = await client.get(f"{self._base_url}/api/tags")
                 response.raise_for_status()
                 models = response.json().get("models", [])
 
@@ -164,6 +203,14 @@ class CaptionProvider:
         except Exception:
             return []
 
+    @staticmethod
+    def _looks_like_vision(name: str) -> bool:
+        value = name.lower()
+        return any(
+            marker in value
+            for marker in ("vl", "vision", "llava", "minicpm", "moondream")
+        )
+
     async def select_model(self, model: str) -> dict:
         details = await self.list_model_details()
         matched = next((item for item in details if item["name"] == model), None)
@@ -177,8 +224,13 @@ class CaptionProvider:
 
     async def runtime_available(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(f"{settings.vlm_url.rstrip('/')}/api/tags")
+            async with httpx.AsyncClient(timeout=3.0, headers=self._headers()) as client:
+                url = (
+                    f"{self._base_url}/models"
+                    if self._is_openai
+                    else f"{self._base_url}/api/tags"
+                )
+                response = await client.get(url)
                 response.raise_for_status()
                 return True
         except Exception:
@@ -201,6 +253,8 @@ class CaptionProvider:
         return self._ready
 
     async def pull(self, model: str, progress) -> None:
+        if self._is_openai:
+            raise RuntimeError("OpenAI-compatible ?????????????????")
         if not await self.runtime_available():
             raise RuntimeError(
                 f"未检测到 Ollama，请先启动本地服务：{settings.vlm_url}"
@@ -233,6 +287,25 @@ class CaptionProvider:
             "options": {"temperature": 0.2, "num_ctx": 4096, "num_predict": 512},
         }
 
+    def _openai_body(self, image_base64: str) -> dict:
+        return {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": PROMPT},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                        },
+                    ],
+                }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 512,
+        }
+
     async def analyze(self, path: Path) -> CaptionDocument:
         if not await self.available():
             raise RuntimeError(
@@ -248,14 +321,31 @@ class CaptionProvider:
         last_error: Exception | None = None
         for attempt in range(2):
             try:
-                async with httpx.AsyncClient(timeout=settings.vlm_timeout) as client:
-                    response = await client.post(
-                        f"{settings.vlm_url.rstrip('/')}/api/generate",
-                        json=self._post_body(image_base64),
-                    )
-                    response.raise_for_status()
-                    payload = response.json()
-                value = _parse_json(str(payload.get("response", "")))
+                async with httpx.AsyncClient(
+                    timeout=settings.vlm_timeout, headers=self._headers()
+                ) as client:
+                    if self._is_openai:
+                        response = await client.post(
+                            f"{self._base_url}/chat/completions",
+                            json=self._openai_body(image_base64),
+                        )
+                        response.raise_for_status()
+                        payload = response.json()
+                        choices = payload.get("choices") or []
+                        raw = (
+                            str(choices[0].get("message", {}).get("content", ""))
+                            if choices
+                            else ""
+                        )
+                    else:
+                        response = await client.post(
+                            f"{self._base_url}/api/generate",
+                            json=self._post_body(image_base64),
+                        )
+                        response.raise_for_status()
+                        payload = response.json()
+                        raw = str(payload.get("response", ""))
+                value = _parse_json(raw)
                 break
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 last_error = exc

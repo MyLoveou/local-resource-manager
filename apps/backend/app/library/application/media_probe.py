@@ -18,6 +18,7 @@ from app.library.domain.media_types import (
     VIDEO_PROBE_TYPES,
 )
 from app.shared.log import logger
+from app.shared.image_support import register_optional_image_decoders
 from app.library.domain.models import ResourceType
 
 
@@ -263,17 +264,19 @@ def _exif_gps(image) -> tuple[float | None, float | None]:
 
 def probe_image(path: Path) -> ProbeFields:
     """Pillow 读宽高、EXIF 拍摄时间/GPS/机身光圈等。失败不抛。"""
+    register_optional_image_decoders()
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
     except ImportError:
         logger.warning("未安装 Pillow，跳过图片探测")
         return ProbeFields()
     try:
         with Image.open(path) as image:
-            width, height = image.size
             taken = _exif_taken_at(image)
             lat, lng = _exif_gps(image)
             camera, lens, iso, aperture, shutter = _exif_camera_fields(image)
+            oriented = ImageOps.exif_transpose(image)
+            width, height = oriented.size
         return ProbeFields(
             width=width,
             height=height,

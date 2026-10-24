@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
+import { readFileSync } from 'fs'
 import { startServices, stopServices } from './infrastructure/services/index'
 import { registerShellOpenIpc } from './infrastructure/shellOpen'
 import { registerThemeCssIpc } from './infrastructure/themeCss'
@@ -52,6 +53,31 @@ function registerDialogIpc(): void {
         : await dialog.showOpenDialog(options)
       if (result.canceled) return []
       return result.filePaths
+    }
+  )
+  ipcMain.handle(
+    'dialog:selectImage',
+    async (): Promise<{ name: string; dataBase64: string } | null> => {
+      const options: Electron.OpenDialogOptions = {
+        properties: ['openFile'],
+        filters: [
+          {
+            name: 'Images',
+            extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'],
+          },
+        ],
+      }
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+      if (result.canceled || result.filePaths.length === 0) return null
+      const path = result.filePaths[0]
+      const data = readFileSync(path)
+      if (data.length > 32 * 1024 * 1024) {
+        throw new Error('???? 32 MB???????')
+      }
+      return { name: basename(path), dataBase64: data.toString('base64') }
     }
   )
   ipcMain.handle('dialog:selectDirectory', async (): Promise<string | null> => {

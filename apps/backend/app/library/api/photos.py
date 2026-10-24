@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.library.api.deps import get_repos
 from app.library.application.photos import PhotoTimelineService
-from app.library.application.schemas import PhotoBackfillResult, PhotoTimeline
+from app.library.application.schemas import PhotoBackfillResult, ThumbnailBackfillResult, PhotoTimeline
 from app.library.domain.models import CategoryRule, ResourceType
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 
@@ -81,5 +81,15 @@ async def photo_timeline(
 async def photo_backfill(
     service: PhotoTimelineService = Depends(_service),
 ) -> PhotoBackfillResult:
-    """旧图回填：重读 primary 文件 EXIF，写回拍摄时间与 GPS。"""
+    """回填拍摄时间/GPS；只补旧图，不覆盖已有值。"""
     return await service.backfill()
+
+
+@router.post("/backfill-thumbnails", response_model=ThumbnailBackfillResult)
+async def photo_thumbnail_backfill(
+    force: bool = Query(default=False),
+    service: PhotoTimelineService = Depends(_service),
+) -> ThumbnailBackfillResult:
+    """补齐缺失缩略图；force=true 时重建已有缩略图。"""
+    return await service.backfill_thumbnails(force=force)
+

@@ -218,8 +218,12 @@ class PhotoTimelineService:
             failed=failed,
         )
 
-    async def backfill_thumbnails(self) -> ThumbnailBackfillResult:
-        """Recreate missing grid thumbnails without touching primary files."""
+    async def backfill_thumbnails(self, force: bool = False) -> ThumbnailBackfillResult:
+        """Recreate missing grid thumbnails without touching primary files.
+
+        ``force`` also rebuilds thumbnails that already exist, which is useful
+        after an EXIF/orientation or thumbnail-rendering fix.
+        """
         rows = await self._resources.media_primary_files()
         scanned = len(rows)
         repaired = 0
@@ -235,7 +239,7 @@ class PhotoTimelineService:
                 (file for file in resource.files if file.role == FILE_ROLE_THUMBNAIL),
                 None,
             )
-            if thumb is not None and thumb.path and Path(thumb.path).is_file():
+            if thumb is not None and thumb.path and Path(thumb.path).is_file() and not force:
                 skipped += 1
                 continue
             source = Path(primary_row.path)

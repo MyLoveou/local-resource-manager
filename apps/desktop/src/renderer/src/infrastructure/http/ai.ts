@@ -36,6 +36,9 @@ export interface AIStatus {
   captionModel: string
   captionIndexed: number
   vlmRuntimeReady: boolean
+  vlmProvider: string
+  animeTaggerReady: boolean
+  animeTaggerSize: number
   vlmModels: string[]
   vlmModelDetails: AIVLMModelInfo[]
   indexUpdatedAt: string | null
@@ -69,6 +72,21 @@ export interface AIQueryInsight {
   notes: string[]
 }
 
+export interface AIEntitySuggestion {
+  id: number
+  name: string
+}
+
+export interface AISuggestionItem {
+  resourceId: number
+  title: string
+  thumbnailPath: string | null
+  tags: string[]
+  characters: AIEntitySuggestion[]
+  persons: AIEntitySuggestion[]
+  collections: AIEntitySuggestion[]
+}
+
 export interface AIMatchExplanation {
   resourceId: number
   reasons: string[]
@@ -92,10 +110,21 @@ export interface AISearchResult {
   filters: string[]
   queryInsight: AIQueryInsight | null
   explanations: AIMatchExplanation[]
+  minScore: number
+  filteredLowScore: number
+  captionMatched: number
+  feedbackAdjusted: number
+  feedback: Record<string, 'relevant' | 'irrelevant'>
+  explored: boolean
 }
 
 export async function getAIStatus(): Promise<AIStatus> {
   const { data } = await client.get<AIStatus>('/ai/status')
+  return data
+}
+
+export async function installAnimeTagger(): Promise<AIJob> {
+  const { data } = await client.post<AIJob>('/ai/anime/install')
   return data
 }
 
@@ -104,8 +133,8 @@ export async function installAIModel(): Promise<AIJob> {
   return data
 }
 
-export async function buildAIIndex(): Promise<AIJob> {
-  const { data } = await client.post<AIJob>('/ai/index')
+export async function buildAIIndex(full = false): Promise<AIJob> {
+  const { data } = await client.post<AIJob>('/ai/index', { full })
   return data
 }
 
@@ -114,12 +143,35 @@ export async function getAIJob(jobId: string): Promise<AIJob> {
   return data
 }
 
-export async function searchAI(q: string, limit = 30): Promise<AISearchResult> {
+export async function searchAI(
+  q: string,
+  limit = 30,
+  minScore = 0,
+): Promise<AISearchResult> {
   const { data } = await client.get<AISearchResult>('/ai/search', {
-    params: { q, limit },
+    params: { q, limit, minScore },
     timeout: 30000,
   })
   return data
+}
+
+export async function sendAIFeedback(payload: {
+  query: string
+  resourceId: number
+  action: 'relevant' | 'irrelevant'
+  source?: string
+  score?: number
+  position?: number
+}): Promise<void> {
+  await client.post('/ai/feedback', payload)
+}
+
+export async function removeAIFeedback(payload: {
+  query: string
+  resourceId: number
+  source?: string
+}): Promise<void> {
+  await client.delete('/ai/feedback', { params: payload })
 }
 
 
@@ -217,6 +269,13 @@ export async function analyzeAIImages(
   const { data } = await client.post<AIJob>('/ai/analyze', {
     resourceIds: resourceIds ?? null,
     onlyPending,
+  })
+  return data
+}
+
+export async function getAISuggestions(limit = 30): Promise<AISuggestionItem[]> {
+  const { data } = await client.get<AISuggestionItem[]>('/ai/suggestions', {
+    params: { limit },
   })
   return data
 }

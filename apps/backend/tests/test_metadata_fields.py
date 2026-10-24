@@ -286,6 +286,52 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fields.exif_shutter, "2s")
         self.assertEqual(fields.exif_aperture, "f/1.8")
 
+    def test_probe_image_applies_exif_orientation(self) -> None:
+        from app.library.application.media_probe import probe_image
+        from PIL import Image
+
+        src = self.root / "rotated.jpg"
+        image = Image.new("RGB", (8, 4), (12, 34, 56))
+        exif = image.getexif()
+        exif[274] = 6
+        image.save(src, format="JPEG", exif=exif)
+        fields = probe_image(src)
+        self.assertEqual((fields.width, fields.height), (4, 8))
+
+    async def test_import_applies_exif_orientation_dimensions(self) -> None:
+        from PIL import Image
+
+        src = self.root / "rotated-import.jpg"
+        image = Image.new("RGB", (8, 4), (12, 34, 56))
+        exif = image.getexif()
+        exif[274] = 6
+        image.save(src, format="JPEG", exif=exif)
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            got = await ResourceRepository(session).get(rid)
+            assert got is not None
+            primary = next(f for f in got.files if f.role == "primary")
+            self.assertEqual((primary.width, primary.height), (4, 8))
+
+    async def test_import_heic_creates_thumbnail(self) -> None:
+        try:
+            import pillow_heif
+        except ImportError:
+            self.skipTest("pillow-heif not installed")
+        from PIL import Image
+
+        pillow_heif.register_heif_opener()
+        src = self.root / "sample.heic"
+        Image.new("RGB", (40, 30), (12, 34, 56)).save(src, format="HEIF")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            got = await ResourceRepository(session).get(rid)
+            assert got is not None
+            primary = next(f for f in got.files if f.role == "primary")
+            self.assertEqual((primary.width, primary.height), (40, 30))
+            self.assertIsNotNone(got.thumbnail_path)
+            self.assertTrue((self.store / "image" / str(rid) / "thumbs" / "grid.webp").is_file())
+
     async def test_import_jpeg_writes_camera_exif(self) -> None:
         src = self._jpeg_with_camera("detail.jpg")
         async with self.factory() as session:

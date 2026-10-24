@@ -64,7 +64,7 @@ export {
   batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
-export { getPhotoTimeline, backfillPhotos } from './photos'
+export { getPhotoTimeline, backfillPhotos, backfillThumbnails } from './photos'
 export { getTags, invalidateTags } from './vocab'
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
@@ -86,15 +86,19 @@ export {
 export {
   getAIStatus,
   installAIModel,
+  installAnimeTagger,
   buildAIIndex,
   getAIJob,
   searchAI,
+  sendAIFeedback,
+  removeAIFeedback,
   getAISimilar,
   searchAISimilarFile,
   searchAIFusion,
   analyzeAIImages,
   clearAIJobs,
   getAIJobs,
+  getAISuggestions,
   getVLMRuntime,
   selectOllamaBinary,
   startOllamaRuntime,
@@ -105,6 +109,8 @@ export {
   type AIJob,
   type AIVLMModelInfo,
   type AIVLMRuntime,
+  type AISuggestionItem,
+  type AIEntitySuggestion,
   type AISearchResult,
   type AISimilarResult,
   type AIQueryInsight,

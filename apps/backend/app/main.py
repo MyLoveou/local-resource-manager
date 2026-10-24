@@ -1,6 +1,9 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import asyncio
+import shutil
+import time
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -10,6 +13,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai.api.router import router as ai_router
 from app.ai.application.jobs import Job, jobs
+from app.ai.application.service import AIService
+from app.ai.infrastructure.model_store import MODEL_ID, is_installed
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
@@ -24,13 +29,19 @@ from app.shared.api_envelope import (
 )
 from app.shared.config import settings
 from app.shared.db.db import dispose_engine, ensure_db, get_session_factory
+from app.shared.image_support import register_optional_image_decoders
 from app.shared.log import logger
+from app.shared.runtime_paths import set_library_root
 from app.shared.utils.watch_manager import watch_manager
 from app.shared.utils.watch_bridge import watch_bridge
 from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
 from app.settings.application.service import load_watch_dirs
+from app.settings.domain.constants import KEY_SYSTEM
+from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.library.domain.models import ResourceType
+
+register_optional_image_decoders()
 
 
 async def _persist_ai_job(job: Job) -> None:
@@ -62,6 +73,50 @@ async def _persist_ai_job(job: Job) -> None:
         await session.commit()
 
 
+def _prune_ai_failures() -> None:
+    root = settings.db_path.parent / "ai-failures"
+    if not root.is_dir():
+        return
+    cutoff = time.time() - settings.ai_failure_retention_days * 86400
+    for path in root.iterdir():
+        try:
+            if path.is_dir() and path.stat().st_mtime < cutoff:
+                shutil.rmtree(path)
+        except OSError:
+            pass
+
+
+async def _auto_index_loop(factory) -> None:
+    while True:
+        await asyncio.sleep(max(10, int(settings.auto_index_interval)))
+        try:
+            if not settings.auto_index or not is_installed() or jobs.has_active():
+                continue
+            async with factory() as session:
+                total = await session.scalar(
+                    text(
+                        "SELECT COUNT(DISTINCT resources.id) FROM resources "
+                        "JOIN files ON files.resource_id = resources.id "
+                        "WHERE resources.type = 'image' AND resources.status = 'active' "
+                        "AND files.role = 'primary'"
+                    )
+                )
+                indexed = await session.scalar(
+                    text("SELECT COUNT(*) FROM ai_vectors WHERE model_id = :model"),
+                    {"model": MODEL_ID},
+                )
+                if int(total or 0) > int(indexed or 0):
+                    logger.info(
+                        "auto index: %s images pending",
+                        int(total or 0) - int(indexed or 0),
+                    )
+                    await AIService(session).build_index(full=False)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("auto index failed: %s", exc)
+
+
 def parse_watch_dirs(raw: dict[str, list[str]]) -> dict[ResourceType, list[str]]:
     """设置里的字符串键 → ResourceType；无效键记日志跳过。"""
     parsed: dict[ResourceType, list[str]] = {}
@@ -80,6 +135,7 @@ async def lifespan(_: FastAPI):
     db_path = settings.db_path.resolve()
     try:
         is_new = ensure_db()
+        _prune_ai_failures()
         if is_new:
             logger.info("已创建数据库 %s", db_path)
         else:
@@ -88,6 +144,11 @@ async def lifespan(_: FastAPI):
             logger.warning("BACKEND_TOKEN 未配置：本次启动不校验鉴权（仅限本机开发）")
         factory = get_session_factory()
         jobs.set_persister(_persist_ai_job)
+        async with factory() as session:
+            stored_system = await SettingsRepository(session).get_json(KEY_SYSTEM)
+            stored_library = stored_system.get("library_path")
+            if isinstance(stored_library, str) and stored_library.strip():
+                set_library_root(Path(stored_library.strip()))
         async with factory() as session:
             await session.execute(
                 text(
@@ -107,6 +168,11 @@ async def lifespan(_: FastAPI):
                 logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
         start_scrape_worker()
         await recover_unfinished()
+        auto_index_task = (
+            asyncio.create_task(_auto_index_loop(factory))
+            if settings.auto_index
+            else None
+        )
 
         # 监视目录：环境变量优先（锁定 UI），否则读数据库设置
         env_dirs = parse_watch_dirs(settings.watch_dirs)

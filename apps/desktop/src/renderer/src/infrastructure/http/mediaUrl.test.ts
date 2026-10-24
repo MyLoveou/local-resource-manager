@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { withMediaCacheBust } from './mediaUrl.ts'
+import { resolveCardImageUrl } from './mediaUrl.ts'
 
 describe('withMediaCacheBust', () => {
   it('appends revision query', () => {
@@ -14,5 +15,14 @@ describe('withMediaCacheBust', () => {
   })
   it('keeps empty url', () => {
     assert.equal(withMediaCacheBust('', 'x'), '')
+  })
+  it('falls back to coverPath when thumbnail is missing', () => {
+    assert.equal(
+      resolveCardImageUrl({
+        thumbnailPath: null,
+        coverPath: 'data:image/png;base64,cover',
+      }),
+      'data:image/png;base64,cover',
+    )
   })
 })

@@ -225,3 +225,80 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.filters, ["人数=2"])
         self.assertEqual(result.query_insight.person_count, 2)
         self.assertIn("人数=2", result.explanations[0].reasons)
+
+    async def test_suggestions_include_thumbnail_and_tags(self) -> None:
+        async with self.factory() as session:
+            resource_id = await self._resource(session, "suggest")
+            await session.execute(
+                text(
+                    "INSERT INTO ai_documents "
+                    "(resource_id, caption, short_caption, tags_json, status) "
+                    "VALUES (:rid, '猫耳角色', '猫耳', '[\"猫耳\"]', 'ready')"
+                ),
+                {"rid": resource_id},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO ai_tags (resource_id, tag, source) "
+                    "VALUES (:rid, '猫耳', 'vlm')"
+                ),
+                {"rid": resource_id},
+            )
+            await session.commit()
+            result = await AIService(session).suggestions(10)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["resource_id"], resource_id)
+        self.assertEqual(result[0]["thumbnail_path"], f"/library/resources/{resource_id}/content")
+        self.assertIn("猫耳", result[0]["tags"])
+
+    async def test_feedback_replaces_and_can_be_removed(self) -> None:
+        vector = np.zeros(512, dtype="float32")
+        vector[0] = 1
+        query = vector.copy()
+
+        async with self.factory() as session:
+            resource_id = await self._resource(session, "feedback")
+            await session.execute(
+                text(
+                    "INSERT INTO ai_vectors "
+                    "(resource_id, model_id, dim, vector, source_path, updated_at) "
+                    "VALUES (:rid, :model, 512, :vector, '', datetime('now'))"
+                ),
+                {"rid": resource_id, "model": MODEL_ID, "vector": vector.tobytes()},
+            )
+            await session.commit()
+            service = AIService(session)
+            await service.add_feedback("cat", resource_id, "relevant")
+            await service.add_feedback("cat", resource_id, "irrelevant")
+
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT action FROM ai_search_feedback "
+                        "WHERE query = 'cat' AND resource_id = :rid"
+                    ),
+                    {"rid": resource_id},
+                )
+            ).scalars().all()
+            self.assertEqual(list(rows), ["irrelevant"])
+
+            with (
+                patch("app.ai.application.service.is_installed", return_value=True),
+                patch("app.ai.application.service.runtime.dependency_ready", return_value=True),
+                patch("app.ai.application.service.runtime.encode_text", return_value=np.stack([query])),
+            ):
+                result = await service.search("cat", 10)
+            self.assertEqual(result.feedback, {resource_id: "irrelevant"})
+
+            await service.remove_feedback("cat", resource_id)
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT action FROM ai_search_feedback "
+                        "WHERE query = 'cat' AND resource_id = :rid"
+                    ),
+                    {"rid": resource_id},
+                )
+            ).scalars().all()
+            self.assertEqual(list(rows), [])

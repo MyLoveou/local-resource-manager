@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from app.shared.fs.file_ops import FileOps
+from app.shared.runtime_paths import library_root
 from app.library.domain.media_types import (
     FILE_ROLE_SUBTITLE,
     THUMB_DIR,
@@ -13,7 +14,7 @@ from app.library.domain.models import ResourceType
 
 def default_library_store(db_path: Path) -> Path:
     """实现默认：与 db 同级的 library/。产品设置项本轮不做。"""
-    return db_path.parent / "library"
+    return library_root(db_path)
 
 
 class ResourcePackage:

@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import logging
+import random
 import tempfile
+from datetime import UTC, datetime
+
+import httpx
 from pathlib import Path
 
 from sqlalchemy import case, distinct, func, select, text
@@ -28,6 +31,7 @@ from app.ai.application.schemas import (
     AIVLMRuntime,
 )
 from app.ai.infrastructure import ollama_runtime
+from app.ai.infrastructure import anime_tagger
 from app.ai.infrastructure.model_store import (
     MODEL_DIM,
     MODEL_ID,
@@ -43,10 +47,11 @@ from app.ai.infrastructure.runtime import runtime
 from app.library.domain.models import ResourceStatus, ResourceType
 from app.library.infrastructure.orm import FileRow, ResourceRow
 from app.library.infrastructure.repositories import ResourceRepository
+from app.shared.config import settings
 from app.shared.db.db import get_session_factory
+from app.shared.log import logger, operations_logger
 
 INDEX_BATCH_SIZE = 8
-logger = logging.getLogger(__name__)
 
 
 class AIServiceError(RuntimeError):
@@ -129,6 +134,9 @@ class AIService:
             caption_model=caption_provider.model if ready else "",
             caption_indexed=int(caption_indexed or 0),
             vlm_runtime_ready=vlm_runtime_ready,
+            vlm_provider=caption_provider.provider,
+            anime_tagger_ready=anime_tagger.is_installed(),
+            anime_tagger_size=anime_tagger.installed_size(),
             vlm_models=[str(item["name"]) for item in details],
             vlm_model_details=[
                 AIVLMModelInfo(
@@ -174,6 +182,160 @@ class AIService:
             for row in rows
         ]
 
+    async def suggestions(self, limit: int = 30) -> list:
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT d.resource_id, r.title, d.caption, d.short_caption, "
+                    "d.tags_json FROM ai_documents d "
+                    "JOIN resources r ON r.id = d.resource_id "
+                    "WHERE r.status = 'active' ORDER BY d.resource_id"
+                )
+            )
+        ).all()
+        tag_rows = (
+            await self.session.execute(
+                text(
+                    "SELECT ai.resource_id, ai.tag "
+                    "FROM ai_tags ai JOIN resources r ON r.id = ai.resource_id "
+                    "WHERE ai.source IN ('vlm', 'wd14') AND r.status = 'active' "
+                    "AND NOT EXISTS ("
+                    "SELECT 1 FROM resource_tags rt "
+                    "JOIN tags t ON t.id = rt.tag_id "
+                    "WHERE rt.resource_id = ai.resource_id AND t.name = ai.tag"
+                    ") ORDER BY ai.resource_id, ai.tag"
+                )
+            )
+        ).all()
+        tags_by_resource: dict[int, list[str]] = {}
+        for resource_id, tag in tag_rows:
+            values = tags_by_resource.setdefault(int(resource_id), [])
+            if tag and tag not in values:
+                values.append(str(tag))
+
+        media_rows = (
+            await self.session.execute(
+                text(
+                    "SELECT f.resource_id, f.id, f.role FROM files f "
+                    "JOIN resources r ON r.id = f.resource_id "
+                    "WHERE r.status = 'active' AND f.role IN ('thumbnail', 'primary') "
+                    "ORDER BY CASE WHEN f.role = 'thumbnail' THEN 0 ELSE 1 END, f.id"
+                )
+            )
+        ).all()
+        thumbnails: dict[int, str] = {}
+        for resource_id, file_id, role in media_rows:
+            rid = int(resource_id)
+            if rid in thumbnails:
+                continue
+            if role == "thumbnail":
+                thumbnails[rid] = f"/library/resources/{rid}/files/{int(file_id)}/content"
+            else:
+                thumbnails[rid] = f"/library/resources/{rid}/content"
+
+        character_rows = (
+            await self.session.execute(
+                text("SELECT id, name FROM characters ORDER BY id")
+            )
+        ).all()
+        character_aliases: dict[int, list[str]] = {}
+        for character_id, alias in (
+            await self.session.execute(
+                text("SELECT character_id, alias FROM character_aliases")
+            )
+        ).all():
+            character_aliases.setdefault(int(character_id), []).append(str(alias))
+        person_rows = (
+            await self.session.execute(text("SELECT id, name FROM persons ORDER BY id"))
+        ).all()
+        person_aliases: dict[int, list[str]] = {}
+        for person_id, alias in (
+            await self.session.execute(
+                text("SELECT person_id, alias FROM person_aliases")
+            )
+        ).all():
+            person_aliases.setdefault(int(person_id), []).append(str(alias))
+        collection_rows = (
+            await self.session.execute(
+                text("SELECT id, title, description FROM collections ORDER BY id")
+            )
+        ).all()
+
+        existing_characters = set(
+            (
+                await self.session.execute(
+                    text("SELECT resource_id, character_id FROM resource_characters")
+                )
+            ).all()
+        )
+        existing_persons = set(
+            (
+                await self.session.execute(
+                    text("SELECT resource_id, person_id FROM resource_persons")
+                )
+            ).all()
+        )
+        existing_collections = set(
+            (
+                await self.session.execute(
+                    text("SELECT resource_id, collection_id FROM collection_items")
+                )
+            ).all()
+        )
+
+        grouped: dict[int, dict] = {}
+        for resource_id, title, caption, short_caption, tags_json in rows:
+            rid = int(resource_id)
+            text_blob = " ".join(
+                str(value or "") for value in (caption, short_caption, tags_json)
+            ).lower()
+            item = grouped.setdefault(
+                rid,
+                {
+                    "resource_id": rid,
+                    "title": str(title),
+                    "thumbnail_path": thumbnails.get(rid),
+                    "tags": tags_by_resource.get(rid, [])[:12],
+                    "characters": [],
+                    "persons": [],
+                    "collections": [],
+                },
+            )
+            for character_id, name in character_rows:
+                names = [str(name), *character_aliases.get(int(character_id), [])]
+                if (rid, int(character_id)) in existing_characters:
+                    continue
+                if any(len(value.strip()) >= 2 and value.strip().lower() in text_blob for value in names):
+                    if len(item["characters"]) < 3:
+                        item["characters"].append(
+                            {"id": int(character_id), "name": str(name)}
+                        )
+            for person_id, name in person_rows:
+                names = [str(name), *person_aliases.get(int(person_id), [])]
+                if (rid, int(person_id)) in existing_persons:
+                    continue
+                if any(len(value.strip()) >= 2 and value.strip().lower() in text_blob for value in names):
+                    if len(item["persons"]) < 3:
+                        item["persons"].append({"id": int(person_id), "name": str(name)})
+            for collection_id, collection_title, description in collection_rows:
+                if (rid, int(collection_id)) in existing_collections:
+                    continue
+                names = [str(collection_title)]
+                if description:
+                    names.append(str(description))
+                if any(len(value.strip()) >= 2 and value.strip().lower() in text_blob for value in names):
+                    if len(item["collections"]) < 3:
+                        item["collections"].append(
+                            {"id": int(collection_id), "name": str(collection_title)}
+                        )
+
+        result = [
+            item
+            for item in grouped.values()
+            if item["tags"] or item["characters"] or item["persons"] or item["collections"]
+        ]
+        return result[: max(1, min(limit, 100))]
+
     async def vlm_runtime_status(self) -> AIVLMRuntime:
         preferred = await self.session.scalar(
             text("SELECT value FROM ai_preferences WHERE key = 'ollama_bin'")
@@ -183,6 +345,7 @@ class AIService:
 
     async def select_ollama_binary(self, path: str) -> AIVLMRuntime:
         raw = path.strip()
+        operations_logger.info("ai.ollama.select path=%s", raw)
         candidate = Path(raw).expanduser()
         if not raw or not candidate.is_file():
             raise AIServiceError("??? Ollama ???????? ollama.exe", 400)
@@ -199,6 +362,7 @@ class AIService:
         return await self.vlm_runtime_status()
 
     async def start_ollama_runtime(self) -> AIVLMRuntime:
+        operations_logger.info("ai.ollama.start")
         preferred = await self.session.scalar(
             text("SELECT value FROM ai_preferences WHERE key = 'ollama_bin'")
         )
@@ -216,9 +380,11 @@ class AIService:
             raise AIServiceError("? AI ???????????????")
         await self.session.execute(text("DELETE FROM ai_jobs"))
         await self.session.commit()
+        operations_logger.info("ai.jobs.clear")
 
     async def select_vlm(self, model: str) -> AIStatus:
         model = model.strip()
+        operations_logger.info("ai.vlm.select model=%s", model)
         if not model:
             raise AIServiceError("模型名称不能为空")
         try:
@@ -245,6 +411,7 @@ class AIService:
 
 
     async def install_model(self) -> AIJob:
+        operations_logger.info("ai.model.install requested")
         if is_installed():
             raise AIServiceError("AI 模型已安装")
         if jobs.has_active():
@@ -262,7 +429,8 @@ class AIService:
         await asyncio.to_thread(person_detector.reload)
         jobs.update(job, done=job.total or job.done, message="模型安装完成")
 
-    async def build_index(self) -> AIJob:
+    async def build_index(self, full: bool = False) -> AIJob:
+        operations_logger.info("ai.index.requested full=%s", full)
         if not is_installed():
             raise AIServiceError("请先安装 AI 模型")
         if not runtime.dependency_ready():
@@ -270,7 +438,7 @@ class AIService:
         if jobs.has_active():
             raise AIServiceError("已有 AI 任务在运行")
         job = jobs.create("index")
-        jobs.start(job, self._run_index)
+        jobs.start(job, lambda current: self._run_index(current, full))
         return job_schema(job)
 
     async def _collect_images(self) -> list[tuple[int, Path]]:
@@ -338,25 +506,46 @@ class AIService:
             },
         )
 
-    async def _run_index(self, job: Job) -> None:
+    async def _indexed_ids(self) -> set[int]:
+        rows = (
+            await self.session.execute(
+                text("SELECT resource_id FROM ai_vectors WHERE model_id = :model"),
+                {"model": MODEL_ID},
+            )
+        ).scalars()
+        return set(rows)
+
+    async def _run_index(self, job: Job, full: bool = False) -> None:
         factory = get_session_factory()
         async with factory() as session:
             service = AIService(session)
-            images = await service._collect_images()
-            jobs.update(job, total=len(images), done=0, message="准备图片")
-            await session.execute(
-                text("DELETE FROM ai_vectors WHERE model_id = :model"),
-                {"model": MODEL_ID},
+            all_images = await service._collect_images()
+            indexed = set() if full else await service._indexed_ids()
+            images = [
+                (resource_id, path)
+                for resource_id, path in all_images
+                if resource_id not in indexed
+            ]
+            jobs.update(
+                job,
+                total=len(images),
+                done=0,
+                message="准备建立索引" if full else "准备增量索引",
             )
-            await session.execute(
-                text(
-                    "DELETE FROM ai_attributes "
-                    "WHERE feature IN ('person_count', 'orientation', 'caption') "
-                    "OR feature LIKE 'label:%'"
+            if full:
+                await session.execute(
+                    text("DELETE FROM ai_vectors WHERE model_id = :model"),
+                    {"model": MODEL_ID},
                 )
-            )
-            await session.execute(text("DELETE FROM ai_hashes"))
-            await session.commit()
+                await session.execute(
+                    text(
+                        "DELETE FROM ai_attributes "
+                        "WHERE feature IN ('person_count', 'orientation', 'caption') "
+                        "OR feature LIKE 'label:%'"
+                    )
+                )
+                await session.execute(text("DELETE FROM ai_hashes"))
+                await session.commit()
 
             label_vectors = await asyncio.to_thread(
                 runtime.encode_text, list(PROMPTS)
@@ -366,15 +555,16 @@ class AIService:
                 session, job, images, label_vectors, processed
             )
 
-            # Resources can be imported while a full rebuild is running. Do a
-            # bounded catch-up pass so the final count does not silently drop
-            # newly imported images.
+            # Resources can be imported while an index run is active. Catch
+            # them up before reporting completion, so a follow-up import does
+            # not require the user to remember to index again.
             for _ in range(2):
                 refreshed = await service._collect_images()
+                indexed_now = set() if full else await service._indexed_ids()
                 missing = [
                     (resource_id, path)
                     for resource_id, path in refreshed
-                    if resource_id not in processed
+                    if resource_id not in processed and resource_id not in indexed_now
                 ]
                 if not missing:
                     break
@@ -387,10 +577,11 @@ class AIService:
                     session, job, missing, label_vectors, processed
                 )
 
+            final_indexed = set() if full else await service._indexed_ids()
             remaining = [
                 (resource_id, path)
                 for resource_id, path in await service._collect_images()
-                if resource_id not in processed
+                if resource_id not in processed and resource_id not in final_indexed
             ]
             if remaining:
                 jobs.update(
@@ -551,7 +742,25 @@ class AIService:
         ).scalars()
         return set(rows)
 
+    async def install_anime_tagger(self) -> AIJob:
+        operations_logger.info("ai.anime_tagger.install requested")
+        if anime_tagger.is_installed():
+            raise AIServiceError("?????????")
+        if jobs.has_active():
+            raise AIServiceError("?? AI ?????")
+        job = jobs.create("anime-install")
+        jobs.start(job, self._run_anime_install)
+        return job_schema(job)
+
+    async def _run_anime_install(self, job: Job) -> None:
+        def progress(done: int, total: int) -> None:
+            jobs.update(job, total=total, done=done, message="????????")
+
+        await anime_tagger.download(progress)
+        jobs.update(job, done=job.total or job.done, message="??????????")
+
     async def pull_vlm(self, model: str) -> AIJob:
+        operations_logger.info("ai.vlm.pull model=%s", model)
         model = model.strip()
         if not model:
             raise AIServiceError("模型名称不能为空")
@@ -592,6 +801,11 @@ class AIService:
             )
         if jobs.has_active():
             raise AIServiceError("已有 AI 任务在运行")
+        operations_logger.info(
+            "ai.caption.requested resource_ids=%s only_pending=%s",
+            resource_ids,
+            only_pending,
+        )
         job = jobs.create("caption")
         jobs.start(
             job,
@@ -635,6 +849,61 @@ class AIService:
                 chosen[resource_id] = path
         return list(chosen.items())
 
+    @staticmethod
+    def _failure_kind(exc: Exception) -> str:
+        if isinstance(exc, httpx.HTTPStatusError):
+            body = exc.response.text.lower() if exc.response is not None else ""
+            if "token repeat limit" in body:
+                return "token_repeat_limit"
+            return "ollama_http"
+        if isinstance(exc, ValueError):
+            return "invalid_json"
+        if isinstance(exc, FileNotFoundError):
+            return "image_missing"
+        if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
+            return "ollama_unavailable"
+        return type(exc).__name__
+
+    @staticmethod
+    def _archive_failure(
+        job_id: str,
+        resource_id: int,
+        path: Path,
+        kind: str,
+        detail: str,
+    ) -> None:
+        root = settings.db_path.parent / "ai-failures" / job_id
+        root.mkdir(parents=True, exist_ok=True)
+        try:
+            from PIL import Image, ImageOps
+
+            with Image.open(path) as opened:
+                image = ImageOps.exif_transpose(opened).convert("RGB")
+                image.thumbnail((320, 320), Image.Resampling.LANCZOS)
+                image.save(root / f"{resource_id}.jpg", format="JPEG", quality=82)
+        except Exception:
+            pass
+        (root / f"{resource_id}-error.txt").write_text(
+            f"{kind}\n{detail}", encoding="utf-8"
+        )
+        manifest = root / "manifest.json"
+        try:
+            entries = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            entries = []
+        entries.append(
+            {
+                "resource_id": resource_id,
+                "path": str(path),
+                "kind": kind,
+                "error": detail[:4000],
+                "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+        )
+        manifest.write_text(
+            json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     async def _run_analyze(
         self,
         job: Job,
@@ -645,6 +914,13 @@ class AIService:
         async with factory() as session:
             service = AIService(session)
             images = await service._collect_analysis_images(resource_ids, only_pending)
+            logger.info(
+                "AI caption job %s started: total=%s only_pending=%s model=%s",
+                job.id,
+                len(images),
+                only_pending,
+                caption_provider.model,
+            )
             jobs.update(
                 job,
                 total=len(images),
@@ -654,29 +930,72 @@ class AIService:
             )
             failed = 0
             consecutive_failures = 0
+            repeat_failures = 0
             for index, (resource_id, path) in enumerate(images, start=1):
                 try:
                     document = await caption_provider.analyze(path)
                 except Exception as exc:
-                    failed += 1
-                    consecutive_failures += 1
-                    logger.warning(
-                        "Caption analysis failed for resource %s: %s",
-                        resource_id,
-                        exc,
-                        exc_info=True,
-                    )
-                    jobs.update(
-                        job,
-                        done=index,
-                        failed=failed,
-                        message=f"已处理 {index}/{len(images)}，失败 {failed} 张：{exc}",
-                    )
-                    if consecutive_failures >= 3:
-                        raise RuntimeError(
-                            f"连续 {consecutive_failures} 张分析失败，任务已停止：{exc}"
-                        ) from exc
-                    continue
+                    kind = self._failure_kind(exc)
+                    fallback_document = None
+                    if kind == "token_repeat_limit" and anime_tagger.is_installed():
+                        try:
+                            fallback_document = await asyncio.to_thread(
+                                anime_tagger.anime_tagger.analyze, path
+                            )
+                        except Exception as fallback_error:
+                            logger.warning(
+                                "anime fallback failed for resource %s: %s",
+                                resource_id,
+                                fallback_error,
+                            )
+                    if fallback_document is not None:
+                        document = fallback_document
+                        repeat_failures = 0
+                        logger.info(
+                            "AI caption job %s used anime fallback for resource=%s",
+                            job.id,
+                            resource_id,
+                        )
+                    else:
+                        failed += 1
+                        if kind == "token_repeat_limit":
+                            repeat_failures += 1
+                        else:
+                            repeat_failures = 0
+                        if isinstance(exc, (httpx.HTTPStatusError, ValueError)):
+                            consecutive_failures = 0
+                        else:
+                            consecutive_failures += 1
+                        detail = str(exc)
+                        self._archive_failure(job.id, resource_id, path, kind, detail)
+                        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                            detail = f"{detail} | response={exc.response.text[:800]}"
+                        logger.warning(
+                            "AI caption job %s failed kind=%s resource=%s path=%s: %s",
+                            job.id,
+                            kind,
+                            resource_id,
+                            path,
+                            detail,
+                            exc_info=True,
+                        )
+                        jobs.update(
+                            job,
+                            done=index,
+                            failed=failed,
+                            message=f"已处理 {index}/{len(images)}，失败 {failed} 张：{exc}",
+                        )
+                        if consecutive_failures >= 3:
+                            raise RuntimeError(
+                                f"连续 {consecutive_failures} 张分析失败，任务已停止：{exc}"
+                            ) from exc
+                        if repeat_failures >= 10:
+                            raise RuntimeError(
+                                "连续 10 张图片触发 token repeat limit；"
+                                "当前视觉模型可能不适合这批图片，任务已暂停"
+                            )
+                        continue
+
                 consecutive_failures = 0
                 await session.execute(
                     text(
@@ -707,6 +1026,7 @@ class AIService:
                     text("DELETE FROM ai_tags WHERE resource_id = :id"),
                     {"id": resource_id},
                 )
+                tag_source = "wd14" if document.model_id == anime_tagger.MODEL_ID else "vlm"
                 for tag in dict.fromkeys(document.tags):
                     if not tag:
                         continue
@@ -714,9 +1034,14 @@ class AIService:
                         text(
                             "INSERT OR IGNORE INTO ai_tags "
                             "(resource_id, tag, category, confidence, source, model_id) "
-                            "VALUES (:resource_id, :tag, NULL, NULL, 'vlm', :model)"
+                            "VALUES (:resource_id, :tag, NULL, NULL, :source, :model)"
                         ),
-                        {"resource_id": resource_id, "tag": tag, "model": document.model_id},
+                        {
+                            "resource_id": resource_id,
+                            "tag": tag,
+                            "source": tag_source,
+                            "model": document.model_id,
+                        },
                     )
                 await session.commit()
                 jobs.update(
@@ -725,6 +1050,12 @@ class AIService:
                     failed=failed,
                     message=f"已分析 {index}/{len(images)}",
                 )
+            logger.info(
+                "AI caption job %s finished: success=%s failed=%s",
+                job.id,
+                len(images) - failed,
+                failed,
+            )
             jobs.update(
                 job,
                 failed=failed,
@@ -1328,7 +1659,155 @@ class AIService:
             filters=[item.label for item in parsed.filters],
         )
 
-    async def search(self, query: str, limit: int = 30) -> AISearchResponse:
+    async def _caption_matches(self, terms: list[str]) -> dict[int, int]:
+        cleaned: list[str] = []
+        for term in terms:
+            value = term.strip()
+            if value and value not in cleaned:
+                cleaned.append(value)
+        if not cleaned:
+            return {}
+        conditions: list[str] = []
+        params: dict[str, str] = {}
+        for index, term in enumerate(cleaned):
+            pattern = f"%{term.replace('%', '').replace('_', '')}%"
+            params[f"term{index}"] = pattern
+            conditions.append(
+                f"(caption LIKE :term{index} OR short_caption LIKE :term{index} "
+                f"OR tags_json LIKE :term{index} OR ocr_text LIKE :term{index})"
+            )
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT resource_id, caption, short_caption, tags_json, ocr_text "
+                    "FROM ai_documents WHERE " + " OR ".join(conditions)
+                ),
+                params,
+            )
+        ).all()
+        hits: dict[int, int] = {}
+        for resource_id, caption, short_caption, tags_json, ocr_text in rows:
+            haystack = " ".join(
+                str(value or "")
+                for value in (caption, short_caption, tags_json, ocr_text)
+            )
+            count = sum(1 for term in cleaned if term in haystack)
+            if count:
+                hits[int(resource_id)] = count
+        return hits
+
+    async def _feedback_adjustments(
+        self, query: str, resource_ids: list[int]
+    ) -> dict[int, float]:
+        marks = await self._feedback_marks(query, resource_ids)
+        return {
+            resource_id: 0.03 if action == "relevant" else -0.05
+            for resource_id, action in marks.items()
+        }
+
+    async def _feedback_marks(
+        self, query: str, resource_ids: list[int], source: str = "search"
+    ) -> dict[int, str]:
+        if not resource_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT resource_id, action FROM ai_search_feedback "
+                    "WHERE query = :query AND source = :source "
+                    "AND action IN ('relevant', 'irrelevant') "
+                    "ORDER BY id ASC"
+                ),
+                {"query": query.strip(), "source": source},
+            )
+        ).all()
+        wanted = set(resource_ids)
+        marks: dict[int, str] = {}
+        for resource_id, action in rows:
+            if int(resource_id) in wanted:
+                marks[int(resource_id)] = str(action)
+        return marks
+
+    async def remove_feedback(
+        self, query: str, resource_id: int, source: str = "search"
+    ) -> None:
+        if not query.strip():
+            raise AIServiceError("反馈缺少查询文本", 400)
+        await self.session.execute(
+            text(
+                "DELETE FROM ai_search_feedback "
+                "WHERE query = :query AND resource_id = :resource_id AND source = :source "
+                "AND action IN ('relevant', 'irrelevant')"
+            ),
+            {
+                "query": query.strip(),
+                "resource_id": resource_id,
+                "source": source,
+            },
+        )
+        await self.session.commit()
+        operations_logger.info(
+            "ai.feedback.remove query=%r resource_id=%s source=%s",
+            query.strip(),
+            resource_id,
+            source,
+        )
+
+    async def add_feedback(
+        self,
+        query: str,
+        resource_id: int,
+        action: str,
+        source: str = "search",
+        score: float | None = None,
+        position: int | None = None,
+        features: dict | None = None,
+    ) -> None:
+        if action not in {"relevant", "irrelevant", "click"}:
+            raise AIServiceError("不支持的反馈类型", 400)
+        if not query.strip():
+            raise AIServiceError("反馈缺少查询文本", 400)
+        if action in {"relevant", "irrelevant"}:
+            await self.session.execute(
+                text(
+                    "DELETE FROM ai_search_feedback "
+                    "WHERE query = :query AND resource_id = :resource_id AND source = :source "
+                    "AND action IN ('relevant', 'irrelevant')"
+                ),
+                {
+                    "query": query.strip(),
+                    "resource_id": resource_id,
+                    "source": source,
+                },
+            )
+        await self.session.execute(
+            text(
+                "INSERT INTO ai_search_feedback "
+                "(query, resource_id, action, source, score, position, features_json) "
+                "VALUES (:query, :resource_id, :action, :source, :score, :position, :features)"
+            ),
+            {
+                "query": query.strip(),
+                "resource_id": resource_id,
+                "action": action,
+                "source": source,
+                "score": score,
+                "position": position,
+                "features": json.dumps(features or {}, ensure_ascii=False),
+            },
+        )
+        await self.session.commit()
+        operations_logger.info(
+            "ai.feedback query=%r resource_id=%s action=%s source=%s",
+            query.strip(),
+            resource_id,
+            action,
+            source,
+        )
+
+    async def search(
+        self, query: str, limit: int = 30, min_score: float = 0.0
+    ) -> AISearchResponse:
         query = query.strip()
         if not query:
             return AISearchResponse(items=[], scores=[], indexed=0, matched=0, returned=0)
@@ -1343,6 +1822,7 @@ class AIService:
 
         parsed = parse_query(query)
         query_insight = self._text_query_insight(query, parsed)
+        query_insight.notes.append("文案/标签命中会参与综合排序。")
         text_vector = (await asyncio.to_thread(runtime.encode_text, [parsed.text]))[0]
         rows = (
             await self.session.execute(
@@ -1383,6 +1863,9 @@ class AIService:
                 continue
             filtered_ids.append(resource_id)
             vectors.append(vector)
+        filters = [item.label for item in parsed.filters] + [
+            f"标签={label}" for label in parsed.labels
+        ]
         if not vectors:
             return AISearchResponse(
                 items=[],
@@ -1390,44 +1873,94 @@ class AIService:
                 indexed=len(all_ids),
                 matched=0,
                 returned=0,
-                filters=[item.label for item in parsed.filters]
-                + [f"标签={label}" for label in parsed.labels],
+                filters=filters,
                 query_insight=query_insight,
+                min_score=max(0.0, min(1.0, min_score)),
             )
 
+        caption_hits = await self._caption_matches([parsed.text, query])
+        feedback = await self._feedback_adjustments(query, filtered_ids)
         matrix = np.stack(vectors)
-        scores = matrix @ text_vector.astype("float32")
-        order = np.argsort(-scores)[: max(1, min(limit, 100))]
+        clip_scores = matrix @ text_vector.astype("float32")
+        candidates: list[tuple[int, float, float, int, float]] = []
+        filtered_low_score = 0
+        for index, resource_id in enumerate(filtered_ids):
+            clip_score = float(clip_scores[index])
+            caption_hit = int(caption_hits.get(resource_id, 0))
+            feedback_adjust = feedback.get(resource_id, 0.0)
+            score = clip_score + min(0.12, caption_hit * 0.06) + feedback_adjust
+            if score < min_score:
+                filtered_low_score += 1
+                continue
+            candidates.append(
+                (resource_id, clip_score, score, caption_hit, feedback_adjust)
+            )
+        candidates.sort(key=lambda item: item[2], reverse=True)
+        explored = False
+        if (
+            len(candidates) > 10
+            and random.random() < settings.search_exploration_rate
+        ):
+            replace_at = random.randint(4, min(9, len(candidates) - 1))
+            from_tail = random.randint(10, len(candidates) - 1)
+            candidates[replace_at], candidates[from_tail] = (
+                candidates[from_tail],
+                candidates[replace_at],
+            )
+            explored = True
         repo = ResourceRepository(self.session)
         items = []
         result_scores: list[float] = []
         result_ids: list[int] = []
-        for index in order:
-            resource_id = filtered_ids[int(index)]
+        explanations = []
+        for resource_id, clip_score, score, caption_hit, feedback_adjust in candidates:
             resource = await repo.get(resource_id)
             if resource is None:
                 continue
             items.append(resource)
-            result_scores.append(float(scores[int(index)]))
+            result_scores.append(float(score))
             result_ids.append(resource_id)
-        meta_by_id = await self._resource_meta(result_ids)
-        explanations = [
-            self._text_match_explanation(
+            explanation = self._text_match_explanation(
                 resource_id,
-                meta_by_id.get(resource_id),
+                {},
                 parsed,
-                result_scores[index],
+                clip_score,
             )
-            for index, resource_id in enumerate(result_ids)
-        ]
+            if caption_hit:
+                explanation.reasons.append("文案/标签命中")
+            if feedback_adjust:
+                explanation.reasons.append("历史反馈加权")
+            explanations.append(explanation)
+            if len(items) >= max(1, min(limit, 100)):
+                break
+        meta_by_id = await self._resource_meta(result_ids)
+        for index, resource_id in enumerate(result_ids):
+            meta = meta_by_id.get(resource_id)
+            if meta:
+                explanations[index].caption = str(meta.get("caption") or "")
+                explanations[index].short_caption = str(meta.get("short_caption") or "")
+                explanations[index].tags = list(meta.get("tags") or [])
+                explanations[index].person_count = (
+                    int(meta["person_count"])
+                    if meta.get("person_count") is not None
+                    else None
+                )
+                explanations[index].orientation = self._orientation_label(
+                    meta.get("orientation")
+                )
         return AISearchResponse(
             items=items,
             scores=result_scores,
             indexed=len(all_ids),
-            matched=len(filtered_ids),
+            matched=len(candidates),
             returned=len(items),
-            filters=[item.label for item in parsed.filters]
-            + [f"标签={label}" for label in parsed.labels],
+            filters=filters,
             query_insight=query_insight,
             explanations=explanations,
+            min_score=max(0.0, min(1.0, min_score)),
+            filtered_low_score=filtered_low_score,
+            caption_matched=len(set(caption_hits) & set(filtered_ids)),
+            feedback_adjusted=sum(1 for item in candidates if item[4]),
+            feedback=await self._feedback_marks(query, result_ids),
+            explored=explored,
         )

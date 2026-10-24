@@ -58,9 +58,16 @@
               type="primary"
               :loading="indexJobActive"
               :disabled="ai.jobActive"
-              @click="index"
+              @click="index(false)"
             >
-              {{ ai.indexed > 0 ? '重新建立索引' : '建立索引' }}
+              增量索引
+            </n-button>
+            <n-button
+              size="small"
+              :disabled="ai.jobActive"
+              @click="rebuildIndex"
+            >
+              重建全部
             </n-button>
             <span v-if="indexJobActive" class="ai-muted">
               {{ jobProgressText }}
@@ -93,6 +100,17 @@
             >
               搜索
             </n-button>
+            <label class="ai-min-score">
+              <span>最低分</span>
+              <n-input-number
+                v-model:value="minScore"
+                size="small"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :show-button="false"
+              />
+            </label>
           </div>
           <div v-if="ai.recentQueries.length" class="ai-history">
             <span class="ai-muted">最近搜索</span>
@@ -109,11 +127,21 @@
               清除
             </button>
           </div>
-          <p v-if="ai.jobActive" class="ai-muted">索引重建中，完成后即可搜索。</p>
+          <p v-if="indexJobActive" class="ai-muted">索引重建中，完成后即可搜索。</p>
+          <p v-else-if="ai.jobActive" class="ai-muted">AI 任务运行中，暂不能开始搜索。</p>
           <p class="ai-muted">
-            已索引 {{ ai.results?.indexed ?? ai.indexed }} 张
+            已索引 {{ ai.results?.indexed ?? ai.indexed }} / {{ ai.total }} 张
             <template v-if="ai.results">
               · 匹配 {{ ai.results.matched }} 张 · 显示 {{ ai.results.returned }} 张
+              <template v-if="ai.results.captionMatched">
+                · 文案命中 {{ ai.results.captionMatched }} 张
+              </template>
+              <template v-if="ai.results.filteredLowScore">
+                · 低于阈值 {{ ai.results.filteredLowScore }} 张
+              </template>
+              <template v-if="ai.results.feedbackAdjusted">
+                · 反馈重排 {{ ai.results.feedbackAdjusted }} 张
+              </template>
             </template>
           </p>
           <div v-if="ai.results?.filters.length" class="ai-filters">
@@ -128,23 +156,59 @@
             <n-spin size="small" /> 正在计算相似度
           </div>
           <div v-else-if="ai.results?.items.length" class="ai-results">
-            <button
-              v-for="(item, index) in ai.results.items"
-              :key="item.id"
-              type="button"
-              class="ai-result"
-              :title="matchReason(ai.results.explanations[index])"
-              @click="openResult(item)"
-            >
-              <img :src="resolveCardImageUrl(item)" :alt="item.title" loading="lazy" />
-              <span class="ai-result__score">
-                {{ scoreLabel(ai.results.scores[index] ?? 0) }}
-              </span>
-              <span class="ai-result__title">{{ item.title }}</span>
-              <span v-if="matchReason(ai.results.explanations[index])" class="ai-result__why">
-                {{ matchReason(ai.results.explanations[index]) }}
-              </span>
-            </button>
+            <div v-if="feedbackNotice" class="ai-feedback-notice">{{ feedbackNotice }}</div>
+            <div v-for="(item, index) in ai.results.items" :key="item.id" class="ai-result-item">
+              <button
+                type="button"
+                class="ai-result"
+                :title="matchReason(ai.results.explanations[index])"
+                @click="openResult(item)"
+              >
+                <img :src="resolveCardImageUrl(item)" :alt="item.title" loading="lazy" />
+                <span class="ai-result__score">
+                  {{ searchScoreLabel(ai.results.scores[index] ?? 0) }}
+                </span>
+                <span class="ai-result__title">{{ item.title }}</span>
+                <span v-if="matchReason(ai.results.explanations[index])" class="ai-result__why">
+                  {{ matchReason(ai.results.explanations[index]) }}
+                </span>
+              </button>
+              <div class="ai-result__feedback">
+                <button
+                  type="button"
+                  :class="{ 'is-relevant': feedbackMark(item) === 'relevant' }"
+                  :aria-pressed="feedbackMark(item) === 'relevant'"
+                  :title="
+                    feedbackMark(item) === 'relevant'
+                      ? '已标为相关，再次点击取消'
+                      : '标记为相关'
+                  "
+                  @click.stop="sendFeedback(item, index, 'relevant')"
+                >
+                  相关
+                </button>
+                <button
+                  type="button"
+                  :class="{ 'is-irrelevant': feedbackMark(item) === 'irrelevant' }"
+                  :aria-pressed="feedbackMark(item) === 'irrelevant'"
+                  :title="
+                    feedbackMark(item) === 'irrelevant'
+                      ? '已标为不相关，再次点击取消'
+                      : '标记为不相关'
+                  "
+                  @click.stop="sendFeedback(item, index, 'irrelevant')"
+                >
+                  不相关
+                </button>
+              </div>
+              <p v-if="feedbackMark(item)" class="ai-result__feedback-state">
+                {{
+                  feedbackMark(item) === 'relevant'
+                    ? '已标为相关，再次点击可取消'
+                    : '已标为不相关，再次点击可取消'
+                }}
+              </p>
+            </div>
           </div>
           <div v-else-if="ai.results && ai.results.matched === 0" class="ai-empty">
             没有符合当前特征的图片。
@@ -362,18 +426,27 @@
         <n-button
           v-if="!ai.modelInstalled"
           type="primary"
-          :loading="ai.jobActive"
+          :loading="installJobActive"
+          :disabled="ai.jobActive"
           @click="install"
         >
           安装模型
         </n-button>
         <n-button
           v-else
-          :loading="ai.jobActive"
+          :loading="indexJobActive"
           :disabled="ai.jobActive"
-          @click="index"
+          @click="index(false)"
         >
-          {{ ai.indexed > 0 ? '重新建立索引' : '建立索引' }}
+          增量索引
+        </n-button>
+        <n-button
+          v-if="ai.modelInstalled"
+          size="small"
+          :disabled="ai.jobActive"
+          @click="rebuildIndex"
+        >
+          重建全部
         </n-button>
       </div>
       <p class="ai-muted">建立索引只计算 CLIP/人数/hash，不会自动分析文案。</p>
@@ -423,7 +496,7 @@
       </p>
       <template v-if="!ai.status?.vlmRuntimeReady">
         <div class="ai-panel__actions">
-          <n-button size="small" :loading="runtimeBusy" @click="detectOllama">
+          <n-button size="small" :loading="detectingOllama" @click="detectOllama">
             检测 Ollama
           </n-button>
           <n-button size="small" @click="chooseOllama">选择程序</n-button>
@@ -431,9 +504,10 @@
             下载安装
           </n-button>
           <n-button
-            v-if="ai.vlmRuntime?.detected"
+            v-if="ai.vlmRuntime?.detected && !ai.vlmRuntime?.running"
             size="small"
-            :loading="runtimeBusy"
+            type="primary"
+            :loading="startingOllama"
             @click="startOllama"
           >
             启动 Ollama
@@ -551,14 +625,128 @@
       <p v-else class="ai-muted">还没有 AI 操作历史。</p>
     </section>
 
-    <section v-else class="ai-panel">
+    <section v-else-if="activeTab === 'suggestions'" class="ai-panel">
       <div class="ai-panel__row">
         <strong>AI 建议</strong>
-        <n-tag size="small" :bordered="false">待接入</n-tag>
+        <n-tag size="small" :bordered="false">{{ ai.suggestions.length }} 张</n-tag>
+        <n-button size="tiny" :loading="ai.suggestionsLoading" @click="ai.refreshSuggestions()">
+          刷新
+        </n-button>
       </div>
       <p class="ai-muted">
-        后续会在这里审核 AI 生成的标签、角色、扮演者和合集建议。
+        审核后应用。标签和实体只会添加，不会覆盖已有内容；不会自动创建角色或合集。
       </p>
+      <div v-if="ai.suggestionsLoading" class="ai-empty">
+        <n-spin size="small" /> 正在读取建议
+      </div>
+      <div v-else-if="!ai.suggestions.length" class="ai-empty">
+        暂无建议。先在图片任务里完成 VLM 文案分析，或补充已有角色/扮演者/合集。
+      </div>
+      <div v-else class="ai-suggestion-list">
+        <article
+          v-for="item in ai.suggestions"
+          :key="item.resourceId"
+          class="ai-suggestion"
+        >
+          <button
+            type="button"
+            class="ai-suggestion__cover"
+            :title="`打开 ${item.title || `资源 #${item.resourceId}`}`"
+            @click="openSuggestion(item)"
+          >
+            <img
+              v-if="item.thumbnailPath"
+              :src="resolveCardImageUrl({ thumbnailPath: item.thumbnailPath })"
+              :alt="item.title"
+              loading="lazy"
+            />
+            <span v-else>无图</span>
+          </button>
+          <div class="ai-suggestion__main">
+            <div class="ai-panel__row">
+              <strong>{{ item.title || `资源 #${item.resourceId}` }}</strong>
+              <n-tag size="tiny" :bordered="false">#{{ item.resourceId }}</n-tag>
+            </div>
+            <div v-if="item.tags.length" class="ai-suggestion__group">
+              <span>标签（可多选）</span>
+              <button
+                v-for="tag in item.tags"
+                :key="`tag-${item.resourceId}-${tag}`"
+                type="button"
+                class="ai-suggestion__tag"
+                :class="{ active: isTagSelected(item, tag) }"
+                :disabled="suggestionBusy === item.resourceId"
+                @click="toggleTag(item, tag)"
+              >
+                {{ tag }}
+              </button>
+              <button
+                type="button"
+                class="ai-suggestion__select"
+                @click="selectAllTags(item)"
+              >
+                全选
+              </button>
+              <button
+                v-if="selectedTagCount(item)"
+                type="button"
+                class="ai-suggestion__select"
+                @click="clearSelectedTags(item)"
+              >
+                清空
+              </button>
+            </div>
+            <div v-if="item.characters.length" class="ai-suggestion__group">
+              <span>角色</span>
+              <button
+                v-for="entity in item.characters"
+                :key="`character-${item.resourceId}-${entity.id}`"
+                type="button"
+                class="ai-suggestion__apply"
+                :disabled="suggestionBusy === item.resourceId"
+                @click="applyEntity(item, 'characters', entity)"
+              >
+                + {{ entity.name }}
+              </button>
+            </div>
+            <div v-if="item.persons.length" class="ai-suggestion__group">
+              <span>扮演者</span>
+              <button
+                v-for="entity in item.persons"
+                :key="`person-${item.resourceId}-${entity.id}`"
+                type="button"
+                class="ai-suggestion__apply"
+                :disabled="suggestionBusy === item.resourceId"
+                @click="applyEntity(item, 'persons', entity)"
+              >
+                + {{ entity.name }}
+              </button>
+            </div>
+            <div v-if="item.collections.length" class="ai-suggestion__group">
+              <span>合集</span>
+              <button
+                v-for="entity in item.collections"
+                :key="`collection-${item.resourceId}-${entity.id}`"
+                type="button"
+                class="ai-suggestion__apply"
+                :disabled="suggestionBusy === item.resourceId"
+                @click="applyEntity(item, 'collections', entity)"
+              >
+                + {{ entity.name }}
+              </button>
+            </div>
+          </div>
+          <n-button
+            v-if="item.tags.length"
+            size="tiny"
+            :loading="suggestionBusy === item.resourceId"
+            :disabled="selectedTagCount(item) === 0"
+            @click="applyTags(item)"
+          >
+            应用选中 {{ selectedTagCount(item) }}
+          </n-button>
+        </article>
+      </div>
     </section>
   </div>
 </template>
@@ -566,11 +754,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NButtonGroup, NCheckbox, NInput, NProgress, NSpin, NTag } from 'naive-ui'
+import {
+  NButton,
+  NButtonGroup,
+  NCheckbox,
+  NInput,
+  NInputNumber,
+  NProgress,
+  NSpin,
+  NTag,
+} from 'naive-ui'
 import { useAIStore } from '@/application/stores/ai'
 import { openResource } from '@/infrastructure/consume/consumeResource'
-import { getAISimilar, getResource, resolveCardImageUrl, searchAIFusion, searchAISimilarFile } from '@/infrastructure/http'
-import type { AIFusionResult, AIMatchExplanation, AISimilarResult } from '@/infrastructure/http'
+import { addCollectionItems } from '@/infrastructure/http/collections'
+import { batchResources, getAISimilar, getResource, resolveCardImageUrl, searchAIFusion, searchAISimilarFile } from '@/infrastructure/http'
+import type { AIEntitySuggestion, AIFusionResult, AIMatchExplanation, AISimilarResult, AISuggestionItem } from '@/infrastructure/http'
 import type { Resource } from '@/domain'
 import AIInsightPanel from '@/components/AIInsightPanel/index.vue'
 
@@ -595,6 +793,18 @@ const route = useRoute()
 const router = useRouter()
 const activeTab = ref<TabValue>(readTab(route.query.tab))
 const query = ref(String(route.query.q ?? ''))
+const minScore = ref(0.2)
+const feedbackMarks = ref<Record<string, 'relevant' | 'irrelevant'>>({})
+const feedbackNotice = ref('')
+
+watch(query, (value) => {
+  const submitted = ai.results?.queryInsight?.raw ?? ''
+  if (value.trim() !== submitted) {
+    ai.clearResults()
+    feedbackMarks.value = {}
+    feedbackNotice.value = ''
+  }
+})
 const similar = ref<AISimilarResult | null>(null)
 const similarSource = ref<Resource | null>(null)
 const similarLoading = ref(false)
@@ -633,9 +843,13 @@ const installJobActive = computed(() => ai.job?.kind === 'install' && ai.jobActi
 const indexJobActive = computed(() => ai.job?.kind === 'index' && ai.jobActive)
 const captionJobActive = computed(() => ai.job?.kind === 'caption' && ai.jobActive)
 const vlmPullActive = computed(() => ai.job?.kind === 'vlm-pull' && ai.jobActive)
+const animeJobActive = computed(() => ai.job?.kind === 'anime-install' && ai.jobActive)
 const vlmModel = ref('qwen2.5vl:3b')
 const selectingModel = ref('')
-const runtimeBusy = ref(false)
+const detectingOllama = ref(false)
+const startingOllama = ref(false)
+const suggestionBusy = ref(0)
+const selectedSuggestionTags = ref<Record<number, string[]>>({})
 const jobProgressText = computed(() => {
   const job = ai.job
   if (!job) return ''
@@ -696,13 +910,48 @@ function scoreLabel(score: number): string {
   return `相似度 ${score.toFixed(2)}`
 }
 
+function searchScoreLabel(score: number): string {
+  return `综合 ${score.toFixed(2)}`
+}
+
+function feedbackMark(item: Resource): 'relevant' | 'irrelevant' | undefined {
+  return item.id == null ? undefined : feedbackMarks.value[item.id]
+}
+
+async function sendFeedback(
+  item: Resource,
+  index: number,
+  action: 'relevant' | 'irrelevant',
+): Promise<void> {
+  const text = query.value.trim()
+  if (!text || item.id == null) return
+  const current = feedbackMarks.value[item.id]
+  const cancel = current === action
+  try {
+    if (cancel) {
+      await ai.removeFeedback(text, item.id)
+      delete feedbackMarks.value[item.id]
+      feedbackNotice.value = action === 'relevant' ? '已取消相关标记' : '已取消不相关标记'
+      return
+    }
+    await ai.feedback(text, item.id, action, ai.results?.scores[index] ?? 0, index + 1)
+    feedbackMarks.value[item.id] = action
+    feedbackNotice.value =
+      action === 'relevant' ? '已标为相关，再点一次可取消' : '已标为不相关，再点一次可取消'
+  } catch {
+    feedbackNotice.value = ''
+  }
+}
+
 function matchReason(explanation?: AIMatchExplanation | null): string {
   return explanation?.reasons?.slice(0, 3).join(' · ') ?? ''
 }
 
 async function runSearch(): Promise<void> {
   if (!ai.canSearch) return
-  await ai.search(query.value)
+  await ai.search(query.value, 30, minScore.value)
+  feedbackMarks.value = { ...(ai.results?.feedback ?? {}) }
+  feedbackNotice.value = ''
 }
 
 async function loadSimilar(resourceId: number): Promise<void> {
@@ -739,8 +988,22 @@ async function changeSimilarMode(mode: 'auto' | 'semantic' | 'duplicate'): Promi
   if (Number.isFinite(id) && id > 0) await loadSimilar(id)
 }
 
-function chooseFile(): void {
-  fileInput.value?.click()
+async function chooseFile(): Promise<void> {
+  try {
+    const api = window.electron
+    if (api?.selectImageFile) {
+      const picked = await api.selectImageFile()
+      if (!picked) return
+      const binary = atob(picked.dataBase64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+      await loadExternal(new File([bytes], picked.name))
+      return
+    }
+    fileInput.value?.click()
+  } catch (error) {
+    similarError.value = error instanceof Error ? error.message : '??????'
+  }
 }
 
 async function loadExternal(file: File): Promise<void> {
@@ -853,9 +1116,15 @@ async function install(): Promise<void> {
   await ai.installModel()
 }
 
-async function index(): Promise<void> {
+async function index(full = false): Promise<void> {
   if (ai.jobActive) return
-  await ai.buildIndex()
+  await ai.buildIndex(full)
+}
+
+async function rebuildIndex(): Promise<void> {
+  if (ai.jobActive) return
+  if (!window.confirm('?????? CLIP ??????????????????')) return
+  await ai.buildIndex(true)
 }
 
 async function analyzeCaptions(onlyPending = true): Promise<void> {
@@ -874,6 +1143,99 @@ async function switchVLMModel(model: string): Promise<void> {
   }
 }
 
+async function openSuggestion(item: AISuggestionItem): Promise<void> {
+  await openResource({ id: item.resourceId, type: 'image' })
+}
+
+function selectedTagsFor(item: AISuggestionItem): string[] {
+  return selectedSuggestionTags.value[item.resourceId] ?? []
+}
+
+function selectedTagCount(item: AISuggestionItem): number {
+  return selectedTagsFor(item).length
+}
+
+function isTagSelected(item: AISuggestionItem, tag: string): boolean {
+  return selectedTagsFor(item).includes(tag)
+}
+
+function toggleTag(item: AISuggestionItem, tag: string): void {
+  const current = selectedTagsFor(item)
+  selectedSuggestionTags.value = {
+    ...selectedSuggestionTags.value,
+    [item.resourceId]: current.includes(tag)
+      ? current.filter((value) => value !== tag)
+      : [...current, tag],
+  }
+}
+
+function selectAllTags(item: AISuggestionItem): void {
+  selectedSuggestionTags.value = {
+    ...selectedSuggestionTags.value,
+    [item.resourceId]: [...item.tags],
+  }
+}
+
+function clearSelectedTags(item: AISuggestionItem): void {
+  selectedSuggestionTags.value = {
+    ...selectedSuggestionTags.value,
+    [item.resourceId]: [],
+  }
+}
+
+async function applyTags(item: AISuggestionItem): Promise<void> {
+  const tags = selectedTagsFor(item)
+  if (!tags.length || item.resourceId == null) return
+  suggestionBusy.value = item.resourceId
+  try {
+    const result = await batchResources('add_tags', [item.resourceId], tags)
+    if (result.failed.length) {
+      window.alert(result.failed[0]?.message || '应用标签失败')
+      return
+    }
+    clearSelectedTags(item)
+    await ai.refreshSuggestions()
+  } finally {
+    suggestionBusy.value = 0
+  }
+}
+
+async function applyEntity(
+  item: AISuggestionItem,
+  kind: 'characters' | 'persons' | 'collections',
+  entity: AIEntitySuggestion,
+): Promise<void> {
+  if (item.resourceId == null) return
+  suggestionBusy.value = item.resourceId
+  try {
+    if (kind === 'collections') {
+      await addCollectionItems(entity.id, [item.resourceId])
+    } else if (kind === 'characters') {
+      const result = await batchResources(
+        'add_characters',
+        [item.resourceId],
+        undefined,
+        undefined,
+        [entity.id],
+      )
+      if (result.failed.length) window.alert(result.failed[0]?.message || '??????')
+    } else {
+      const result = await batchResources(
+        'add_persons',
+        [item.resourceId],
+        undefined,
+        undefined,
+        undefined,
+        [entity.id],
+      )
+      if (result.failed.length) window.alert(result.failed[0]?.message || '???????')
+    }
+    await ai.refreshSuggestions()
+  } finally {
+    suggestionBusy.value = 0
+  }
+}
+
 async function useRecentQuery(value: string): Promise<void> {
   query.value = value
   await runSearch()
@@ -884,18 +1246,23 @@ async function clearJobHistory(): Promise<void> {
   await ai.clearJobHistory()
 }
 
+async function installAnime(): Promise<void> {
+  if (ai.jobActive) return
+  await ai.installAnime()
+}
+
 async function pullVLM(): Promise<void> {
   if (ai.jobActive || !vlmModel.value.trim()) return
   await ai.pullVLM(vlmModel.value.trim())
 }
 
 async function detectOllama(): Promise<void> {
-  runtimeBusy.value = true
+  detectingOllama.value = true
   try {
     await ai.refreshVLMRuntime()
     await ai.refresh()
   } finally {
-    runtimeBusy.value = false
+    detectingOllama.value = false
   }
 }
 
@@ -911,11 +1278,11 @@ async function installOllama(): Promise<void> {
 }
 
 async function startOllama(): Promise<void> {
-  runtimeBusy.value = true
+  startingOllama.value = true
   try {
     await ai.startOllama()
   } finally {
-    runtimeBusy.value = false
+    startingOllama.value = false
   }
 }
 
@@ -966,6 +1333,7 @@ onMounted(async () => {
   window.addEventListener('paste', onPaste)
   await ai.refresh()
   await ai.refreshJobs()
+  await ai.refreshSuggestions()
   await ai.refreshVLMRuntime()
   const selected = ai.vlmModelDetails.find((model) => model.selected)?.name
   if (selected) vlmModel.value = selected
@@ -981,6 +1349,8 @@ onMounted(async () => {
 <style scoped lang="less">
 .ai-center {
   height: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
   overflow: auto;
   padding: 20px;
 }
@@ -1117,12 +1487,36 @@ onMounted(async () => {
 
 .ai-searchbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 18px;
   padding: 12px;
   border: 1px solid var(--sm-color-border);
   border-radius: 10px;
   background: var(--sm-color-bg-surface);
+}
+
+.ai-min-score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+
+  :deep(.n-input-number) {
+    width: 62px;
+  }
+}
+
+.ai-runtime-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--sm-color-warning, #f0a020) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sm-color-warning, #f0a020) 8%, transparent);
+  color: var(--sm-color-text);
+  font-size: 12px;
 }
 
 .ai-muted {
@@ -1145,7 +1539,17 @@ onMounted(async () => {
   gap: 6px;
   margin-top: 8px;
 
-  .ai-muted {
+  .ai-runtime-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--sm-color-warning, #f0a020) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sm-color-warning, #f0a020) 8%, transparent);
+  color: var(--sm-color-text);
+  font-size: 12px;
+}
+
+.ai-muted {
     margin: 0 4px 0 0;
   }
 }
@@ -1201,13 +1605,119 @@ onMounted(async () => {
     overflow-wrap: anywhere;
   }
 
-  .ai-muted {
+  .ai-runtime-hint {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--sm-color-warning, #f0a020) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--sm-color-warning, #f0a020) 8%, transparent);
+  color: var(--sm-color-text);
+  font-size: 12px;
+}
+
+.ai-muted {
     margin: 4px 0 0;
   }
 }
 
 .ai-job-list {
   margin-top: 4px;
+}
+
+.ai-suggestion-list {
+  margin-top: 8px;
+}
+
+.ai-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sm-color-border);
+}
+
+.ai-suggestion__cover {
+  display: flex;
+  flex: 0 0 96px;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 6px;
+  background: var(--sm-color-bg-surface);
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.ai-suggestion__tag {
+  padding: 1px 6px;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-suggestion__tag.active {
+  border-color: var(--sm-color-accent);
+  background: color-mix(in srgb, var(--sm-color-accent) 12%, transparent);
+  color: var(--sm-color-text);
+}
+
+.ai-suggestion__select {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sm-color-accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.ai-suggestion__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-suggestion__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+
+  > span {
+    color: var(--sm-color-text-muted);
+    font-size: 11px;
+  }
+}
+
+.ai-suggestion__apply {
+  padding: 1px 6px;
+  border: 1px solid var(--sm-color-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--sm-color-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ai-suggestion__apply:hover {
+  border-color: var(--sm-color-accent);
 }
 
 .ai-job-row__failed {
@@ -1217,9 +1727,17 @@ onMounted(async () => {
 
 .ai-results {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-items: start;
+  gap: 12px;
   margin-top: 14px;
+}
+
+.ai-result-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
 }
 
 .ai-result {
@@ -1227,6 +1745,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -1236,6 +1755,7 @@ onMounted(async () => {
   cursor: pointer;
 
   img {
+    display: block;
     width: 100%;
     aspect-ratio: 4 / 3;
     object-fit: cover;
@@ -1262,6 +1782,7 @@ onMounted(async () => {
 
 .ai-result__title {
   overflow: hidden;
+  width: 100%;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1275,6 +1796,60 @@ onMounted(async () => {
   line-height: 1.45;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.ai-result__feedback {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+
+  button {
+    padding: 1px 6px;
+    border: 1px solid var(--sm-color-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--sm-color-text-muted);
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  button:hover,
+  button.active {
+    border-color: var(--sm-color-accent);
+    color: var(--sm-color-text);
+  }
+
+  button.active {
+    background: color-mix(in srgb, var(--sm-color-accent) 12%, transparent);
+  }
+
+  button.is-relevant {
+    border-color: var(--sm-color-success, #18a058);
+    background: color-mix(in srgb, var(--sm-color-success, #18a058) 12%, transparent);
+    color: var(--sm-color-success, #18a058);
+  }
+
+  button.is-irrelevant {
+    border-color: var(--sm-color-danger, #d03050);
+    background: color-mix(in srgb, var(--sm-color-danger, #d03050) 12%, transparent);
+    color: var(--sm-color-danger, #d03050);
+  }
+}
+
+.ai-result__feedback-state {
+  margin: 0;
+  color: var(--sm-color-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ai-feedback-notice {
+  grid-column: 1 / -1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--sm-color-accent) 8%, transparent);
+  color: var(--sm-color-text-muted);
+  font-size: 11px;
 }
 
 .ai-empty {

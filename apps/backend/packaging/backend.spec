@@ -10,7 +10,7 @@ BACKEND = Path(SPECPATH).parent
 
 # Conda 发行版把 OpenSSL/ffi/sqlite 等运行库放在 Library/bin（PyInstaller 默认不收集）
 binaries, datas, hiddenimports = [], [], []
-for package in ("onnxruntime", "tokenizers"):
+for package in ("onnxruntime", "tokenizers", "pillow_heif"):
     _datas, _binaries, _hidden = collect_all(package)
     datas += _datas
     binaries += _binaries
