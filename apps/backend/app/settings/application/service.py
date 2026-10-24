@@ -124,9 +124,9 @@ async def load_parse_flags(session: AsyncSession) -> tuple[bool, bool]:
 
 async def get_view(session: AsyncSession, db_path: Path, backend_version: str) -> SettingsView:
     invalidate_secret_cache()
-    tmdb = tmdb_api_key()
-    bangumi = bangumi_token()
-    mikan = mikan_base_url()
+    tmdb, bangumi, mikan = await asyncio.to_thread(
+        lambda: (tmdb_api_key(), bangumi_token(), mikan_base_url())
+    )
     stored = await SettingsRepository(session).get_json(KEY_SYSTEM)
     channels = await load_channels(session)
     watch_dirs = await load_watch_dirs(session)
@@ -208,7 +208,7 @@ async def patch_watch(
     validate_watch_dirs(normalized)
     await SettingsRepository(session).put_json(KEY_WATCH, {"dirs": normalized})
     applied = {ResourceType(key): dirs for key, dirs in normalized.items()}
-    watch_manager.apply(applied)
+    await asyncio.to_thread(watch_manager.apply, applied)
     # 重配后补扫新目录，把后台未运行期间放入的文件补导入
     if applied:
         asyncio.create_task(watch_bridge.catch_up(applied))

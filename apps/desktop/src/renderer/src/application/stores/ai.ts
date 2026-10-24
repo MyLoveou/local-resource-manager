@@ -45,6 +45,7 @@ export const useAIStore = defineStore('ai', () => {
   const searching = ref(false)
   const error = ref('')
   let timer: ReturnType<typeof setTimeout> | null = null
+  let searchRequest = 0
 
   const modelInstalled = computed(() => status.value?.model.installed === true)
   const indexed = computed(() => status.value?.indexed ?? 0)
@@ -311,8 +312,10 @@ export const useAIStore = defineStore('ai', () => {
 
   async function search(query: string, limit = 30, minScore = 0): Promise<void> {
     const q = query.trim()
+    const request = ++searchRequest
     if (!q) {
       results.value = null
+      searching.value = false
       return
     }
     if (jobActive.value) {
@@ -322,17 +325,22 @@ export const useAIStore = defineStore('ai', () => {
     searching.value = true
     error.value = ''
     try {
-      results.value = await searchAI(q, limit, minScore)
+      const result = await searchAI(q, limit, minScore)
+      if (request !== searchRequest) return
+      results.value = result
       rememberQuery(q)
     } catch (err) {
+      if (request !== searchRequest) return
       results.value = null
       error.value = err instanceof Error ? err.message : 'AI 搜索失败'
     } finally {
-      searching.value = false
+      if (request === searchRequest) searching.value = false
     }
   }
 
   function clearResults(): void {
+    searchRequest += 1
+    searching.value = false
     results.value = null
   }
 

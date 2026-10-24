@@ -21,10 +21,13 @@ class Settings(BaseSettings):
     port: int = 8000
     token: str = ""  # 进程间鉴权 token；为空表示未启用鉴权（见 shared/middleware/auth.py）
     db_path: Path = BACKEND_DIR / "data" / "library.db"  # SQLite 单文件
-    # CORS 允许源：本地服务绑定 127.0.0.1 + token 鉴权（非 cookie），"*" 安全
-    # 覆盖开发态 vite(localhost:5173) 与生产态 Electron(file:///app://) 源
-
-    cors_origins: list[str] = ["*"]
+    # CORS 允许源：仅在本地渲染进程 origin；生产 Electron file:// 的 Origin 为 null。
+    # 不使用 "*"，避免任意网页发起跨源请求。
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "null",
+    ]
     # 常驻监视：资源类型("image"/"video"…) → 源目录列表；一个类型可多个目录，同一目录可多类型。
     # env 用 JSON 对象：BACKEND_WATCH_DIRS='{"image":["D:\\Pics"],"video":["D:\\Videos","E:\\Videos"]}'
     watch_dirs: dict[str, list[str]] = {}

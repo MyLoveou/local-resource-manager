@@ -4,7 +4,7 @@
 > 约束/禁止项见 [浓缩基线](baseline.md) / [openspec/baseline.md](../../openspec/baseline.md)。  
 > 历次拍板见 [decisions.md](decisions.md)。
 
-**最后核对**：2026-10-19 · 资源库工作区（每类型分类树、多分类、`/library/:type`、保存时间线、首页、D 卡、快捷键）已实现；照片时间线/合集/批量打标/分区可见性/Windows 生产包已实现；安装/手验待跑；下载方向拍板 D-20261007-01（不自建，委托第三方下载器）。
+**最后核对**：2026-10-25 · v0.2.4；资源库工作区、照片时间线、合集、角色/扮演者、地图、AI 图片检索与文案、备份恢复、Windows 生产包已实现；安装/手验待跑；下载方向拍板 D-20261007-01（不自建，委托第三方下载器）。
 
 ---
 
@@ -29,7 +29,7 @@
 - **尚未实现**（需求或路线有，工作区没有可用入口）：
   - 改库根路径、扫描根、适配器表管理、播放器渠道。
   - 右键菜单、紧凑列表、FTS5、按标签独立浏览、词表统计与删除。
-  - AV 刮削、SearXNG、以图搜图、Pixiv 登录、适配器配置表、远程索引。
+  - AV 刮削、SearXNG、Pixiv 登录、适配器配置表、远程索引。
   - 番剧/AV 第二刀（规范重命名、增删集、字幕组、女优、集封面双列表）。
   - rqbit / yt-dlp。合集、画廊沉浸、小说与漫画内置阅读器。
   - 设计系统、提示词、Skill、导出、加密。
@@ -53,9 +53,9 @@
 |----|------|-------------|------|
 | 桌面壳 | Electron 44 + TS | `apps/desktop/src/main` | `spawn` uvicorn；动态端口；`additionalArguments` 注入 URL/token |
 | UI | Vue 3 + Vite + naive-ui + Pinia + vue-router | `apps/desktop/src/renderer/src` | 四层：`ui` / `application` / `domain` / `infrastructure` |
-| 后端 | FastAPI + uvicorn | `apps/backend/app/main.py` | **一个进程**，`include_router`：`/library` `/scrape` `/download` `/settings` |
+| 后端 | FastAPI + uvicorn | `apps/backend/app/main.py` | **一个进程**，`include_router`：`/library` `/scrape` `/ai` `/settings` |
 | 数据 | SQLite + SQLAlchemy async + aiosqlite | `apps/backend/app/shared/db` | WAL；启动 `ensure_db`；**新库不再 demo seed** |
-| 鉴权 | 主进程生成 token，axios Bearer | 后端**未校验** | 与需求「token 鉴权」不一致 |
+| 鉴权 | 主进程生成 token，axios Bearer | `apps/backend/app/shared/middleware/auth.py` | 后端校验 Bearer；媒体 `/content` 使用短期 path-bound 签名 URL |
 
 - 主数据流：渲染进程 axios → `http://127.0.0.1:<port>/library/...` → `LibraryQueryService` → `ResourceRepository` → SQLite。
 - 关键模块：
@@ -64,7 +64,7 @@
   - `apps/desktop/src/renderer/src/hooks/useResourcePage.ts` — 分页列表状态
   - `apps/desktop/src/renderer/src/application/stores/selection.ts` — 当前选中 id
   - `apps/backend/app/scrape/` — 刮削任务与渠道；确认回填走 library 封面与仓储
-  - `apps/backend/app/download/` — HTTP 直链任务；桌面入口 `DownloadDrawer`
+  - `apps/backend/app/ai/` — CLIP/YOLO 索引、VLM/WD14 文案、检索与相似图
 - 构建 / 启动：见浓缩基线。
 
 ### 实现边界（已确认）

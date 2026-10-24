@@ -123,6 +123,15 @@ def _string_list(value: object, limit: int = 16) -> list[str]:
     ][:limit]
 
 
+def _image_base64(path: Path) -> str:
+    with Image.open(path) as opened:
+        image = ImageOps.exif_transpose(opened).convert("RGB")
+        image.thumbnail((768, 768), Image.Resampling.LANCZOS)
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=86)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
 class CaptionProvider:
     def __init__(self) -> None:
         self.model = settings.vlm_model
@@ -336,12 +345,7 @@ class CaptionProvider:
                 f"未找到可用的 VLM 模型，请先运行：ollama pull {settings.vlm_model}"
             )
 
-        with Image.open(path) as opened:
-            image = ImageOps.exif_transpose(opened).convert("RGB")
-            image.thumbnail((768, 768), Image.Resampling.LANCZOS)
-            buffer = BytesIO()
-            image.save(buffer, format="JPEG", quality=86)
-        image_base64 = base64.b64encode(buffer.getvalue()).decode("ascii")
+        image_base64 = await asyncio.to_thread(_image_base64, path)
         value: dict | None = None
         last_error: Exception | None = None
         for attempt in range(2):

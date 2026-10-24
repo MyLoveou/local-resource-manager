@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.shared.config import Settings, settings
 from app.shared.constants import is_auth_exempt
+from app.shared.media_auth import sign_media_path
 
 TOKEN = "s3cret-token"
 PROTECTED = "/library/resources"
@@ -69,13 +70,18 @@ class AuthTests(unittest.TestCase):
             },
         )
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.headers.get("access-control-allow-origin"), "*")
+        self.assertEqual(res.headers.get("access-control-allow-origin"), "http://localhost:5173")
 
     def test_unauthorized_response_keeps_cors_headers(self) -> None:
-        # CORS 必须是最外层，否则 401 没有 CORS 头，前端只能看到 Network Error
+        # CORS 预检通过后，真正请求仍返回 401，但必须保留 CORS 头
         res = self._client().get(PROTECTED, headers={"Origin": "http://localhost:5173"})
         self.assertEqual(res.status_code, 401)
-        self.assertEqual(res.headers.get("access-control-allow-origin"), "*")
+        self.assertEqual(res.headers.get("access-control-allow-origin"), "http://localhost:5173")
+
+    def test_unlisted_origin_does_not_receive_cors_header(self) -> None:
+        res = self._client().get(PROTECTED, headers={"Origin": "https://evil.example"})
+        self.assertEqual(res.status_code, 401)
+        self.assertIsNone(res.headers.get("access-control-allow-origin"))
 
     def test_health_paths_are_exempt(self) -> None:
         client = self._client()
@@ -94,9 +100,15 @@ class AuthTests(unittest.TestCase):
         self.assertNotEqual(res.status_code, 401)
         self.assertEqual(res.status_code, 422)
 
-    def test_media_content_paths_are_exempt_by_rule(self) -> None:
-        self.assertTrue(is_auth_exempt("/library/resources/1/content"))
-        self.assertTrue(is_auth_exempt("/library/resources/1/files/2/content"))
+    def test_media_content_requires_token(self) -> None:
+        self.assertFalse(is_auth_exempt("/library/resources/1/content"))
+        self.assertFalse(is_auth_exempt("/library/resources/1/files/2/content"))
+        client = self._client()
+        self.assertEqual(client.get("/library/resources/1/content").status_code, 401)
+        self.assertNotEqual(
+            client.get(sign_media_path("/library/resources/1/content") or "").status_code,
+            401,
+        )
         self.assertFalse(is_auth_exempt(PROTECTED))
         self.assertFalse(is_auth_exempt("/library/resources/batch"))
 

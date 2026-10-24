@@ -48,18 +48,40 @@ import { NButton, NIcon } from 'naive-ui'
 import { Icon } from '@iconify/vue'
 import { Howl } from 'howler'
 import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
-import { resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { FILE_ROLE, type Resource } from '@/domain'
 
 const player = useAudioPlayerStore()
+const current = ref<Resource | null>(null)
 const playing = ref(false)
 const progress = ref(0)
 const volume = ref(80)
 let howl: Howl | null = null
 let timer: number | null = null
 
+watch(
+  () => [player.visible, player.currentId] as const,
+  async ([visible, id]) => {
+    if (!visible || id == null) {
+      current.value = null
+      return
+    }
+    if (current.value?.id !== id) current.value = null
+    try {
+      const row = await getResource(id)
+      if (player.visible && player.currentId === id) current.value = row
+    } catch {
+      if (player.currentId === id) current.value = null
+    }
+  },
+  { immediate: true },
+)
+
 const src = computed(() => {
   if (player.currentId == null || !player.visible) return ''
-  return resolveLibraryMediaUrl(`/library/resources/${player.currentId}/content`)
+  const files = current.value?.files ?? []
+  const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0]
+  return resolveLibraryMediaUrl(primary?.contentUrl ?? '')
 })
 
 function stopTimer(): void {
@@ -132,13 +154,10 @@ function onKey(event: KeyboardEvent): void {
   close()
 }
 
-watch(
-  () => [player.visible, player.currentId] as const,
-  ([visible]) => {
-    if (visible) load()
-    else unload()
-  }
-)
+watch(src, (value) => {
+  if (value) load()
+  else unload()
+})
 
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => {

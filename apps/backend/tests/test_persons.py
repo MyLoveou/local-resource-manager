@@ -54,6 +54,9 @@ class PersonTests(unittest.IsolatedAsyncioTestCase):
             assert first.id is not None and second.id is not None
             rid = await self._resource(session, "photo")
             await repo.add_resources([rid], [first.id, second.id])
+            detail = await ResourceRepository(session).get(rid)
+            assert detail is not None
+            self.assertEqual({person.id for person in (detail.persons or [])}, {first.id, second.id})
             found = await repo.list("小 A")
             self.assertEqual([item.id for item in found], [first.id])
             self.assertEqual(found[0].resource_count, 1)

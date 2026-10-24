@@ -1,5 +1,6 @@
 """设置路由。"""
 
+import asyncio
 import os
 from pathlib import Path
 
@@ -49,7 +50,7 @@ async def patch_consume_settings(
 @router.post("/backup")
 async def post_backup():
     try:
-        return backup_database(settings.db_path)
+        return await asyncio.to_thread(backup_database, settings.db_path)
     except SettingsError as exc:
         raise _err(exc) from exc
 
@@ -58,7 +59,9 @@ async def post_backup():
 async def post_backup_full(session: AsyncSession = Depends(get_session)):
     try:
         view = await get_view(session, settings.db_path, _VERSION)
-        return backup_library(settings.db_path, Path(view.system.backup_dir))
+        return await asyncio.to_thread(
+            backup_library, settings.db_path, Path(view.system.backup_dir)
+        )
     except SettingsError as exc:
         raise _err(exc) from exc
 
@@ -66,7 +69,9 @@ async def post_backup_full(session: AsyncSession = Depends(get_session)):
 @router.post("/restore/prepare", response_model=RestorePrepareResult)
 async def post_restore_prepare(body: RestorePrepareRequest):
     try:
-        pending = prepare_restore(settings.db_path, Path(body.path))
+        pending = await asyncio.to_thread(
+            prepare_restore, settings.db_path, Path(body.path)
+        )
         return RestorePrepareResult(path=str(pending), restart_required=True)
     except SettingsError as exc:
         raise _err(exc) from exc

@@ -46,7 +46,7 @@ class ApiEnvelopeTests(unittest.TestCase):
     def test_envelope_keeps_cors_header(self) -> None:
         res = self.client.get("/health", headers={"Origin": "http://localhost:5173"})
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.headers.get("access-control-allow-origin"), "*")
+        self.assertEqual(res.headers.get("access-control-allow-origin"), "http://localhost:5173")
 
     def test_validation_wrapped(self) -> None:
         res = self.client.post("/library/imports", json={})

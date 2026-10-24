@@ -280,3 +280,20 @@
 - [ ] 图片库剪贴板/拖拽导入
 - [ ] 幻灯片、双图对比
 - [ ] 图片站点刮削（原 P3，继续后置）
+
+### 已知问题（v0.2.4 后）
+
+- [x] 重建全部缩略图后，资源网格、时间线和当前详情没有自动失效/刷新（已补 `library.invalidate`）
+- [x] AI 检索解读与 WD14 中文映射中存在实际问号字符串（已修 `AIInsightPanel`、`TAG_ZH`）
+- [x] 文字查询的检索解读只显示原始查询和策略，不展示语义文本/识别条件/未识别说明（已重写）
+
+### 架构拆分（进行中）
+
+- [x] `AIService` 的搜索/相似/融合/反馈用例抽到 `ai/application/search.py`
+- [x] `PersonRepository` / `CharacterRepository` 抽到 `library/infrastructure/repositories_people.py`
+- [x] AI 建议面板抽到 `components/AISuggestionsPanel`
+- [x] 媒体 `/content` 改为短期 path-bound 签名 URL
+- [x] `InfoPanel` 关系/AI/Footer/合集弹窗抽成子组件
+- [ ] `InfoPanel` 详情 tab 与草稿状态仍可继续抽 composable
+- [x] `repositories.py` 拆为 facade + resources/views/collections/people/common 模块
+- [ ] `ResourceRepository` 内部读写查询可继续抽 mixin/query 模块

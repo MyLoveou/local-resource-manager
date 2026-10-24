@@ -60,11 +60,11 @@
       ×
     </n-button>
     <n-button class="image-viewer-overlay__prev" size="small" circle :disabled="!hasPrev"
-      aria-label="{{ NextAndPre[resource.type].prev }}" @click="prev">
+      aria-label="上一张" @click="prev">
       ‹
     </n-button>
     <n-button class="image-viewer-overlay__next" size="small" circle :disabled="!hasNext"
-      aria-label="{{ NextAndPre[resource.type].next }}" @click="() => void next()">
+      aria-label="下一张" @click="() => void next()">
       ›
     </n-button>
   </div>
@@ -100,13 +100,13 @@ const format = computed(() => {
 })
 const imageSrc = computed(() => {
   if (currentId.value == null || !visible.value) return ''
-  const preview = current.value?.files?.find((file) => file.role === FILE_ROLE.PREVIEW)
-  if (isLikelyUnsupportedInlineFormat(format.value) && preview?.id != null) {
-    return resolveLibraryMediaUrl(
-      `/library/resources/${currentId.value}/files/${preview.id}/content`,
-    )
+  const files = current.value?.files ?? []
+  const preview = files.find((file) => file.role === FILE_ROLE.PREVIEW)
+  if (isLikelyUnsupportedInlineFormat(format.value) && preview?.contentUrl) {
+    return resolveLibraryMediaUrl(preview.contentUrl)
   }
-  return resolveLibraryMediaUrl(`/library/resources/${currentId.value}/content`)
+  const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0]
+  return resolveLibraryMediaUrl(primary?.contentUrl ?? '')
 })
 const animated = ref(false)
 const slideshow = ref(false)
@@ -211,12 +211,10 @@ function mediaSrcFor(row: Resource | null): string {
   const files = row.files ?? []
   const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0]
   const preview = files.find((file) => file.role === FILE_ROLE.PREVIEW)
-  if (isLikelyUnsupportedInlineFormat(primary?.format) && preview?.id != null) {
-    return resolveLibraryMediaUrl(
-      `/library/resources/${row.id}/files/${preview.id}/content`,
-    )
+  if (isLikelyUnsupportedInlineFormat(primary?.format) && preview?.contentUrl) {
+    return resolveLibraryMediaUrl(preview.contentUrl)
   }
-  return resolveLibraryMediaUrl(`/library/resources/${row.id}/content`)
+  return resolveLibraryMediaUrl(primary?.contentUrl ?? '')
 }
 
 function closeCompare(): void {
@@ -272,8 +270,14 @@ function prefetchNeighbors(id: number): void {
   const i = ids.indexOf(id)
   for (const n of [i - 1, i + 1]) {
     if (n < 0 || n >= ids.length) continue
-    const img = new Image()
-    img.src = resolveLibraryMediaUrl(`/library/resources/${ids[n]}/content`)
+    const neighborId = ids[n]
+    void getResource(neighborId).then((row) => {
+      const file = (row.files ?? []).find((item) => item.role === FILE_ROLE.PRIMARY)
+      if (file?.contentUrl) {
+        const img = new Image()
+        img.src = resolveLibraryMediaUrl(file.contentUrl)
+      }
+    })
   }
 }
 
@@ -284,6 +288,7 @@ watch(
       current.value = null
       return
     }
+    if (current.value?.id !== id) current.value = null
     prefetchNeighbors(id)
     void getResource(id).then((row) => {
       if (currentId.value === id) current.value = row

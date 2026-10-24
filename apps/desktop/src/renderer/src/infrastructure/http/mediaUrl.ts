@@ -3,7 +3,7 @@
  */
 export function resolveLibraryMediaUrl(path: string | null | undefined): string {
   if (!path) return ''
-  if (path.startsWith('http') || path.startsWith('data:')) return path
+  if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path
   const base = window.electron?.backend?.baseUrl ?? ''
   if (path.startsWith('/')) return `${base}${path}`
   return path

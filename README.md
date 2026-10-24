@@ -173,6 +173,8 @@ pnpm backend:start
 
 ```bash
 pnpm --filter desktop typecheck
+pnpm check:file-size
+pnpm --filter desktop test
 pnpm --filter desktop lint
 pnpm --filter desktop build
 
@@ -229,7 +231,7 @@ pnpm release:publish
 - 功能文档放在 `docs/requirements/features/<feature>/`
 - 架构取舍写入 `docs/design/adr/`
 - 提交信息使用 `feat` / `fix` / `docs` / `chore` 前缀
-- 发布前必须通过 typecheck、lint、pytest、打包与 release verify
+- 发布前必须通过 typecheck、文件规模、前端测试、lint、pytest、打包与 release verify
 
 ## 相关链接
 

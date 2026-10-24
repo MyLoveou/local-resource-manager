@@ -10,22 +10,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import VideoPlayerHost from '@/components/VideoPlayer/index.vue'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
-import { resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { FILE_ROLE, type Resource } from '@/domain'
 
 const player = useVideoPlayerStore()
+const current = ref<Resource | null>(null)
+
+watch(
+  () => [player.visible, player.currentId] as const,
+  async ([visible, id]) => {
+    if (!visible || id == null) {
+      current.value = null
+      return
+    }
+    if (current.value?.id !== id) current.value = null
+    try {
+      const row = await getResource(id)
+      if (player.visible && player.currentId === id) current.value = row
+    } catch {
+      if (player.currentId === id) current.value = null
+    }
+  },
+  { immediate: true },
+)
 
 const videoSrc = computed(() => {
   if (player.currentId == null || !player.visible) return ''
-  if (player.currentFileId != null) {
-    return resolveLibraryMediaUrl(
-      `/library/resources/${player.currentId}/files/${player.currentFileId}/content`
-    )
-  }
-  return resolveLibraryMediaUrl(`/library/resources/${player.currentId}/content`)
+  const files = current.value?.files ?? []
+  const file = player.currentFileId == null
+    ? undefined
+    : files.find((item) => item.id === player.currentFileId)
+  const primary = file ?? files.find((item) => item.role === FILE_ROLE.PRIMARY) ?? files[0]
+  return resolveLibraryMediaUrl(primary?.contentUrl ?? '')
 })
 
 function isTypingTarget(target: EventTarget | null): boolean {

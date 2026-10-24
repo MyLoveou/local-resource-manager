@@ -113,7 +113,8 @@ export interface ResourceFile {
   id?: number
   resourceId: number
   path: string
-  /** 文件哈希，图片元数据匹配键 */
+  contentUrl?: string | null
+  /** ????,???????? */
   sha256?: string | null
   size?: number | null
   format?: string | null

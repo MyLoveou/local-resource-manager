@@ -218,166 +218,69 @@
         </template>
         </section>
         </template>
-        <template v-else-if="inspectorTab === 'relation'">
-        <section class="info-panel-section">
-        <div class="info-panel-section-title">组织</div>
-        <!-- 分类是独立词表，不是 type -->
-        <div class="info-panel-label">评分</div>
-        <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
-        <div class="info-panel-label">分类</div>
-        <n-select multiple filterable clearable :options="categoryOptions" :value="draft.categoryIds"
-          @update:value="(value: number[]) => (draft.categoryIds = value ?? [])" />
-        <div class="info-panel-label">标签（Enter 切词）</div>
-        <div class="info-panel-tags">
-          <n-tag v-for="name in draft.tagNames" :key="name" closable @close="removeTag(name)">
-            {{ name }}
-          </n-tag>
-          <n-input :value="draft.tagInput" placeholder="回车添加" size="small" style="width: 120px"
-            @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
-        </div>
-        <div class="info-panel-label">角色</div>
-        <n-select
-          multiple
-          filterable
-          clearable
-          :options="characterOptions"
-          :value="characterIds"
-          :loading="characterBusy"
-          @update:value="(value: number[]) => void updateCharacters(value ?? [])"
+        <InfoPanelRelationTab
+          v-else-if="inspectorTab === 'relation'"
+          :rating="draft.ratingStars"
+          :category-options="categoryOptions"
+          :category-ids="draft.categoryIds"
+          :tag-names="draft.tagNames"
+          :tag-input="draft.tagInput"
+          :character-options="characterOptions"
+          :character-ids="characterIds"
+          :character-busy="characterBusy"
+          :person-options="personOptions"
+          :person-ids="personIds"
+          :person-busy="personBusy"
+          @update:rating="draft.ratingStars = $event"
+          @update:category-ids="draft.categoryIds = $event"
+          @update:tag-input="draft.tagInput = $event"
+          @remove-tag="removeTag"
+          @commit-tag="commitTagInput"
+          @update:characters="(value) => void updateCharacters(value)"
+          @update:persons="(value) => void updatePersons(value)"
         />
-        <div class="info-panel-label">扮演者</div>
-        <n-select
-          multiple
-          filterable
-          clearable
-          :options="personOptions"
-          :value="personIds"
-          :loading="personBusy"
-          @update:value="(value: number[]) => void updatePersons(value ?? [])"
+        <InfoPanelAITab
+          v-else
+          :is-image="isImage"
+          @similar="openSimilar"
+          @open-ai="openAICenter"
         />
-        </section>
-        </template>
-        <template v-else>
-        <section class="info-panel-section info-panel-ai-empty">
-          <div class="info-panel-section-title">AI</div>
-          <p>文字搜图、以图搜图、近似重复和 AI 建议可以在 AI 中心使用。</p>
-          <div class="info-panel-ai-actions">
-            <n-button v-if="resource?.type === 'image'" size="small" @click="openSimilar">找相似</n-button>
-            <n-button size="small" @click="openAICenter">打开 AI 中心</n-button>
-          </div>
-        </section>
-        </template>
       </div>
-      <div v-if="inspectorTab !== 'ai'" class="info-panel-footer">
-        <div class="info-panel-actions">
-          <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
-          <n-button
-            v-if="resource?.type === 'image'"
-            size="small"
-            :loading="thumbnailBusy"
-            @click="rebuildCurrentThumbnail"
-          >
-            重建缩略图
-          </n-button>
-          <n-input
-            v-if="needsScrapeQuery"
-            size="small"
-            :placeholder="scrapeQueryPlaceholder"
-            :value="scrapeQuery"
-            style="width: 220px"
-            @update:value="scrapeQuery = $event"
-          />
-          <n-button
-            v-if="isShellOpen"
-            size="small"
-            :disabled="!canShellOpen || shellBusy"
-            @click="onOpenDefault"
-          >
-            {{ shellActionLabel }}
-          </n-button>
-          <n-button size="small" @click="openModal">编辑</n-button>
-          <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
-            <n-button size="small">更多</n-button>
-          </n-dropdown>
-          <n-popconfirm v-if="resource.status !== 'trashed'" positive-text="移入" negative-text="取消"
-            @positive-click="handleDelete">
-            <template #trigger>
-              <n-button size="small" type="error" :disabled="deleting" ghost>移入回收站</n-button>
-            </template>
-            确定将此资源移入回收站？可稍后恢复。
-          </n-popconfirm>
-          <n-popconfirm v-else positive-text="恢复" negative-text="取消" @positive-click="handleRestore">
-            <template #trigger>
-              <n-button size="small" :disabled="deleting">恢复</n-button>
-            </template>
-            确定恢复此资源？
-          </n-popconfirm>
-          <n-popconfirm v-if="resource.status === 'trashed'" positive-text="彻底删除" negative-text="取消"
-            @positive-click="handlePurge">
-            <template #trigger>
-              <n-button size="small" type="error" :disabled="deleting" ghost>彻底删除</n-button>
-            </template>
-            彻底删除后不可恢复。只删除库内副本，不删除你电脑上的原文件。
-          </n-popconfirm>
-        </div>
-        <p v-if="errorMessage" class="info-panel-error">{{ errorMessage }}</p>
-      </div>
+      <InfoPanelFooter
+        v-if="inspectorTab !== 'ai'"
+        :saving="saving"
+        :dirty="dirty"
+        :resource-type="resource.type"
+        :thumbnail-busy="thumbnailBusy"
+        :needs-scrape-query="needsScrapeQuery"
+        :scrape-query-placeholder="scrapeQueryPlaceholder"
+        :scrape-query="scrapeQuery"
+        :is-shell-open="isShellOpen"
+        :can-shell-open="canShellOpen"
+        :shell-busy="shellBusy"
+        :shell-action-label="shellActionLabel"
+        :more-options="moreOptions"
+        :deleting="deleting"
+        :resource-status="resource.status"
+        :error-message="errorMessage"
+        @save="savePanel"
+        @rebuild-thumbnail="rebuildCurrentThumbnail"
+        @update:scrape-query="scrapeQuery = $event"
+        @open-default="onOpenDefault"
+        @edit="openModal"
+        @more="onMoreSelect"
+        @delete="handleDelete"
+        @restore="handleRestore"
+        @purge="handlePurge"
+      />
       <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
         :saving="saving" :allow-cover="canChangeCover" :show-taken-at="isImage" @update:show="onModalShow"
         @save="saveModal" @cancel="cancelModal" @pick-cover="pickCoverForModal" />
-      <n-modal
+      <InfoPanelCollectionsModal
         :show="collectionOpen"
-        preset="card"
-        title="加入合集"
-        style="width: 360px"
-        :mask-closable="!collectionBusy"
-        :close-on-esc="!collectionBusy"
-        @update:show="onCollectionShow"
-      >
-        <p class="info-panel-collection-hint">
-          勾选后点「确定」保存；取消不会改动。
-        </p>
-        <div
-          v-for="collection in collectionList"
-          :key="collection.id"
-          class="info-panel-collection-row"
-        >
-          <n-checkbox
-            :checked="collectionMemberIds.has(collection.id)"
-            :disabled="collectionBusy"
-            @update:checked="(checked: boolean) => toggleCollection(collection.id, checked)"
-          >
-            {{ collection.title }}（{{ collection.memberCount }}）
-          </n-checkbox>
-        </div>
-        <div class="info-panel-collection-add">
-          <n-input
-            v-model:value="newCollectionTitle"
-            size="small"
-            placeholder="新合集名称"
-            :disabled="collectionBusy"
-            @keydown.enter.prevent="createAndAdd"
-          />
-          <n-button
-            size="small"
-            type="primary"
-            :disabled="!newCollectionTitle.trim() || collectionBusy"
-            @click="createAndAdd"
-          >
-            新建并加入
-          </n-button>
-        </div>
-        <template #footer>
-          <div class="info-panel-collection-actions">
-            <n-button size="small" :disabled="collectionBusy" @click="collectionOpen = false">
-              取消
-            </n-button>
-            <n-button size="small" type="primary" :loading="collectionBusy" @click="saveCollections">
-              确定
-            </n-button>
-          </div>
-        </template>
-      </n-modal>
+        :resource-id="resource?.id ?? null"
+        @update:show="collectionOpen = $event"
+      />
       <ScrapeConfirmQueue
         v-model:show="scrapeOpen"
         :resource-ids="scrapeIds"
@@ -400,17 +303,14 @@ import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
+import InfoPanelCollectionsModal from './InfoPanelCollectionsModal.vue'
+import InfoPanelAITab from './InfoPanelAITab.vue'
+import InfoPanelRelationTab from './InfoPanelRelationTab.vue'
+import InfoPanelFooter from './InfoPanelFooter.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, rebuildThumbnail, resolveCardImageUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
-import {
-  addCollectionItem,
-  createCollection,
-  listCollections,
-  removeCollectionItem,
-  resourceCollections,
-} from '@/infrastructure/http/collections'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
 import { useCategoryTreeStore } from '@/application/stores/categoryTree'
@@ -427,7 +327,7 @@ import {
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { notify } from '@/application/notify'
 import { storeToRefs } from 'pinia'
-import type { CategoryNode, Collection, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
+import type { CategoryNode, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
   FILE_ROLE,
@@ -1294,87 +1194,8 @@ async function removeNote(noteId: string): Promise<void> {
 }
 
 const collectionOpen = ref(false)
-const collectionList = ref<Collection[]>([])
-/** 弹窗打开时的成员快照；确认时与勾选状态做差集 */
-const collectionOriginalIds = ref(new Set<number>())
-/** 勾选中的待提交状态（取消即丢弃） */
-const collectionMemberIds = ref(new Set<number>())
-const newCollectionTitle = ref('')
-const collectionBusy = ref(false)
-
-async function openCollections(): Promise<void> {
-  const id = resource.value?.id
-  if (id == null) return
-  collectionOpen.value = true
-  try {
-    const [all, mine] = await Promise.all([listCollections(), resourceCollections(id)])
-    collectionList.value = all
-    const ids = mine.map((collection) => collection.id)
-    collectionOriginalIds.value = new Set(ids)
-    collectionMemberIds.value = new Set(ids)
-  } catch (error) {
-    notify.fromError(error, { context: '读取合集' })
-  }
-}
-
-function onCollectionShow(value: boolean): void {
-  collectionOpen.value = value
-}
-
-function toggleCollection(collectionId: number, checked: boolean): void {
-  if (collectionBusy.value) return
-  const next = new Set(collectionMemberIds.value)
-  if (checked) next.add(collectionId)
-  else next.delete(collectionId)
-  collectionMemberIds.value = next
-}
-
-async function saveCollections(): Promise<void> {
-  const id = resource.value?.id
-  if (id == null) return
-  const toAdd = [...collectionMemberIds.value].filter(
-    (collectionId) => !collectionOriginalIds.value.has(collectionId)
-  )
-  const toRemove = [...collectionOriginalIds.value].filter(
-    (collectionId) => !collectionMemberIds.value.has(collectionId)
-  )
-  if (toAdd.length === 0 && toRemove.length === 0) {
-    collectionOpen.value = false
-    return
-  }
-  collectionBusy.value = true
-  try {
-    for (const collectionId of toAdd) await addCollectionItem(collectionId, id)
-    for (const collectionId of toRemove) await removeCollectionItem(collectionId, id)
-    collectionOpen.value = false
-    library.invalidate({ collections: true, resources: true, home: true })
-    notify.toast.success('已更新合集')
-  } catch (error) {
-    notify.fromError(error, { context: '更新合集' })
-  } finally {
-    collectionBusy.value = false
-  }
-}
-
-async function createAndAdd(): Promise<void> {
-  const id = resource.value?.id
-  const title = newCollectionTitle.value.trim()
-  if (id == null || !title) return
-  collectionBusy.value = true
-  try {
-    const created = await createCollection({ title })
-    await addCollectionItem(created.id, id)
-    newCollectionTitle.value = ''
-    const all = await listCollections()
-    collectionList.value = all
-    collectionOriginalIds.value = new Set([...collectionOriginalIds.value, created.id])
-    collectionMemberIds.value = new Set([...collectionMemberIds.value, created.id])
-    library.invalidate({ collections: true, resources: true, home: true })
-  } catch (error) {
-    notify.fromError(error, { context: '新建合集' })
-  } finally {
-    collectionBusy.value = false
-  }
+function openCollections(): void {
+  if (resource.value?.id != null) collectionOpen.value = true
 }
 
 function onMoreSelect(key: string | number): void {
@@ -1747,25 +1568,4 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.info-panel-collection-hint {
-  margin: 0 0 10px;
-  color: var(--sm-color-text-muted);
-  font-size: 12px;
-}
-
-.info-panel-collection-row {
-  margin-bottom: 6px;
-}
-
-.info-panel-collection-add {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.info-panel-collection-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 </style>

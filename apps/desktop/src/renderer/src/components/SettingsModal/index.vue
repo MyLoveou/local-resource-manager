@@ -372,9 +372,11 @@ import { patchSystemSettings } from '@/infrastructure/http/settings'
 import { backfillThumbnails } from '@/infrastructure/http/photos'
 import logger from '@/infrastructure/logging/logger'
 import { useUpdateStore } from '@/application/stores/update'
+import { useLibraryStore } from '@/application/stores/library'
 import { SYSTEM_SETTING_PATH_MAP } from '@/static'
 const props = defineProps<{ show: boolean; tab?: string }>()
 const update = useUpdateStore()
+const library = useLibraryStore()
 const updatePhaseLabel = computed(() => {
   const status = update.status
   switch (status.phase) {
@@ -699,10 +701,22 @@ async function doBackup(): Promise<void> {
 }
 
 async function doRepairThumbnails(): Promise<void> {
-  if (!window.confirm('将重建图片缩略图，照片较多时可能需要几分钟。继续？')) return
+  if (
+    !(await notify.confirm({
+      title: '重建缩略图',
+      content: '将重建图片缩略图，照片较多时可能需要几分钟。继续？',
+    }))
+  ) return
   thumbRepairing.value = true
   try {
     const result = await backfillThumbnails(true)
+    library.invalidate({
+      resources: true,
+      home: true,
+      collections: true,
+      savedViews: true,
+      tags: true,
+    })
     notify.toast.success(
       `缩略图完成：修复 ${result.repaired}，跳过 ${result.skipped}，失败 ${result.failed}`,
     )
@@ -719,7 +733,12 @@ async function doRestore(): Promise<void> {
   ])
   const path = files?.[0]
   if (!path) return
-  if (!window.confirm('恢复会替换当前数据库和图片，并在完成后重启应用。继续？')) return
+  if (
+    !(await notify.confirm({
+      title: '恢复备份',
+      content: '恢复会替换当前数据库和图片，并在完成后重启应用。继续？',
+    }))
+  ) return
   restoring.value = true
   try {
     await prepareRestore(path)

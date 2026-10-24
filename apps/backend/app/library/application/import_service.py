@@ -443,12 +443,12 @@ class ImportService:
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
 
@@ -588,12 +588,12 @@ class ImportService:
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("系列导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 
@@ -721,12 +721,12 @@ class ImportService:
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("漫画导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 
@@ -814,14 +814,14 @@ class ImportService:
         except IntegrityError:
             await resources.rollback()
             if package is not None and storage == StorageKind.OWNED:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             elif package is not None and storage == StorageKind.INDEXED:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("游戏导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 

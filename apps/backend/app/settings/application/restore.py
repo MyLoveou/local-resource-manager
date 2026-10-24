@@ -15,6 +15,9 @@ from app.settings.application.errors import SettingsError
 
 PENDING_DIR = "restore-pending"
 MANIFEST = "restore.json"
+_MAX_ARCHIVE_BYTES = 2 * 1024**3
+_MAX_UNCOMPRESSED_BYTES = 8 * 1024**3
+_MAX_MEMBERS = 100_000
 
 
 def _safe_member(name: str) -> bool:
@@ -26,13 +29,20 @@ def prepare_restore(db_path: Path, source: Path) -> Path:
     archive = source.expanduser().resolve()
     if not archive.is_file() or archive.suffix.lower() != ".zip":
         raise SettingsError("请选择有效的 ZIP 备份文件", 400)
+    if archive.stat().st_size > _MAX_ARCHIVE_BYTES:
+        raise SettingsError("备份文件过大", 413)
     pending = db_path.parent / PENDING_DIR
     if pending.exists():
         shutil.rmtree(pending)
     pending.mkdir(parents=True)
     try:
         with zipfile.ZipFile(archive) as zipped:
-            names = zipped.namelist()
+            infos = zipped.infolist()
+            names = [info.filename for info in infos]
+            if len(infos) > _MAX_MEMBERS:
+                raise SettingsError("备份文件数量过多", 413)
+            if sum(max(0, info.file_size) for info in infos) > _MAX_UNCOMPRESSED_BYTES:
+                raise SettingsError("备份解压后过大", 413)
             if "library.db" not in names:
                 raise SettingsError("备份缺少 library.db", 400)
             if any(not _safe_member(name) for name in names):
@@ -63,8 +73,8 @@ def prepare_restore(db_path: Path, source: Path) -> Path:
 
 
 def _update_library_setting(db_path: Path, library: Path) -> None:
+    conn = sqlite3.connect(str(db_path))
     try:
-        conn = sqlite3.connect(str(db_path))
         row = conn.execute(
             "SELECT value FROM settings WHERE key = 'system'"
         ).fetchone()
@@ -78,9 +88,8 @@ def _update_library_setting(db_path: Path, library: Path) -> None:
             (json.dumps(data, ensure_ascii=False),),
         )
         conn.commit()
+    finally:
         conn.close()
-    except (OSError, sqlite3.Error, ValueError):
-        logger.exception("failed to update restored library setting")
 
 
 def apply_pending_restore(db_path: Path) -> bool:

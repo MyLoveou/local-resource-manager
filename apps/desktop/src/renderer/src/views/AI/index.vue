@@ -712,138 +712,7 @@
       <p v-else class="ai-muted">还没有 AI 操作历史。</p>
     </section>
 
-    <section v-else-if="activeTab === 'suggestions'" class="ai-panel">
-      <div class="ai-panel__row">
-        <strong>AI 建议</strong>
-        <n-tag size="small" :bordered="false">{{ ai.suggestions.length }} 张</n-tag>
-        <n-button size="tiny" :loading="ai.suggestionsLoading" @click="ai.refreshSuggestions()">
-          刷新
-        </n-button>
-      </div>
-      <p class="ai-muted">
-        审核后应用。标签和实体只会添加，不会覆盖已有内容；不会自动创建角色或合集。
-      </p>
-      <div v-if="ai.suggestionsLoading" class="ai-empty">
-        <n-spin size="small" /> 正在读取建议
-      </div>
-      <div v-else-if="!ai.suggestions.length" class="ai-empty">
-        暂无建议。先在图片任务里完成 VLM 文案分析，或补充已有角色/扮演者/合集。
-      </div>
-      <div v-else class="ai-suggestion-list">
-        <article
-          v-for="item in ai.suggestions"
-          :key="item.resourceId"
-          class="ai-suggestion"
-        >
-          <button
-            type="button"
-            class="ai-suggestion__cover"
-            :title="`打开 ${item.title || `资源 #${item.resourceId}`}`"
-            @click="openSuggestion(item)"
-          >
-            <img
-              v-if="item.thumbnailPath"
-              :src="resolveCardImageUrl({ thumbnailPath: item.thumbnailPath })"
-              :alt="item.title"
-              loading="lazy"
-            />
-            <span v-else>无图</span>
-          </button>
-          <div class="ai-suggestion__main">
-            <div class="ai-panel__row">
-              <strong>{{ item.title || `资源 #${item.resourceId}` }}</strong>
-              <n-tag size="tiny" :bordered="false">#{{ item.resourceId }}</n-tag>
-            </div>
-            <div v-if="item.tags.length" class="ai-suggestion__group">
-              <span>标签（可多选）</span>
-              <button
-                v-for="tag in item.tags"
-                :key="`tag-${item.resourceId}-${tag}`"
-                type="button"
-                class="ai-suggestion__tag"
-                :class="{ active: isTagSelected(item, tag) }"
-                :disabled="suggestionBusy === item.resourceId"
-                @click="toggleTag(item, tag)"
-              >
-                {{ tag }}
-              </button>
-              <button
-                type="button"
-                class="ai-suggestion__select"
-                @click="selectAllTags(item)"
-              >
-                全选
-              </button>
-              <button
-                v-if="selectedTagCount(item)"
-                type="button"
-                class="ai-suggestion__select"
-                @click="clearSelectedTags(item)"
-              >
-                清空
-              </button>
-            </div>
-            <div v-if="item.characters.length" class="ai-suggestion__group">
-              <span>角色</span>
-              <button
-                v-for="entity in item.characters"
-                :key="`character-${item.resourceId}-${entity.id}`"
-                type="button"
-                class="ai-suggestion__apply"
-                :disabled="suggestionBusy === item.resourceId"
-                @click="applyEntity(item, 'characters', entity)"
-              >
-                + {{ entity.name }}
-              </button>
-            </div>
-            <div v-if="item.persons.length" class="ai-suggestion__group">
-              <span>扮演者</span>
-              <button
-                v-for="entity in item.persons"
-                :key="`person-${item.resourceId}-${entity.id}`"
-                type="button"
-                class="ai-suggestion__apply"
-                :disabled="suggestionBusy === item.resourceId"
-                @click="applyEntity(item, 'persons', entity)"
-              >
-                + {{ entity.name }}
-              </button>
-            </div>
-            <div v-if="item.collections.length" class="ai-suggestion__group">
-              <span>合集</span>
-              <button
-                v-for="entity in item.collections"
-                :key="`collection-${item.resourceId}-${entity.id}`"
-                type="button"
-                class="ai-suggestion__apply"
-                :disabled="suggestionBusy === item.resourceId"
-                @click="applyEntity(item, 'collections', entity)"
-              >
-                + {{ entity.name }}
-              </button>
-            </div>
-          </div>
-          <n-button
-            v-if="item.tags.length"
-            size="tiny"
-            :loading="suggestionBusy === item.resourceId"
-            :disabled="selectedTagCount(item) === 0"
-            @click="applyTags(item)"
-          >
-            应用选中 {{ selectedTagCount(item) }}
-          </n-button>
-        </article>
-      </div>
-      <div v-if="ai.suggestionsHasMore" class="ai-panel__actions">
-        <n-button
-          size="small"
-          :loading="ai.suggestionsLoadingMore"
-          @click="ai.loadMoreSuggestions()"
-        >
-          加载更多建议
-        </n-button>
-      </div>
-    </section>
+    <AISuggestionsPanel v-else-if="activeTab === 'suggestions'" @open="openSuggestion" />
   </div>
 </template>
 
@@ -861,12 +730,13 @@ import {
   NTag,
 } from 'naive-ui'
 import { useAIStore } from '@/application/stores/ai'
+import { notify } from '@/application/notify'
 import { openResource } from '@/infrastructure/consume/consumeResource'
-import { addCollectionItems } from '@/infrastructure/http/collections'
-import { batchResources, getAISimilar, getResource, resolveCardImageUrl, searchAIFusion, searchAISimilarFile } from '@/infrastructure/http'
-import type { AIEntitySuggestion, AIFusionResult, AIMatchExplanation, AISimilarResult, AISuggestionItem } from '@/infrastructure/http'
+import { getAISimilar, getResource, resolveCardImageUrl, searchAIFusion, searchAISimilarFile } from '@/infrastructure/http'
+import type { AIFusionResult, AIMatchExplanation, AISimilarResult, AISuggestionItem } from '@/infrastructure/http'
 import type { Resource } from '@/domain'
 import AIInsightPanel from '@/components/AIInsightPanel/index.vue'
+import AISuggestionsPanel from '@/components/AISuggestionsPanel/index.vue'
 
 const tabs = [
   { value: 'search', label: '搜索' },
@@ -918,6 +788,9 @@ const fusionStrict = ref(false)
 const fusion = ref<AIFusionResult | null>(null)
 const fusionLoading = ref(false)
 const fusionError = ref('')
+let similarRequest = 0
+let externalRequest = 0
+let fusionRequest = 0
 const externalFile = ref<File | null>(null)
 const externalPreview = ref('')
 const externalName = ref('')
@@ -951,8 +824,6 @@ const vlmModel = ref('qwen2.5vl:3b')
 const selectingModel = ref('')
 const detectingOllama = ref(false)
 const startingOllama = ref(false)
-const suggestionBusy = ref(0)
-const selectedSuggestionTags = ref<Record<number, string[]>>({})
 const jobProgressText = computed(() => {
   const job = ai.job
   if (!job) return ''
@@ -1058,6 +929,9 @@ async function runSearch(): Promise<void> {
 }
 
 async function loadSimilar(resourceId: number): Promise<void> {
+  const request = ++similarRequest
+  externalRequest += 1
+  fusionRequest += 1
   similarLoading.value = true
   similarError.value = ''
   fusion.value = null
@@ -1068,18 +942,24 @@ async function loadSimilar(resourceId: number): Promise<void> {
   if (externalPreview.value) URL.revokeObjectURL(externalPreview.value)
   externalPreview.value = ''
   try {
-    similarSource.value = await getResource(resourceId)
-    similar.value = await getAISimilar(resourceId, similarMode.value)
+    const source = await getResource(resourceId)
+    const result = await getAISimilar(resourceId, similarMode.value)
+    if (request !== similarRequest) return
+    similarSource.value = source
+    similar.value = result
   } catch (error) {
+    if (request !== similarRequest) return
     similarError.value = error instanceof Error ? error.message : '相似搜索失败'
     similar.value = null
   } finally {
-    similarLoading.value = false
+    if (request === similarRequest) similarLoading.value = false
   }
 }
 
 async function changeSimilarMode(mode: 'auto' | 'semantic' | 'duplicate'): Promise<void> {
   similarMode.value = mode
+  fusionRequest += 1
+  fusionLoading.value = false
   fusion.value = null
   fusionText.value = ''
   fusionError.value = ''
@@ -1110,6 +990,9 @@ async function chooseFile(): Promise<void> {
 }
 
 async function loadExternal(file: File): Promise<void> {
+  const request = ++externalRequest
+  similarRequest += 1
+  fusionRequest += 1
   externalFile.value = file
   externalName.value = file.name
   similarSource.value = null
@@ -1120,12 +1003,15 @@ async function loadExternal(file: File): Promise<void> {
   fusion.value = null
   fusionError.value = ''
   try {
-    similar.value = await searchAISimilarFile(file, similarMode.value)
+    const result = await searchAISimilarFile(file, similarMode.value)
+    if (request !== externalRequest) return
+    similar.value = result
   } catch (error) {
+    if (request !== externalRequest) return
     similar.value = null
     similarError.value = error instanceof Error ? error.message : '相似搜索失败'
   } finally {
-    similarLoading.value = false
+    if (request === externalRequest) similarLoading.value = false
   }
 }
 
@@ -1157,17 +1043,21 @@ function onPaste(event: ClipboardEvent): void {
 
 async function runFusion(): Promise<void> {
   if (!similarSource.value?.id || !fusionText.value.trim() || ai.jobActive) return
+  const request = ++fusionRequest
   fusionLoading.value = true
   fusionError.value = ''
   try {
-    fusion.value = await searchAIFusion(similarSource.value.id, fusionText.value, {
+    const result = await searchAIFusion(similarSource.value.id, fusionText.value, {
       strict: fusionStrict.value,
     })
+    if (request !== fusionRequest) return
+    fusion.value = result
   } catch (error) {
+    if (request !== fusionRequest) return
     fusion.value = null
     fusionError.value = error instanceof Error ? error.message : '融合搜索失败'
   } finally {
-    fusionLoading.value = false
+    if (request === fusionRequest) fusionLoading.value = false
   }
 }
 
@@ -1226,7 +1116,12 @@ async function index(full = false): Promise<void> {
 
 async function rebuildIndex(): Promise<void> {
   if (ai.jobActive) return
-  if (!window.confirm('将重建全部 CLIP 索引，图片较多时可能需要几分钟。继续？')) return
+  if (
+    !(await notify.confirm({
+      title: '重建索引',
+      content: '将重建全部 CLIP 索引，图片较多时可能需要几分钟。继续？',
+    }))
+  ) return
   await ai.buildIndex(true)
 }
 
@@ -1250,102 +1145,19 @@ async function openSuggestion(item: AISuggestionItem): Promise<void> {
   await openResource({ id: item.resourceId, type: 'image' })
 }
 
-function selectedTagsFor(item: AISuggestionItem): string[] {
-  return selectedSuggestionTags.value[item.resourceId] ?? []
-}
-
-function selectedTagCount(item: AISuggestionItem): number {
-  return selectedTagsFor(item).length
-}
-
-function isTagSelected(item: AISuggestionItem, tag: string): boolean {
-  return selectedTagsFor(item).includes(tag)
-}
-
-function toggleTag(item: AISuggestionItem, tag: string): void {
-  const current = selectedTagsFor(item)
-  selectedSuggestionTags.value = {
-    ...selectedSuggestionTags.value,
-    [item.resourceId]: current.includes(tag)
-      ? current.filter((value) => value !== tag)
-      : [...current, tag],
-  }
-}
-
-function selectAllTags(item: AISuggestionItem): void {
-  selectedSuggestionTags.value = {
-    ...selectedSuggestionTags.value,
-    [item.resourceId]: [...item.tags],
-  }
-}
-
-function clearSelectedTags(item: AISuggestionItem): void {
-  selectedSuggestionTags.value = {
-    ...selectedSuggestionTags.value,
-    [item.resourceId]: [],
-  }
-}
-
-async function applyTags(item: AISuggestionItem): Promise<void> {
-  const tags = selectedTagsFor(item)
-  if (!tags.length || item.resourceId == null) return
-  suggestionBusy.value = item.resourceId
-  try {
-    const result = await batchResources('add_tags', [item.resourceId], tags)
-    if (result.failed.length) {
-      window.alert(result.failed[0]?.message || '应用标签失败')
-      return
-    }
-    clearSelectedTags(item)
-    await ai.refreshSuggestions()
-  } finally {
-    suggestionBusy.value = 0
-  }
-}
-
-async function applyEntity(
-  item: AISuggestionItem,
-  kind: 'characters' | 'persons' | 'collections',
-  entity: AIEntitySuggestion,
-): Promise<void> {
-  if (item.resourceId == null) return
-  suggestionBusy.value = item.resourceId
-  try {
-    if (kind === 'collections') {
-      await addCollectionItems(entity.id, [item.resourceId])
-    } else if (kind === 'characters') {
-      const result = await batchResources(
-        'add_characters',
-        [item.resourceId],
-        undefined,
-        undefined,
-        [entity.id],
-      )
-      if (result.failed.length) window.alert(result.failed[0]?.message || '添加角色失败')
-    } else {
-      const result = await batchResources(
-        'add_persons',
-        [item.resourceId],
-        undefined,
-        undefined,
-        undefined,
-        [entity.id],
-      )
-      if (result.failed.length) window.alert(result.failed[0]?.message || '添加扮演者失败')
-    }
-    await ai.refreshSuggestions()
-  } finally {
-    suggestionBusy.value = 0
-  }
-}
-
 async function useRecentQuery(value: string): Promise<void> {
   query.value = value
   await runSearch()
 }
 
 async function clearJobHistory(): Promise<void> {
-  if (!window.confirm('确定清空 AI 任务历史？')) return
+  if (
+    !(await notify.confirm({
+      title: '清空任务历史',
+      content: '确定清空 AI 任务历史？',
+      level: 'warning',
+    }))
+  ) return
   await ai.clearJobHistory()
 }
 
@@ -1734,102 +1546,6 @@ onMounted(async () => {
 
 .ai-job-list {
   margin-top: 4px;
-}
-
-.ai-suggestion-list {
-  margin-top: 8px;
-}
-
-.ai-suggestion {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--sm-color-border);
-}
-
-.ai-suggestion__cover {
-  display: flex;
-  flex: 0 0 96px;
-  align-items: center;
-  justify-content: center;
-  width: 96px;
-  height: 72px;
-  overflow: hidden;
-  padding: 0;
-  border: 1px solid var(--sm-color-border);
-  border-radius: 6px;
-  background: var(--sm-color-bg-surface);
-  color: var(--sm-color-text-muted);
-  font-size: 11px;
-  cursor: pointer;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
-.ai-suggestion__tag {
-  padding: 1px 6px;
-  border: 1px solid var(--sm-color-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--sm-color-text-muted);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.ai-suggestion__tag.active {
-  border-color: var(--sm-color-accent);
-  background: color-mix(in srgb, var(--sm-color-accent) 12%, transparent);
-  color: var(--sm-color-text);
-}
-
-.ai-suggestion__select {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--sm-color-accent);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.ai-suggestion:last-child {
-  border-bottom: 0;
-}
-
-.ai-suggestion__main {
-  flex: 1;
-  min-width: 0;
-}
-
-.ai-suggestion__group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
-
-  > span {
-    color: var(--sm-color-text-muted);
-    font-size: 11px;
-  }
-}
-
-.ai-suggestion__apply {
-  padding: 1px 6px;
-  border: 1px solid var(--sm-color-border);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--sm-color-text);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.ai-suggestion__apply:hover {
-  border-color: var(--sm-color-accent);
 }
 
 .ai-job-row__failed {

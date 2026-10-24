@@ -312,7 +312,7 @@ class LibraryQueryService:
             selected = [await character_repo.get(character_id) for character_id in ids]
             if any(character is None for character in selected):
                 raise HTTPException(status_code=422, detail="character not found")
-            await character_repo.set_resources(resource_id, ids)
+            await character_repo.set_resources(resource_id, ids, commit=False)
         if "person_ids" in body.model_fields_set:
             ids = list(dict.fromkeys(body.person_ids or []))
             from app.library.infrastructure.repositories import PersonRepository
@@ -320,7 +320,7 @@ class LibraryQueryService:
             selected = [await person_repo.get(person_id) for person_id in ids]
             if any(person is None for person in selected):
                 raise HTTPException(status_code=422, detail="person not found")
-            await person_repo.set_resources(resource_id, ids)
+            await person_repo.set_resources(resource_id, ids, commit=False)
         await self._resources.commit()
         return await self._resources.get(resource_id)
 
@@ -858,7 +858,7 @@ class CollectionService:
                 continue
             name = export_name(index, resource.title, source.suffix)
             try:
-                shutil.copy2(source, target / name)
+                await asyncio.to_thread(shutil.copy2, source, target / name)
                 exported += 1
             except OSError:
                 skipped += 1

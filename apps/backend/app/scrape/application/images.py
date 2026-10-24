@@ -101,21 +101,24 @@ async def fetch_poster_bytes(url: str) -> tuple[bytes, str]:
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=False, headers=POSTER_HEADERS) as client:
         current = target
         for _ in range(5):
-            res = await client.get(current)
-            if res.status_code in {301, 302, 303, 307, 308}:
-                loc = res.headers.get("location")
-                if not loc:
-                    raise RuntimeError("封面跳转不允许")
-                nxt = public_image_url(urljoin(current, loc))
-                if not nxt:
-                    raise RuntimeError("封面跳转不允许")
-                current = nxt
-                continue
-            res.raise_for_status()
-            if len(res.content) > _MAX_BYTES:
-                raise RuntimeError("封面过大")
-            mime = sniff_image(res.content)
-            if mime is None:
-                raise RuntimeError("封面不是图片")
-            return res.content, mime
+            async with client.stream("GET", current) as res:
+                if res.status_code in {301, 302, 303, 307, 308}:
+                    loc = res.headers.get("location")
+                    if not loc:
+                        raise RuntimeError("封面跳转不允许")
+                    nxt = public_image_url(urljoin(current, loc))
+                    if not nxt:
+                        raise RuntimeError("封面跳转不允许")
+                    current = nxt
+                    continue
+                res.raise_for_status()
+                body = bytearray()
+                async for chunk in res.aiter_bytes(64 * 1024):
+                    if len(body) + len(chunk) > _MAX_BYTES:
+                        raise RuntimeError("封面过大")
+                    body.extend(chunk)
+                mime = sniff_image(bytes(body))
+                if mime is None:
+                    raise RuntimeError("封面不是图片")
+                return bytes(body), mime
         raise RuntimeError("封面跳转过多")

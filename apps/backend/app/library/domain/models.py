@@ -209,6 +209,7 @@ class ResourceFile(ApiModel):
     id: int | None = None
     resource_id: int
     path: str
+    content_url: str | None = None
     sha256: str | None = None  # 文件哈希，图片元数据匹配键（唯一索引）
     size: int | None = None
     format: str | None = None  # 扩展名/格式

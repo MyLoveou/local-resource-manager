@@ -9,53 +9,58 @@
     </div>
     <p class="ai-insight__strategy">{{ insight.strategy }}</p>
     <p v-if="!expanded" class="ai-insight__summary">
-      {{ insight.source === 'text' ? insight.raw : (insight.caption || '尚未生成 VLM 文案') }}
+      {{ insight.source === 'text' ? insight.raw : (insight.caption || '暂无 VLM 文案') }}
     </p>
 
     <template v-if="expanded">
-    <div class="ai-insight__grid">
-      <div v-if="insight.source === 'text'" class="ai-insight__item">
-        <span>原始查询</span>
-        <p>{{ insight.raw || '—' }}</p>
+      <div class="ai-insight__grid">
+        <div v-if="insight.source === 'text'" class="ai-insight__item">
+          <span>原始查询</span>
+          <p>{{ insight.raw || '无' }}</p>
+        </div>
+        <div v-if="insight.source === 'text'" class="ai-insight__item">
+          <span>语义检索文本</span>
+          <p>{{ insight.semanticText || insight.raw || '无' }}</p>
+        </div>
+
+        <template v-if="insight.source !== 'text'">
+          <div class="ai-insight__item">
+            <span>图片识别</span>
+            <p>{{ insight.caption || '暂无 VLM 文案' }}</p>
+          </div>
+          <div class="ai-insight__item">
+            <span>人数（YOLO）/ 方向</span>
+            <p>{{ peopleText }}</p>
+          </div>
+        </template>
+
+        <div class="ai-insight__item">
+          <span>硬条件</span>
+          <p>{{ insight.filters.length ? insight.filters.join(' · ') : '无' }}</p>
+        </div>
       </div>
-      <div
-        v-if="insight.source === 'text' && insight.semanticText && insight.semanticText !== insight.raw"
-        class="ai-insight__item"
+
+      <div v-if="insight.labels.length" class="ai-insight__chips">
+        <span>{{ insight.source === 'image' ? 'CLIP 标签' : '识别标签' }}</span>
+        <n-tag v-for="label in insight.labels" :key="label" size="small" :bordered="false">
+          {{ label }}
+        </n-tag>
+      </div>
+      <div v-if="insight.tags.length" class="ai-insight__chips">
+        <span>{{ insight.source === 'image' ? '图片标签' : '查询标签' }}</span>
+        <n-tag v-for="tag in insight.tags" :key="tag" size="small" :bordered="false">
+          {{ tag }}
+        </n-tag>
+      </div>
+
+      <p
+        v-if="insight.source === 'text' && !insight.filters.length && !insight.labels.length"
+        class="ai-insight__note"
       >
-        <span>交给 CLIP 的语义</span>
-        <p>{{ insight.semanticText }}</p>
-      </div>
-      <template v-else-if="insight.source !== 'text'">
-        <div class="ai-insight__item">
-          <span>图片识别</span>
-          <p>{{ insight.caption || '尚未生成 VLM 文案' }}</p>
-        </div>
-        <div class="ai-insight__item">
-          <span>人数（YOLO） / 方向</span>
-          <p>{{ peopleText }}</p>
-        </div>
-      </template>
-      <div class="ai-insight__item">
-        <span>硬条件</span>
-        <p>{{ insight.filters.join('、') || '无' }}</p>
-      </div>
-    </div>
-
-    <div v-if="insight.labels.length" class="ai-insight__chips">
-      <span>{{ insight.source === 'image' ? 'CLIP 标签' : '标签条件' }}</span>
-      <n-tag v-for="label in insight.labels" :key="label" size="small" :bordered="false">
-        {{ label }}
-      </n-tag>
-    </div>
-    <div v-if="insight.tags.length" class="ai-insight__chips">
-      <span>图片标签</span>
-      <n-tag v-for="tag in insight.tags" :key="tag" size="small" :bordered="false">
-        {{ tag }}
-      </n-tag>
-    </div>
-
-    <p v-for="note in insight.notes" :key="note" class="ai-insight__note">{{ note }}</p>
-    <p class="ai-insight__foot">这里展示的是检索依据，不是模型内部思维链。</p>
+        未识别到人数、方向或固定标签条件，当前仅使用原始查询的 CLIP 语义向量。
+      </p>
+      <p v-for="note in insight.notes" :key="note" class="ai-insight__note">{{ note }}</p>
+      <p class="ai-insight__foot">这里展示的是检索依据，不是模型内部思维链。</p>
     </template>
   </section>
 </template>

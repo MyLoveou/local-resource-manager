@@ -1,7 +1,8 @@
 """Bearer token 鉴权中间件。
 
 - token 为空 = 未启用鉴权（开发态裸跑），启动时 lifespan 已打 WARN
-- 豁免清单集中在 `shared/constants.py`：健康检查、OpenAPI 文档、媒体字节流
+- 豁免清单集中在 `shared/constants.py`：健康检查、OpenAPI 文档、图片代理
+- 媒体 `/content` 使用短期 path-bound 签名，或 Bearer token
 - 失败返回已完成信封的 401；日志只记 method + path，不记 token 原文
 """
 from __future__ import annotations
@@ -13,8 +14,9 @@ from fastapi.responses import JSONResponse
 
 from app.shared.api_envelope import error_envelope
 from app.shared.config import settings
-from app.shared.constants import is_auth_exempt
+from app.shared.constants import is_auth_exempt, is_media_content_path
 from app.shared.log import logger
+from app.shared.media_auth import verify_media_path
 
 UNAUTHORIZED_MESSAGE = "未授权"
 
@@ -34,7 +36,7 @@ def _matches(received: str, expected: str) -> bool:
 
 
 async def require_token(request: Request, call_next):
-    """校验 Bearer token；token 未配置或路径命中豁免则直接放行。"""
+    """校验 Bearer token；媒体 content 额外允许 query token。"""
     token = settings.token
     if not token:
         return await call_next(request)
@@ -44,6 +46,18 @@ async def require_token(request: Request, call_next):
     path = request.url.path
     if is_auth_exempt(path):
         return await call_next(request)
+    if is_media_content_path(path):
+        if _matches(_bearer_value(request), token) or verify_media_path(
+            path,
+            request.query_params.get("exp"),
+            request.query_params.get("sig"),
+        ):
+            return await call_next(request)
+        logger.warning("拒绝未授权媒体请求 %s %s", request.method, path)
+        return JSONResponse(
+            status_code=401,
+            content=error_envelope(UNAUTHORIZED_MESSAGE, code=401),
+        )
     if not _matches(_bearer_value(request), token):
         logger.warning("拒绝未授权请求 %s %s", request.method, path)
         return JSONResponse(

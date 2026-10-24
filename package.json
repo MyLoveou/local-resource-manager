@@ -8,6 +8,7 @@
     "build": "pnpm --filter desktop build",
     "start": "pnpm --filter desktop start",
     "release:win": "node scripts/release.mjs",
+    "check:file-size": "node scripts/check-file-size.mjs",
     "release:verify": "node scripts/verify-release.mjs",
     "release:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
     "backend:freeze": "apps/backend/.venv/Scripts/python -m PyInstaller --noconfirm --clean --distpath apps/backend/dist --workpath apps/backend/build apps/backend/packaging/backend.spec",

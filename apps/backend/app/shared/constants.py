@@ -15,7 +15,7 @@ ENVELOPE_SKIP_PATHS = ("/docs", "/redoc", "/openapi.json")
 # 鉴权豁免：健康检查（/health 与各子应用 /xxx/health）、OpenAPI 文档、
 # 媒体字节流（img / video / model-viewer 无法带请求头）
 AUTH_EXEMPT_PREFIXES = ("/docs", "/redoc", "/openapi.json")
-AUTH_EXEMPT_SUFFIXES = ("/health", "/content")
+AUTH_EXEMPT_SUFFIXES = ("/health",)
 AUTH_EXEMPT_PATHS = ("/scrape/proxy-image",)
 
 
@@ -26,3 +26,8 @@ def is_auth_exempt(path: str) -> bool:
     if path.startswith(AUTH_EXEMPT_PREFIXES):
         return True
     return path.endswith(AUTH_EXEMPT_SUFFIXES)
+
+
+def is_media_content_path(path: str) -> bool:
+    """/content 仍需 token；img/video 通过查询参数携带 token。"""
+    return path.endswith("/content")

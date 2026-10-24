@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -107,20 +108,23 @@ async def _download(
 ) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_suffix(target.suffix + ".part")
-    part.unlink(missing_ok=True)
+    await asyncio.to_thread(part.unlink, missing_ok=True)
     done = 0
     try:
         async with client.stream("GET", url) as response:
             response.raise_for_status()
             content_length = int(response.headers.get("content-length") or expected)
-            with part.open("wb") as handle:
+            handle = await asyncio.to_thread(part.open, "wb")
+            try:
                 async for chunk in response.aiter_bytes(1024 * 256):
-                    handle.write(chunk)
+                    await asyncio.to_thread(handle.write, chunk)
                     done += len(chunk)
                     progress(base_done + done, total or base_done + content_length)
-        os.replace(part, target)
+            finally:
+                await asyncio.to_thread(handle.close)
+        await asyncio.to_thread(os.replace, part, target)
     except Exception:
-        part.unlink(missing_ok=True)
+        await asyncio.to_thread(part.unlink, missing_ok=True)
         raise
 
 

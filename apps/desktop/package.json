@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dist": "electron-builder --win",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

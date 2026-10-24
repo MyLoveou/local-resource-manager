@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import threading
 from pathlib import Path
@@ -27,53 +28,59 @@ TAGS_URL = (
 )
 THRESHOLD = 0.35
 TAG_ZH = {
-    "1girl": "1???",
-    "1boy": "1???",
-    "2girls": "2???",
-    "2boys": "2???",
-    "solo": "??",
-    "multiple_girls": "????",
-    "long_hair": "??",
-    "short_hair": "??",
-    "blue_hair": "??",
-    "red_hair": "??",
-    "pink_hair": "??",
-    "blonde_hair": "??",
-    "white_hair": "??",
-    "black_hair": "??",
-    "purple_hair": "??",
-    "blue_eyes": "??",
-    "red_eyes": "??",
-    "purple_eyes": "??",
-    "closed_eyes": "??",
-    "open_mouth": "??",
-    "smile": "??",
-    "looking_at_viewer": "????",
-    "flower": "?",
-    "flowers": "?",
-    "dress": "???",
-    "shirt": "??",
-    "school_uniform": "??",
-    "cosplay": "????",
-    "indoors": "??",
-    "outdoors": "??",
-    "lying": "??",
-    "on_back": "??",
-    "sitting": "??",
-    "standing": "??",
-    "solo_focus": "????",
-    "upper_body": "???",
-    "portrait": "??",
-    "cleavage": "??",
-    "breasts": "??",
-    "detached_sleeves": "?????",
-    "hair_over_one_eye": "???????",
-    "no_shoes": "??",
-    "black_background": "????",
-    "simple_background": "????",
-    "monochrome": "??",
-    "greyscale": "??",
-    "comic": "??",
+    "1girl": "1个女孩",
+    "1boy": "1个男孩",
+    "2girls": "2个女孩",
+    "2boys": "2个男孩",
+    "solo": "单人",
+    "multiple_girls": "多个女孩",
+    "long_hair": "长发",
+    "short_hair": "短发",
+    "blue_hair": "蓝发",
+    "red_hair": "红发",
+    "pink_hair": "粉发",
+    "blonde_hair": "金发",
+    "white_hair": "白发",
+    "black_hair": "黑发",
+    "purple_hair": "紫发",
+    "blue_eyes": "蓝眼",
+    "red_eyes": "红眼",
+    "purple_eyes": "紫眼",
+    "closed_eyes": "闭眼",
+    "open_mouth": "张嘴",
+    "smile": "微笑",
+    "looking_at_viewer": "看向镜头",
+    "flower": "花",
+    "flowers": "花丛",
+    "dress": "连衣裙",
+    "shirt": "衬衫",
+    "school_uniform": "校服",
+    "cosplay": "角色扮演",
+    "indoors": "室内",
+    "outdoors": "室外",
+    "lying": "躺卧",
+    "on_back": "仰卧",
+    "sitting": "坐姿",
+    "standing": "站姿",
+    "solo_focus": "单人特写",
+    "upper_body": "上半身",
+    "portrait": "肖像",
+    "cleavage": "乳沟",
+    "breasts": "胸部",
+    "detached_sleeves": "独立袖套",
+    "hair_over_one_eye": "遮住一只眼",
+    "no_shoes": "赤脚",
+    "black_background": "黑色背景",
+    "simple_background": "简单背景",
+    "monochrome": "单色",
+    "greyscale": "灰度",
+    "comic": "漫画",
+    "hand_fan": "手持扇",
+    "chinese_clothes": "中式服装",
+    "holding_fan": "拿着扇子",
+    "china_dress": "中式连衣裙",
+    "holding": "手持",
+    "wisteria": "紫藤",
 }
 
 
@@ -112,18 +119,21 @@ async def download(progress) -> None:
                 progress(done, total)
                 continue
             part = target.with_suffix(target.suffix + ".part")
-            part.unlink(missing_ok=True)
+            await asyncio.to_thread(part.unlink, missing_ok=True)
             try:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
-                    with part.open("wb") as handle:
+                    handle = await asyncio.to_thread(part.open, "wb")
+                    try:
                         async for chunk in response.aiter_bytes(1024 * 256):
-                            handle.write(chunk)
+                            await asyncio.to_thread(handle.write, chunk)
                             done += len(chunk)
                             progress(done, total)
-                part.replace(target)
+                    finally:
+                        await asyncio.to_thread(handle.close)
+                await asyncio.to_thread(part.replace, target)
             except Exception:
-                part.unlink(missing_ok=True)
+                await asyncio.to_thread(part.unlink, missing_ok=True)
                 raise
 
 

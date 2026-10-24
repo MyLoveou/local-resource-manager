@@ -54,6 +54,8 @@ try {
   }
 
   run('类型检查', 'pnpm', ['--filter', 'desktop', 'typecheck'])
+  run('文件规模', 'pnpm', ['check:file-size'])
+  run('前端测试', 'pnpm', ['--filter', 'desktop', 'test'])
   run('Lint', 'pnpm', ['--filter', 'desktop', 'lint'])
   run('后端测试', python, ['-m', 'pytest', '-q', 'tests'], {
     cwd: join(ROOT, 'apps/backend'),

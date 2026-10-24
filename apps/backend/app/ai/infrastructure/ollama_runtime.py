@@ -109,7 +109,8 @@ async def start_runtime(binary: str) -> dict:
     creationflags = 0
     if os.name == "nt":
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    process = subprocess.Popen(
+    process = await asyncio.to_thread(
+        subprocess.Popen,
         [str(path), "serve"],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -122,14 +123,14 @@ async def start_runtime(binary: str) -> dict:
         if process.poll() is not None:
             output = ""
             if process.stdout is not None:
-                output = process.stdout.read(2000).strip()
+                output = (await asyncio.to_thread(process.stdout.read, 2000)).strip()
             raise RuntimeError(
                 "Ollama 启动失败" + (f"：{output}" if output else "，请检查安装路径或端口是否被占用")
             )
         if await is_running():
             return await runtime_status(str(path))
         await asyncio.sleep(0.2)
-    process.terminate()
+    await asyncio.to_thread(process.terminate)
     raise RuntimeError("Ollama 启动超时，请检查端口 11434 或手动运行 ollama serve")
 
 

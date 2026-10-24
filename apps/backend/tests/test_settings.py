@@ -16,6 +16,8 @@ from app.settings.application.errors import SettingsError
 from app.settings.application.schemas import ScrapeSettingsPatch, SystemSettingPatch
 from app.settings.application.secrets import invalidate_secret_cache, tmdb_api_key
 from app.settings.application.service import backup_database, backup_library, get_view, patch_scrape, pathc_system_settings
+from app.settings.application.restore import prepare_restore
+from app.settings.application import restore as restore_module
 from app.shared.db.migrations import migrate
 from app.shared import config
 from app.shared.runtime_paths import set_library_root
@@ -125,3 +127,36 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             names = set(archive.namelist())
         self.assertIn("library.db", names)
         self.assertIn("library/image/1/thumbs/grid.webp", names)
+
+    def test_prepare_restore_rejects_unsafe_member(self) -> None:
+        archive = self.root / "unsafe.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.write(self.db_path, "library.db")
+            zipped.writestr("../outside.txt", "x")
+        with self.assertRaises(SettingsError):
+            prepare_restore(self.db_path, archive)
+
+    def test_prepare_restore_rejects_missing_database(self) -> None:
+        archive = self.root / "missing-db.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.writestr("library/image/1/primary.jpg", "x")
+        with self.assertRaises(SettingsError):
+            prepare_restore(self.db_path, archive)
+
+    def test_prepare_restore_rejects_member_limit(self) -> None:
+        archive = self.root / "many-members.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.write(self.db_path, "library.db")
+            zipped.writestr("library/a.jpg", "x")
+        with patch.object(restore_module, "_MAX_MEMBERS", 1):
+            with self.assertRaises(SettingsError):
+                prepare_restore(self.db_path, archive)
+
+    def test_prepare_restore_rejects_uncompressed_limit(self) -> None:
+        archive = self.root / "large-uncompressed.zip"
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.write(self.db_path, "library.db")
+            zipped.writestr("library/a.jpg", "x" * 1024)
+        with patch.object(restore_module, "_MAX_UNCOMPRESSED_BYTES", 512):
+            with self.assertRaises(SettingsError):
+                prepare_restore(self.db_path, archive)
