@@ -64,7 +64,7 @@ export {
   batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
-export { getPhotoTimeline, backfillPhotos, backfillThumbnails } from './photos'
+export { getPhotoTimeline, backfillPhotos, backfillThumbnails, rebuildThumbnail } from './photos'
 export { getTags, invalidateTags } from './vocab'
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
 export type { ResourcePatch, TodoPatch, ResourceBatchAction, ResourceBatchResult } from './resources'
@@ -73,6 +73,7 @@ export {
   getSettings,
   patchScrapeSettings,
   backupLibrary,
+  prepareRestore,
 } from './settings'
 export {
   createScrapeJob,
@@ -85,6 +86,8 @@ export {
 } from './scrape'
 export {
   getAIStatus,
+  getAIPerformance,
+  updateAIPerformance,
   installAIModel,
   installAnimeTagger,
   buildAIIndex,
@@ -106,6 +109,8 @@ export {
   pullVLMModel,
   type AIModelInfo,
   type AIStatus,
+  type AIDeviceInfo,
+  type AIPerformance,
   type AIJob,
   type AIVLMModelInfo,
   type AIVLMRuntime,

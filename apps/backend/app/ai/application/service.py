@@ -23,6 +23,9 @@ from app.ai.application.schemas import (
     AIJob,
     AIMatchExplanation,
     AIModelInfo,
+    AIDeviceInfo,
+    AIPerformance,
+    AIPerformancePatch,
     AIQueryInsight,
     AISearchResponse,
     AISimilarResponse,
@@ -32,6 +35,7 @@ from app.ai.application.schemas import (
 )
 from app.ai.infrastructure import ollama_runtime
 from app.ai.infrastructure import anime_tagger
+from app.ai.infrastructure import device_info as device_hints
 from app.ai.infrastructure.model_store import (
     MODEL_DIM,
     MODEL_ID,
@@ -182,7 +186,7 @@ class AIService:
             for row in rows
         ]
 
-    async def suggestions(self, limit: int = 30) -> list:
+    async def suggestions(self, limit: int = 30, offset: int = 0) -> list:
         rows = (
             await self.session.execute(
                 text(
@@ -334,7 +338,9 @@ class AIService:
             for item in grouped.values()
             if item["tags"] or item["characters"] or item["persons"] or item["collections"]
         ]
-        return result[: max(1, min(limit, 100))]
+        size = max(1, min(limit, 100))
+        start = max(0, offset)
+        return result[start : start + size]
 
     async def vlm_runtime_status(self) -> AIVLMRuntime:
         preferred = await self.session.scalar(
@@ -377,10 +383,61 @@ class AIService:
 
     async def clear_jobs(self) -> None:
         if jobs.has_active():
-            raise AIServiceError("? AI ???????????????")
+            raise AIServiceError("有 AI 任务运行时不能清空历史")
         await self.session.execute(text("DELETE FROM ai_jobs"))
         await self.session.commit()
         operations_logger.info("ai.jobs.clear")
+
+    async def performance(self) -> AIPerformance:
+        info = device_hints.device_info()
+        recommended = device_hints.recommendation(info)
+        stored_mode = await self.session.scalar(
+            text("SELECT value FROM ai_preferences WHERE key = 'ai_concurrency_mode'")
+        )
+        stored_manual = await self.session.scalar(
+            text("SELECT value FROM ai_preferences WHERE key = 'ai_concurrency'")
+        )
+        mode = str(stored_mode or "balanced").strip().lower()
+        if mode not in {"safe", "balanced", "max", "manual"}:
+            mode = "balanced"
+        try:
+            manual = max(1, min(4, int(stored_manual or recommended["balanced"])))
+        except (TypeError, ValueError):
+            manual = recommended["balanced"]
+        effective = manual if mode == "manual" else recommended.get(mode, 1)
+        return AIPerformance(
+            device=AIDeviceInfo(**info),
+            mode=mode,
+            manual=manual,
+            effective=max(1, min(4, int(effective))),
+            **recommended,
+        )
+
+    async def update_performance(self, patch: AIPerformancePatch) -> AIPerformance:
+        values: dict[str, str] = {}
+        if patch.mode is not None:
+            mode = patch.mode.strip().lower()
+            if mode not in {"safe", "balanced", "max", "manual"}:
+                raise AIServiceError("无效的 AI 并发模式", 400)
+            values["ai_concurrency_mode"] = mode
+        if patch.manual is not None:
+            values["ai_concurrency"] = str(max(1, min(4, int(patch.manual))))
+        for key, value in values.items():
+            await self.session.execute(
+                text(
+                    "INSERT INTO ai_preferences (key, value, updated_at) "
+                    "VALUES (:key, :value, datetime('now')) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+                    "updated_at = datetime('now')"
+                ),
+                {"key": key, "value": value},
+            )
+        await self.session.commit()
+        return await self.performance()
+
+    async def effective_concurrency(self) -> int:
+        performance = await self.performance()
+        return performance.effective
 
     async def select_vlm(self, model: str) -> AIStatus:
         model = model.strip()
@@ -849,6 +906,74 @@ class AIService:
                 chosen[resource_id] = path
         return list(chosen.items())
 
+    async def _analysis_contexts(self, resource_ids: list[int]) -> dict[int, dict]:
+        if not resource_ids:
+            return {}
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT rt.resource_id, t.name FROM resource_tags rt "
+                    "JOIN tags t ON t.id = rt.tag_id"
+                )
+            )
+        ).all()
+        tags: dict[int, list[str]] = {}
+        for resource_id, name in rows:
+            values = tags.setdefault(int(resource_id), [])
+            if name and str(name) not in values:
+                values.append(str(name))
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT rc.resource_id, c.name FROM resource_categories rc "
+                    "JOIN categories c ON c.id = rc.category_id"
+                )
+            )
+        ).all()
+        categories: dict[int, list[str]] = {}
+        for resource_id, name in rows:
+            values = categories.setdefault(int(resource_id), [])
+            if name and str(name) not in values:
+                values.append(str(name))
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT rc.resource_id, c.name FROM resource_characters rc "
+                    "JOIN characters c ON c.id = rc.character_id"
+                )
+            )
+        ).all()
+        characters: dict[int, list[str]] = {}
+        for resource_id, name in rows:
+            values = characters.setdefault(int(resource_id), [])
+            if name and str(name) not in values:
+                values.append(str(name))
+        rows = (
+            await self.session.execute(
+                text(
+                    "SELECT rp.resource_id, p.name FROM resource_persons rp "
+                    "JOIN persons p ON p.id = rp.person_id"
+                )
+            )
+        ).all()
+        persons: dict[int, list[str]] = {}
+        for resource_id, name in rows:
+            values = persons.setdefault(int(resource_id), [])
+            if name and str(name) not in values:
+                values.append(str(name))
+        wanted = set(resource_ids)
+        result: dict[int, dict] = {}
+        for resource_id in wanted:
+            context = {
+                "categories": categories.get(resource_id, [])[:8],
+                "tags": tags.get(resource_id, [])[:12],
+                "characters": characters.get(resource_id, [])[:5],
+                "persons": persons.get(resource_id, [])[:5],
+            }
+            if any(context.values()):
+                result[resource_id] = context
+        return result
+
     @staticmethod
     def _failure_kind(exc: Exception) -> str:
         if isinstance(exc, httpx.HTTPStatusError):
@@ -928,12 +1053,40 @@ class AIService:
                 failed=0,
                 message="准备分析文案" if images else "没有待分析图片",
             )
+            contexts = await service._analysis_contexts([rid for rid, _ in images])
+            concurrency = await service.effective_concurrency()
+            logger.info(
+                "AI caption job %s concurrency=%s", job.id, concurrency
+            )
+            semaphore = asyncio.Semaphore(max(1, concurrency))
+
+            async def analyze_one(resource_id: int, path: Path):
+                async with semaphore:
+                    try:
+                        return await caption_provider.analyze(
+                            path, contexts.get(resource_id)
+                        )
+                    except Exception as exc:  # noqa: BLE001 - returned to ordered loop
+                        return exc
+
+            tasks = [
+                asyncio.create_task(analyze_one(rid, path)) for rid, path in images
+            ]
+
+            def cancel_pending() -> None:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+
             failed = 0
             consecutive_failures = 0
             repeat_failures = 0
             for index, (resource_id, path) in enumerate(images, start=1):
                 try:
-                    document = await caption_provider.analyze(path)
+                    result = await tasks[index - 1]
+                    if isinstance(result, Exception):
+                        raise result
+                    document = result
                 except Exception as exc:
                     kind = self._failure_kind(exc)
                     fallback_document = None
@@ -986,13 +1139,20 @@ class AIService:
                             message=f"已处理 {index}/{len(images)}，失败 {failed} 张：{exc}",
                         )
                         if consecutive_failures >= 3:
+                            cancel_pending()
                             raise RuntimeError(
                                 f"连续 {consecutive_failures} 张分析失败，任务已停止：{exc}"
                             ) from exc
                         if repeat_failures >= 10:
+                            cancel_pending()
+                            hint = (
+                                "可安装 WD14 动漫标签模型作为兜底"
+                                if not anime_tagger.is_installed()
+                                else "WD14 兜底也未能处理这批图片"
+                            )
                             raise RuntimeError(
                                 "连续 10 张图片触发 token repeat limit；"
-                                "当前视觉模型可能不适合这批图片，任务已暂停"
+                                f"当前视觉模型可能不适合这批图片，任务已暂停。{hint}"
                             )
                         continue
 

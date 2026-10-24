@@ -38,6 +38,7 @@ from app.library.domain.media_types import (
     FILE_ROLE_LAUNCH,
     FILE_ROLE_PAGE,
     FILE_ROLE_PRIMARY,
+    FILE_ROLE_PREVIEW,
     FILE_ROLE_THUMBNAIL,
 )
 from app.library.domain.models import (
@@ -228,6 +229,37 @@ class ImportService:
         await self._ingest_series(self._resources, job, type_, layout, root, videos)
         job.done = 1
 
+    async def _try_register_preview(
+        self,
+        resources: ResourceRepository,
+        resource_id: int,
+        package: ResourcePackage,
+        role_paths: dict[str, Path],
+    ) -> None:
+        primary = role_paths.get(FILE_ROLE_PRIMARY)
+        if primary is None or primary.suffix.lower() not in {".heic", ".heif"}:
+            return
+        existing = await resources.get_file_by_role(resource_id, FILE_ROLE_PREVIEW)
+        if existing is not None:
+            return
+        try:
+            preview_dest = await asyncio.to_thread(package.put_preview, primary)
+            if preview_dest is None:
+                return
+            size = (await asyncio.to_thread(preview_dest.stat)).st_size
+            await resources.add_file(
+                resource_id,
+                path=str(preview_dest),
+                sha256=None,
+                size=size,
+                format_="jpg",
+                role=FILE_ROLE_PREVIEW,
+                commit=True,
+            )
+        except Exception as exc:
+            logger.warning("预览图登记失败 resource=%s: %s", resource_id, exc)
+            await resources.rollback()
+
     async def _try_register_thumbnail(
         self,
         resources: ResourceRepository,
@@ -237,6 +269,7 @@ class ImportService:
         role_paths: dict[str, Path],
     ) -> None:
         """缩略图失败只记日志，不回滚已复制的资源。"""
+        await self._try_register_preview(resources, resource_id, package, role_paths)
         thumb_src = source_for_grid_thumbnail(type_, role_paths)
         if thumb_src is None:
             return

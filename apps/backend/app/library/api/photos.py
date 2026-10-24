@@ -93,3 +93,11 @@ async def photo_thumbnail_backfill(
     """补齐缺失缩略图；force=true 时重建已有缩略图。"""
     return await service.backfill_thumbnails(force=force)
 
+
+@router.post("/{resource_id}/thumbnail/rebuild", response_model=ThumbnailBackfillResult)
+async def photo_thumbnail_rebuild(
+    resource_id: int,
+    service: PhotoTimelineService = Depends(_service),
+) -> ThumbnailBackfillResult:
+    """单张重建缩略图，并为 HEIC/HEIF 生成浏览器预览。"""
+    return await service.rebuild_thumbnail(resource_id)

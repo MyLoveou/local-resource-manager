@@ -16,7 +16,11 @@ from app.library.application.schemas import (
     ThumbnailBackfillResult,
 )
 from app.library.application.thumbnails import source_for_grid_thumbnail
-from app.library.domain.media_types import FILE_ROLE_PRIMARY, FILE_ROLE_THUMBNAIL
+from app.library.domain.media_types import (
+    FILE_ROLE_PREVIEW,
+    FILE_ROLE_PRIMARY,
+    FILE_ROLE_THUMBNAIL,
+)
 from app.library.domain.models import CategoryRule, ResourceStatus, ResourceType
 from app.library.infrastructure.repositories import CategoryRepository, ResourceRepository
 from app.shared.config import settings
@@ -218,6 +222,74 @@ class PhotoTimelineService:
             failed=failed,
         )
 
+    async def rebuild_thumbnail(self, resource_id: int) -> ThumbnailBackfillResult:
+        """Rebuild one resource's grid thumbnail and HEIC preview."""
+        resource = await self._resources.get(resource_id)
+        if resource is None or resource.id is None:
+            return ThumbnailBackfillResult(scanned=1, failed=1)
+        primary = next(
+            (file for file in resource.files if file.role == FILE_ROLE_PRIMARY),
+            None,
+        )
+        if primary is None or not primary.path:
+            return ThumbnailBackfillResult(scanned=1, failed=1)
+        source = Path(primary.path)
+        if not source.is_file():
+            return ThumbnailBackfillResult(scanned=1, failed=1)
+        layout = layout_for(resource.type)
+        if layout is None:
+            return ThumbnailBackfillResult(scanned=1, skipped=1)
+        thumb_source = source_for_grid_thumbnail(
+            resource.type, {FILE_ROLE_PRIMARY: source}
+        )
+        if thumb_source is None:
+            return ThumbnailBackfillResult(scanned=1, skipped=1)
+        package = ResourcePackage(
+            self._store_root,
+            resource.type,
+            resource.id,
+            self._ops,
+            cover_falls_back_to_primary=layout.cover_falls_back_to_primary,
+        )
+        try:
+            thumb_dest = await asyncio.to_thread(package.put_thumbnail, thumb_source)
+            if thumb_dest is None:
+                return ThumbnailBackfillResult(scanned=1, failed=1)
+            preview_dest = None
+            if source.suffix.lower() in {".heic", ".heif"}:
+                preview_dest = await asyncio.to_thread(package.put_preview, source)
+            for role in (FILE_ROLE_THUMBNAIL, FILE_ROLE_PREVIEW):
+                old = await self._resources.get_file_by_role(resource.id, role)
+                if old is not None and old.id is not None:
+                    await self._resources.delete_file_row(old.id, commit=False)
+            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
+            await self._resources.add_file(
+                resource.id,
+                path=str(thumb_dest),
+                sha256=None,
+                size=thumb_size,
+                format_="webp",
+                role=FILE_ROLE_THUMBNAIL,
+                commit=False,
+            )
+            if preview_dest is not None and preview_dest.is_file():
+                preview_size = (await asyncio.to_thread(preview_dest.stat)).st_size
+                await self._resources.add_file(
+                    resource.id,
+                    path=str(preview_dest),
+                    sha256=None,
+                    size=preview_size,
+                    format_="jpg",
+                    role=FILE_ROLE_PREVIEW,
+                    commit=False,
+                )
+            await self._resources.commit()
+            return ThumbnailBackfillResult(scanned=1, repaired=1)
+        except Exception:
+            await self._resources.rollback()
+            logger.exception("thumbnail rebuild failed resource=%s", resource_id)
+            return ThumbnailBackfillResult(scanned=1, failed=1)
+
     async def backfill_thumbnails(self, force: bool = False) -> ThumbnailBackfillResult:
         """Recreate missing grid thumbnails without touching primary files.
 
@@ -277,6 +349,26 @@ class PhotoTimelineService:
                     role=FILE_ROLE_THUMBNAIL,
                     commit=False,
                 )
+                if source.suffix.lower() in {".heic", ".heif"}:
+                    preview_dest = await asyncio.to_thread(package.put_preview, source)
+                    if preview_dest is not None:
+                        old_preview = await self._resources.get_file_by_role(
+                            resource.id, FILE_ROLE_PREVIEW
+                        )
+                        if old_preview is not None and old_preview.id is not None:
+                            await self._resources.delete_file_row(
+                                old_preview.id, commit=False
+                            )
+                        preview_size = (await asyncio.to_thread(preview_dest.stat)).st_size
+                        await self._resources.add_file(
+                            resource.id,
+                            path=str(preview_dest),
+                            sha256=None,
+                            size=preview_size,
+                            format_="jpg",
+                            role=FILE_ROLE_PREVIEW,
+                            commit=False,
+                        )
                 await self._resources.commit()
                 repaired += 1
             except Exception:

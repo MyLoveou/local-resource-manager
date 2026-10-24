@@ -331,6 +331,8 @@ class MetadataFieldsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((primary.width, primary.height), (40, 30))
             self.assertIsNotNone(got.thumbnail_path)
             self.assertTrue((self.store / "image" / str(rid) / "thumbs" / "grid.webp").is_file())
+            self.assertTrue((self.store / "image" / str(rid) / "thumbs" / "preview.jpg").is_file())
+            self.assertTrue(any(f.role == "preview" for f in got.files))
 
     async def test_import_jpeg_writes_camera_exif(self) -> None:
         src = self._jpeg_with_camera("detail.jpg")

@@ -1,10 +1,70 @@
 import logging
-import logging.handlers
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from app.shared.config import LoggingConfig
+
+
+class DailyFileHandler(logging.Handler):
+    """Write to prefix-YYYY-MM-DD.log and prune old daily files."""
+
+    def __init__(
+        self,
+        directory: Path,
+        prefix: str,
+        level: int,
+        *,
+        encoding: str = "utf-8",
+        retention_days: int = 14,
+    ) -> None:
+        super().__init__(level)
+        self.directory = directory
+        self.prefix = prefix
+        self.encoding = encoding
+        self.retention_days = retention_days
+        self._stream = None
+        self._date = ""
+
+    def _path_for(self, day: str) -> Path:
+        return self.directory / f"{self.prefix}-{day}.log"
+
+    def _open_for(self, day: str) -> None:
+        if self._stream is not None:
+            self._stream.close()
+        self._date = day
+        self._stream = self._path_for(day).open(
+            "a", encoding=self.encoding, buffering=1
+        )
+        self._prune(day)
+
+    def _prune(self, today: str) -> None:
+        cutoff = time.time() - self.retention_days * 86400
+        for path in self.directory.glob(f"{self.prefix}-*.log"):
+            try:
+                if path.name == f"{self.prefix}-{today}.log":
+                    continue
+                if path.is_file() and path.stat().st_mtime < cutoff:
+                    path.unlink()
+            except OSError:
+                pass
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            day = datetime.now().strftime("%Y-%m-%d")
+            if self._stream is None or day != self._date:
+                self._open_for(day)
+            assert self._stream is not None
+            self._stream.write(self.format(record) + "\n")
+        except Exception:
+            self.handleError(record)
+
+    def close(self) -> None:
+        if self._stream is not None:
+            self._stream.close()
+            self._stream = None
+        super().close()
 
 
 class LoggingApp:
@@ -38,24 +98,27 @@ class LoggingApp:
         handler.setFormatter(self._formatter())
         self.logger.addHandler(handler)
 
-    def _daily_handler(self, filename: Path, level: int) -> logging.Handler:
-        handler = logging.handlers.TimedRotatingFileHandler(
-            filename=filename,
-            when="midnight",
-            interval=1,
-            backupCount=LoggingConfig.log_retention_days,
+    def _daily_handler(self, prefix: str, level: int) -> logging.Handler:
+        handler = DailyFileHandler(
+            LoggingConfig.log_dir(),
+            prefix,
+            level,
             encoding=LoggingConfig.log_file_encoding,
-            delay=True,
-            utc=False,
+            retention_days=LoggingConfig.log_retention_days,
         )
-        handler.suffix = "%Y-%m-%d"
-        handler.setLevel(level)
         handler.setFormatter(self._formatter())
         return handler
 
-    def _prune_old_logs(self) -> None:
+    def _prune_legacy_logs(self) -> None:
         cutoff = time.time() - LoggingConfig.log_retention_days * 86400
-        for pattern in ("backend.log.*", "backend.error.log.*", "operations.log.*"):
+        for pattern in (
+            "backend.log",
+            "backend.error.log",
+            "operations.log",
+            "backend.log.*",
+            "backend.error.log.*",
+            "operations.log.*",
+        ):
             for path in LoggingConfig.log_dir().glob(pattern):
                 try:
                     if path.is_file() and path.stat().st_mtime < cutoff:
@@ -74,19 +137,17 @@ class LoggingApp:
             self.operation_logger.setLevel(logging.INFO)
             self.operation_logger.propagate = False
             self._ensure_log_dir()
-            self._prune_old_logs()
+            self._prune_legacy_logs()
             self._add_console_handler()
             self.logger.addHandler(
                 self._daily_handler(
-                    LoggingConfig.log_file(),
+                    "backend",
                     self._level(LoggingConfig.log_file_level),
                 )
             )
-            self.logger.addHandler(
-                self._daily_handler(LoggingConfig.log_file_error(), logging.ERROR)
-            )
+            self.logger.addHandler(self._daily_handler("backend.error", logging.ERROR))
             self.operation_logger.addHandler(
-                self._daily_handler(LoggingConfig.operation_log_file(), logging.INFO)
+                self._daily_handler("operations", logging.INFO)
             )
             LoggingApp._configured = True
         return self.logger

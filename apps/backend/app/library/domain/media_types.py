@@ -35,6 +35,7 @@ FILE_ROLE_PRIMARY = "primary"
 FILE_ROLE_COVER = "cover"
 FILE_ROLE_SUBTITLE = "subtitle"
 FILE_ROLE_THUMBNAIL = "thumbnail"
+FILE_ROLE_PREVIEW = "preview"
 FILE_ROLE_EPISODE = "episode"
 FILE_ROLE_EXTRA = "extra"
 FILE_ROLE_LAUNCH = "launch"
@@ -91,6 +92,7 @@ THUMB_DIR = "thumbs"
 THUMB_GRID_NAME = "grid.webp"
 THUMB_MAX_EDGE_PX = 480
 THUMB_WEBP_QUALITY = 80
+PREVIEW_NAME = "preview.jpg"
 
 FFPROBE_BIN = "ffprobe"
 FFPROBE_TIMEOUT_SEC = 30

@@ -104,65 +104,81 @@
         hint="还没有可显示的照片。导入后可按拍摄时间在这里浏览。"
       />
       <template v-else>
-        <section
-          v-for="group in months"
-          :key="group.key"
-          :id="`timeline-month-${group.key}`"
-          class="photo-timeline__month-section"
-        >
-          <h3 class="photo-timeline__month">{{ group.label }}</h3>
+        <div class="photo-timeline__virtual-spacer" :style="{ height: `${totalSize}px` }">
           <div
-            v-for="day in group.days"
-            :key="day.date"
-            class="photo-timeline__day-section"
+            v-for="vItem in virtualItems"
+            :key="virtualDays[vItem.index].key"
+            :data-index="vItem.index"
+            :ref="measureDay"
+            class="photo-timeline__virtual-item"
+            :style="{ transform: `translateY(${vItem.start}px)` }"
           >
-            <div class="photo-timeline__day-head">
-              <span class="photo-timeline__day-label">{{ dayLabel(day.date) }} · {{ day.count }} 张</span>
-              <div class="photo-timeline__day-actions">
-                <n-button text size="tiny" @click="editDateNote(day.date)">
-                  {{ dateNotes[day.date] ? '编辑备注' : '添加备注' }}
-                </n-button>
-                <n-button v-if="!hideFilters" text size="tiny" @click="openDay(day.date)">查看当天</n-button>
+            <template v-if="virtualDays[vItem.index]">
+              <h3 v-if="virtualDays[vItem.index].monthLabel" class="photo-timeline__month">
+                {{ virtualDays[vItem.index].monthLabel }}
+              </h3>
+              <div class="photo-timeline__day-section">
+                <div class="photo-timeline__day-head">
+                  <span class="photo-timeline__day-label">
+                    {{
+                      virtualDays[vItem.index].unknown
+                        ? `${virtualDays[vItem.index].day.count} 张`
+                        : `${dayLabel(virtualDays[vItem.index].date)} · ${virtualDays[vItem.index].day.count} 张`
+                    }}
+                  </span>
+                  <div class="photo-timeline__day-actions">
+                    <n-button
+                      v-if="!virtualDays[vItem.index].unknown"
+                      text
+                      size="tiny"
+                      @click="editDateNote(virtualDays[vItem.index].date)"
+                    >
+                      {{ dateNotes[virtualDays[vItem.index].date] ? '编辑备注' : '添加备注' }}
+                    </n-button>
+                    <n-button
+                      v-if="!hideFilters"
+                      text
+                      size="tiny"
+                      @click="openDay(virtualDays[vItem.index].unknown ? null : virtualDays[vItem.index].date)"
+                    >
+                      查看当天
+                    </n-button>
+                  </div>
+                </div>
+                <div
+                  v-if="!virtualDays[vItem.index].unknown && dateNotes[virtualDays[vItem.index].date]"
+                  class="photo-timeline__note"
+                >
+                  <strong v-if="dateNotes[virtualDays[vItem.index].date].title">
+                    {{ dateNotes[virtualDays[vItem.index].date].title }}
+                  </strong>
+                  <span
+                    v-if="dateNotes[virtualDays[vItem.index].date].locationName"
+                    class="photo-timeline__note-location"
+                  >
+                    {{ dateNotes[virtualDays[vItem.index].date].locationName }}
+                  </span>
+                  <p v-if="dateNotes[virtualDays[vItem.index].date].body">
+                    {{ dateNotes[virtualDays[vItem.index].date].body }}
+                  </p>
+                </div>
+                <div class="photo-timeline__row-wrap">
+                  <PhotoRow
+                    :photos="virtualDays[vItem.index].day.photos"
+                    :layout="
+                      virtualDays[vItem.index].unknown
+                        ? unknownLayout
+                        : layoutForDay(virtualDays[vItem.index].date)
+                    "
+                    :selected-ids="selectedId !== null ? [selectedId] : []"
+                    @select="selectPhoto"
+                    @open="openPhoto"
+                  />
+                </div>
               </div>
-            </div>
-            <div v-if="dateNotes[day.date]" class="photo-timeline__note">
-              <strong v-if="dateNotes[day.date].title">{{ dateNotes[day.date].title }}</strong>
-              <span v-if="dateNotes[day.date].locationName" class="photo-timeline__note-location">
-                {{ dateNotes[day.date].locationName }}
-              </span>
-              <p v-if="dateNotes[day.date].body">{{ dateNotes[day.date].body }}</p>
-            </div>
-            <div class="photo-timeline__row-wrap">
-              <PhotoRow
-                :photos="day.photos"
-                :layout="layoutForDay(day.date)"
-                :selected-ids="selectedId !== null ? [selectedId] : []"
-                @select="selectPhoto"
-                @open="openPhoto"
-              />
-            </div>
+            </template>
           </div>
-        </section>
-
-        <section v-if="timeline.unknownCount > 0" class="photo-timeline__month-section">
-          <h3 class="photo-timeline__month">未知时间</h3>
-          <div class="photo-timeline__day-section">
-            <div class="photo-timeline__day-head">
-              <span class="photo-timeline__day-label">{{ timeline.unknownCount }} 张</span>
-              <n-button v-if="!hideFilters" text size="tiny" @click="openDay(null)">查看全部</n-button>
-            </div>
-            <div class="photo-timeline__row-wrap">
-              <PhotoRow
-                :photos="timeline.unknownPhotos"
-                :layout="unknownLayout"
-                :selected-ids="selectedId !== null ? [selectedId] : []"
-                @select="selectPhoto"
-                @open="openPhoto"
-              />
-            </div>
-          </div>
-        </section>
-
+        </div>
         <p class="photo-timeline__total">共 {{ timeline.total }} 张</p>
       </template>
     </div>
@@ -181,6 +197,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { NButton, NCheckbox, NSelect } from 'naive-ui'
 import { useElementSize } from '@vueuse/core'
+import { useVirtualizer, type VirtualItem } from '@tanstack/vue-virtual'
 import justifiedLayout from 'justified-layout'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import JustifiedMediaGrid from '@/components/JustifiedMediaGrid/index.vue'
@@ -333,6 +350,72 @@ const months = computed<MonthGroup[]>(() => {
 
 const selectedId = computed(() => selection.selectedId)
 
+interface VirtualDay {
+  key: string
+  date: string
+  day: PhotoTimelineDay
+  monthLabel: string | null
+  unknown: boolean
+}
+
+const virtualDays = computed<VirtualDay[]>(() => {
+  const items: VirtualDay[] = []
+  for (const group of months.value) {
+    group.days.forEach((day, index) => {
+      items.push({
+        key: day.date,
+        date: day.date,
+        day,
+        monthLabel: index === 0 ? group.label : null,
+        unknown: false,
+      })
+    })
+  }
+  const unknown = timeline.value?.unknownPhotos ?? []
+  if (unknown.length > 0) {
+    items.push({
+      key: '__unknown__',
+      date: '',
+      day: { date: '', count: unknown.length, photos: unknown },
+      monthLabel: '未知时间',
+      unknown: true,
+    })
+  }
+  return items
+})
+
+function estimateDayHeight(item: VirtualDay): number {
+  const layout = item.unknown ? unknownLayout.value : layoutForDay(item.date)
+  const note = item.date ? dateNotes.value[item.date] : null
+  const month = item.monthLabel ? 36 : 0
+  const noteHeight = note ? (note.body ? 74 : 42) : 0
+  return Math.max(90, month + layout.containerHeight + 44 + noteHeight)
+}
+
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: virtualDays.value.length,
+    getScrollElement: () => scrollRef.value,
+    estimateSize: (index: number) => estimateDayHeight(virtualDays.value[index]),
+    overscan: 4,
+  })),
+)
+
+const virtualItems = computed(() => virtualizer.value.getVirtualItems())
+const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+watch(
+  [layoutWidth, dateNotes],
+  () => {
+    void nextTick(() => virtualizer.value.measure())
+  },
+  { deep: true, flush: 'post' },
+)
+
+function measureDay(element: unknown): void {
+  if (element instanceof Element) virtualizer.value.measureElement(element)
+}
+
 function allTiles() {
   const pending = timeline.value
   if (!pending) return []
@@ -353,8 +436,8 @@ const videoPlayerIds = computed(() =>
 )
 
 function scrollToMonth(key: string): void {
-  const el = document.getElementById(`timeline-month-${key}`)
-  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const index = virtualDays.value.findIndex((item) => item.date.startsWith(key))
+  if (index >= 0) virtualizer.value.scrollToIndex(index, { align: 'start' })
 }
 
 function dayLabel(date: string): string {
@@ -681,6 +764,19 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  position: relative;
+}
+
+.photo-timeline__virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.photo-timeline__virtual-item {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
 }
 
 .photo-timeline__grid {
@@ -693,19 +789,40 @@ onMounted(() => {
 }
 
 .photo-timeline__month {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 2;
   margin: 0;
   padding: 10px 16px 6px;
   background: var(--sm-color-bg-page);
   font-size: 16px;
   font-weight: 600;
-  backdrop-filter: blur(6px);
 }
 
 .photo-timeline__day-section {
-  padding: 0 16px;
+  position: relative;
+  padding: 0 16px 0 42px;
+
+  &::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 17px;
+    width: 1px;
+    background: color-mix(in srgb, var(--sm-color-border) 80%, transparent);
+    content: '';
+  }
+
+  &::after {
+    position: absolute;
+    top: 18px;
+    left: 12px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--sm-color-bg-page);
+    border-radius: 50%;
+    background: var(--sm-color-accent);
+    content: '';
+  }
 }
 
 .photo-timeline__day-head {

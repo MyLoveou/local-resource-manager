@@ -107,6 +107,15 @@
         <p class="set-modal__hint">
           资源库路径仅在空库时允许修改；已有资源请先备份/迁移。
         </p>
+        <div class="set-modal__backup-target">
+          <span>备份位置：{{ view?.system.backupDir || '—' }}</span>
+          <n-button
+            size="tiny"
+            @click="changeSystemPath({ key: 'backupDir', label: '备份', path: view?.system.backupDir ?? '' })"
+          >
+            更改
+          </n-button>
+        </div>
         <div class="set-modal__actions">
           <n-button
             size="small"
@@ -123,9 +132,16 @@
           >
             重建缩略图
           </n-button>
+          <n-button
+            size="small"
+            :loading="restoring"
+            @click="doRestore"
+          >
+            恢复备份
+          </n-button>
         </div>
         <p class="set-modal__hint">
-          备份包含数据库和图片文件。恢复需退出应用后运行后端的 restore_backup.py。
+          恢复会先校验备份，然后重启应用替换当前数据库和图片。
         </p>
       </n-tab-pane>
       <n-tab-pane
@@ -346,6 +362,7 @@ import {
   patchParseSettings,
   patchScrapeSettings,
   patchWatchSettings,
+  prepareRestore,
   type ChannelMode,
   type ChannelSetting,
   type SettingsView,
@@ -446,6 +463,7 @@ const activeTab = ref('scrape')
 const busy = ref(false)
 const backing = ref(false)
 const thumbRepairing = ref(false)
+const restoring = ref(false)
 const view = ref<SettingsView | null>(null)
 const tmdbKey = ref('')
 const bangumiToken = ref('')
@@ -695,6 +713,29 @@ async function doRepairThumbnails(): Promise<void> {
   }
 }
 
+async function doRestore(): Promise<void> {
+  const files = await window.electron?.selectFiles([
+    { name: '资源管理器备份', extensions: ['zip'] },
+  ])
+  const path = files?.[0]
+  if (!path) return
+  if (!window.confirm('恢复会替换当前数据库和图片，并在完成后重启应用。继续？')) return
+  restoring.value = true
+  try {
+    await prepareRestore(path)
+    notify.toast.success('备份已校验，应用即将重启并恢复')
+    if (window.electron?.relaunch) {
+      await window.electron.relaunch()
+    } else {
+      notify.toast.warning('请手动重启应用以完成恢复')
+    }
+  } catch (error) {
+    notify.fromError(error, { context: '准备恢复备份' })
+  } finally {
+    restoring.value = false
+  }
+}
+
 watch(
   [() => props.show, () => props.tab],
   ([open, tab]) => {
@@ -768,6 +809,16 @@ watch(
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.set-modal__backup-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .set-modal__label {

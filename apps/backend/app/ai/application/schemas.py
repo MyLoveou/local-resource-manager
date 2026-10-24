@@ -49,6 +49,31 @@ class AIStatus(ApiModel):
     index_updated_at: str | None = None
 
 
+class AIDeviceInfo(ApiModel):
+    cpu_count: int
+    memory_total_bytes: int
+    memory_available_bytes: int = 0
+    gpu_name: str = ""
+    vram_total_bytes: int = 0
+    vram_free_bytes: int = 0
+    platform: str = ""
+
+
+class AIPerformance(ApiModel):
+    device: AIDeviceInfo
+    mode: str = "balanced"
+    manual: int = 1
+    effective: int = 1
+    safe: int = 1
+    balanced: int = 1
+    max: int = 1
+
+
+class AIPerformancePatch(ApiModel):
+    mode: str | None = None
+    manual: int | None = None
+
+
 class AIJob(ApiModel):
     id: str
     kind: str

@@ -6,6 +6,7 @@ from app.shared.fs.file_ops import FileOps
 from app.shared.runtime_paths import library_root
 from app.library.domain.media_types import (
     FILE_ROLE_SUBTITLE,
+    PREVIEW_NAME,
     THUMB_DIR,
     THUMB_GRID_NAME,
 )
@@ -89,7 +90,7 @@ class ResourcePackage:
         return dest
 
     def put_thumbnail(self, source_image: Path) -> Path | None:
-        """从源图生成网格 WebP。失败返回 None。"""
+        """把源图缩成 WebP；失败返回 None。"""
         from app.library.application.thumbnails import write_grid_thumbnail
         from app.shared.log import logger
 
@@ -100,6 +101,28 @@ class ResourcePackage:
         except Exception as exc:
             logger.warning("缩略图生成失败 %s: %s", source_image, exc)
             return None
+
+    def preview_dest(self) -> Path:
+        dest = (self.root / THUMB_DIR / PREVIEW_NAME).resolve()
+        try:
+            dest.relative_to(self.root.resolve())
+        except ValueError as exc:
+            raise ValueError("destination outside package") from exc
+        return dest
+
+    def put_preview(self, source_image: Path) -> Path | None:
+        """生成浏览器可显示的 JPEG 预览，供 HEIC 等格式使用。"""
+        from app.library.application.previews import write_preview
+        from app.shared.log import logger
+
+        dest = self.preview_dest()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            return write_preview(source_image, dest)
+        except Exception as exc:
+            logger.warning("预览图生成失败 %s: %s", source_image, exc)
+            return None
+
 
     def resolve_cover(self, role_paths: dict[str, Path]) -> Path | None:
         """有 cover 角色用它；否则按类型是否回退到 primary。"""

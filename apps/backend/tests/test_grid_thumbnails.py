@@ -191,6 +191,25 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             assert got is not None
             self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in got.files))
 
+    async def test_rebuild_single_thumbnail(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("single.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            dest = self._thumb_path("image", rid)
+            dest.unlink()
+            thumb = next(
+                f for f in (await repo.get(rid)).files if f.role == FILE_ROLE_THUMBNAIL
+            )
+            await repo.delete_file_row(thumb.id)
+            result = await PhotoTimelineService(
+                repo, store_root=self.store, file_ops=self.ops
+            ).rebuild_thumbnail(rid)
+            self.assertEqual(result.repaired, 1)
+            self.assertTrue(dest.is_file())
+
     async def test_backfill_skips_ok_and_does_not_purge_on_fail(self) -> None:
         from app.library.application.photos import PhotoTimelineService
 

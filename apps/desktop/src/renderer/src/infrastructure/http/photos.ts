@@ -63,3 +63,15 @@ export async function backfillThumbnails(force = false): Promise<{
   })
   return data
 }
+
+export async function rebuildThumbnail(resourceId: number): Promise<{
+  scanned: number
+  repaired: number
+  skipped: number
+  failed: number
+}> {
+  const { data } = await client.post(
+    `/library/photos/${resourceId}/thumbnail/rebuild`,
+  )
+  return data
+}

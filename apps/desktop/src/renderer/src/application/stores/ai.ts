@@ -7,6 +7,7 @@ import {
   buildAIIndex,
   getAIJob,
   getAIJobs,
+  getAIPerformance,
   getAISuggestions,
   getAIStatus,
   getVLMRuntime,
@@ -18,7 +19,9 @@ import {
   selectOllamaBinary,
   selectVLMModel,
   startOllamaRuntime,
+  updateAIPerformance,
   type AIJob,
+  type AIPerformance,
   type AISearchResult,
   type AIStatus,
   type AISuggestionItem,
@@ -31,8 +34,12 @@ export const useAIStore = defineStore('ai', () => {
   const jobHistory = ref<AIJob[]>([])
   const suggestions = ref<AISuggestionItem[]>([])
   const suggestionsLoading = ref(false)
+  const suggestionsLoadingMore = ref(false)
+  const suggestionsHasMore = ref(false)
   const results = ref<AISearchResult | null>(null)
   const vlmRuntime = ref<AIVLMRuntime | null>(null)
+  const performance = ref<AIPerformance | null>(null)
+  const performanceSaving = ref(false)
   const recentQueries = ref<string[]>(loadRecentQueries())
   const loading = ref(false)
   const searching = ref(false)
@@ -98,20 +105,59 @@ export const useAIStore = defineStore('ai', () => {
   async function refreshSuggestions(): Promise<void> {
     suggestionsLoading.value = true
     try {
-      suggestions.value = await getAISuggestions(60)
+      suggestions.value = await getAISuggestions(60, 0)
+      suggestionsHasMore.value = suggestions.value.length >= 60
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? AI ????'
+      error.value = err instanceof Error ? err.message : '加载 AI 建议失败'
     } finally {
       suggestionsLoading.value = false
     }
   }
 
+  async function loadMoreSuggestions(): Promise<void> {
+    if (suggestionsLoadingMore.value || !suggestionsHasMore.value) return
+    suggestionsLoadingMore.value = true
+    try {
+      const next = await getAISuggestions(60, suggestions.value.length)
+      suggestions.value = [...suggestions.value, ...next]
+      suggestionsHasMore.value = next.length >= 60
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '加载 AI 建议失败'
+    } finally {
+      suggestionsLoadingMore.value = false
+    }
+  }
+
   async function refreshVLMRuntime(): Promise<void> {
+
     try {
       vlmRuntime.value = await getVLMRuntime()
     } catch (err) {
       error.value = err instanceof Error ? err.message : '?? Ollama ????'
     }
+  }
+
+  async function refreshPerformance(): Promise<void> {
+    try {
+      performance.value = await getAIPerformance()
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '读取设备信息失败'
+    }
+  }
+
+  async function savePerformance(payload: {
+    mode?: AIPerformance['mode']
+    manual?: number
+  }): Promise<void> {
+    performanceSaving.value = true
+    try {
+      performance.value = await updateAIPerformance(payload)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '保存 AI 并发设置失败'
+    } finally {
+      performanceSaving.value = false
+    }
+
   }
 
   async function selectOllama(path: string): Promise<void> {
@@ -298,9 +344,13 @@ export const useAIStore = defineStore('ai', () => {
     jobHistory,
     suggestions,
     suggestionsLoading,
+    suggestionsLoadingMore,
+    suggestionsHasMore,
     recentQueries,
     results,
     vlmRuntime,
+    performance,
+    performanceSaving,
     loading,
     searching,
     error,
@@ -315,7 +365,10 @@ export const useAIStore = defineStore('ai', () => {
     refresh,
     refreshJobs,
     refreshSuggestions,
+    loadMoreSuggestions,
     refreshVLMRuntime,
+    refreshPerformance,
+    savePerformance,
     clearJobHistory,
     installModel,
     installAnime,

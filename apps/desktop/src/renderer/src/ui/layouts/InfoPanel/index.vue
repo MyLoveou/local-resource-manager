@@ -271,6 +271,14 @@
       <div v-if="inspectorTab !== 'ai'" class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
+          <n-button
+            v-if="resource?.type === 'image'"
+            size="small"
+            :loading="thumbnailBusy"
+            @click="rebuildCurrentThumbnail"
+          >
+            重建缩略图
+          </n-button>
           <n-input
             v-if="needsScrapeQuery"
             size="small"
@@ -280,14 +288,6 @@
             @update:value="scrapeQuery = $event"
           />
           <n-button
-            v-if="canScrape"
-            size="small"
-            :disabled="scrapeBusy"
-            @click="openScrape(false)"
-          >
-            {{ resource?.scrapePending ? '查看候选' : '获取元数据' }}
-          </n-button>
-          <n-button
             v-if="isShellOpen"
             size="small"
             :disabled="!canShellOpen || shellBusy"
@@ -295,16 +295,7 @@
           >
             {{ shellActionLabel }}
           </n-button>
-          <n-button
-            size="small"
-            :disabled="!canReveal || shellBusy"
-            :title="revealHint"
-            @click="onReveal"
-          >
-            {{ revealLabel }}
-          </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
-          <n-button size="small" @click="openCollections">加入合集</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
             <n-button size="small">更多</n-button>
           </n-dropdown>
@@ -410,7 +401,7 @@ import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSel
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
-import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, rebuildThumbnail, resolveCardImageUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import {
@@ -476,6 +467,7 @@ const inspectorTabs = [
 const categories = ref<CategoryNode[]>([])
 const deleting = ref(false)
 const saving = ref(false)
+const thumbnailBusy = ref(false)
 const errorMessage = ref('')
 const editOpen = ref(false)
 const modalTextSnapshot = ref<{ title: string; description: string; synopsis: string } | null>(null)
@@ -634,16 +626,30 @@ async function onScrapeApplied(): Promise<void> {
 const moreOptions = computed((): DropdownOption[] => {
   const items: DropdownOption[] = []
   if (canChangeCover.value) items.push({ label: '更换封面', key: 'cover' })
-  if (canScrape.value) items.push({ label: '重新搜索元数据', key: 'scrapeForce', disabled: scrapeBusy.value })
+  if (canScrape.value) {
+    items.push({
+      label: resource.value?.scrapePending ? '查看候选' : '获取元数据',
+      key: 'scrape',
+      disabled: scrapeBusy.value,
+    })
+    if (resource.value?.scrapePending) {
+      items.push({ label: '重新搜索元数据', key: 'scrapeForce', disabled: scrapeBusy.value })
+    }
+  }
+  items.push({ label: '加入合集', key: 'collections' })
   if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
   if (isImage.value || isShellOpen.value || consume.value === 'overlay-model') {
-    items.push({ label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value })
+    items.push({ label: '打开默认应用', key: 'openDefault', disabled: shellBusy.value })
     if (!isWork.value) {
-      items.push({ label: '选择其他应用', key: 'openWith', disabled: shellBusy.value })
+      items.push({ label: '用其他应用打开', key: 'openWith', disabled: shellBusy.value })
     }
+  }
+  if (canReveal.value) {
+    items.push({ label: revealLabel.value, key: 'reveal', disabled: shellBusy.value })
   }
   return items
 })
+
 
 function primaryTakenAt(row: Resource): string | null | undefined {
   const files = row.files ?? []
@@ -718,6 +724,24 @@ async function updateCharacters(ids: number[]): Promise<void> {
     notify.fromError(error, { context: '更新角色失败' })
   } finally {
     characterBusy.value = false
+  }
+}
+
+async function rebuildCurrentThumbnail(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  thumbnailBusy.value = true
+  try {
+    const result = await rebuildThumbnail(id)
+    invalidateResourceCache(id)
+    resource.value = await getResource(id)
+    if (result.failed) notify.toast.error('缩略图重建失败')
+    else if (result.skipped) notify.toast.warning('没有可用的源图')
+    else notify.toast.success('缩略图已重建')
+  } catch (error) {
+    notify.fromError(error, { context: '重建缩略图' })
+  } finally {
+    thumbnailBusy.value = false
   }
 }
 
@@ -1358,8 +1382,20 @@ function onMoreSelect(key: string | number): void {
     void pickCoverImmediate()
     return
   }
+  if (key === 'scrape') {
+    openScrape(false)
+    return
+  }
   if (key === 'scrapeForce') {
     openScrape(true)
+    return
+  }
+  if (key === 'collections') {
+    openCollections()
+    return
+  }
+  if (key === 'reveal') {
+    onReveal()
     return
   }
   if (key === 'subtitle') {

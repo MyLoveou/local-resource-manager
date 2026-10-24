@@ -15,6 +15,7 @@ from app.ai.api.router import router as ai_router
 from app.ai.application.jobs import Job, jobs
 from app.ai.application.service import AIService
 from app.ai.infrastructure.model_store import MODEL_ID, is_installed
+from app.ai.infrastructure import ollama_runtime
 from app.library.api.router import router as library_router
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.seed import replace_remote_demo_covers
@@ -37,6 +38,7 @@ from app.shared.utils.watch_bridge import watch_bridge
 from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
 from app.settings.application.service import load_watch_dirs
+from app.settings.application.restore import apply_pending_restore
 from app.settings.domain.constants import KEY_SYSTEM
 from app.settings.infrastructure.settings_repo import SettingsRepository
 from app.library.domain.models import ResourceType
@@ -117,6 +119,31 @@ async def _auto_index_loop(factory) -> None:
             logger.warning("auto index failed: %s", exc)
 
 
+async def _auto_start_ollama(factory) -> None:
+    if not settings.ollama_auto_start:
+        return
+    if (settings.vlm_provider or "ollama").strip().lower() != "ollama":
+        return
+    try:
+        async with factory() as session:
+            preferred = await session.scalar(
+                text("SELECT value FROM ai_preferences WHERE key = 'ollama_bin'")
+            )
+        binary = ollama_runtime.detect_binary(str(preferred or ""))
+        if not binary:
+            logger.info("Ollama 自动启动跳过：未检测到 ollama.exe")
+            return
+        if await ollama_runtime.is_running():
+            logger.info("Ollama 已在运行：%s", settings.vlm_url)
+            return
+        await ollama_runtime.start_runtime(binary)
+        logger.info("Ollama 自动启动完成：%s", settings.vlm_url)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - AI service remains optional
+        logger.warning("Ollama 自动启动失败：%s", exc)
+
+
 def parse_watch_dirs(raw: dict[str, list[str]]) -> dict[ResourceType, list[str]]:
     """设置里的字符串键 → ResourceType；无效键记日志跳过。"""
     parsed: dict[ResourceType, list[str]] = {}
@@ -133,7 +160,10 @@ def parse_watch_dirs(raw: dict[str, list[str]]) -> dict[ResourceType, list[str]]
 async def lifespan(_: FastAPI):
     """启动：已有库则连接；无库则创建。演示封面仅在需要时处理。"""
     db_path = settings.db_path.resolve()
+    ollama_task: asyncio.Task[None] | None = None
     try:
+        if apply_pending_restore(db_path):
+            logger.info("已应用待恢复备份")
         is_new = ensure_db()
         _prune_ai_failures()
         if is_new:
@@ -173,6 +203,7 @@ async def lifespan(_: FastAPI):
             if settings.auto_index
             else None
         )
+        ollama_task = asyncio.create_task(_auto_start_ollama(factory))
 
         # 监视目录：环境变量优先（锁定 UI），否则读数据库设置
         env_dirs = parse_watch_dirs(settings.watch_dirs)
@@ -195,6 +226,8 @@ async def lifespan(_: FastAPI):
         raise
     yield
     logger.info("数据库关闭连接")
+    if ollama_task is not None:
+        ollama_task.cancel()
     await stop_scrape_worker()
     watch_manager.shutdown()
     await watch_bridge.stop()

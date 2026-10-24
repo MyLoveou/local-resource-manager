@@ -59,6 +59,11 @@ export interface BackupResult {
   path: string
 }
 
+export interface RestorePrepareResult {
+  path: string
+  restartRequired: boolean
+}
+
 let channelCache: Record<string, ChannelSetting> | null = null
 /** 记住消费渠道设置 */
 function rememberChannels(view: SettingsView): SettingsView {
@@ -110,7 +115,18 @@ export async function patchConsumeSettings(body: {
  * @returns BackupResult
  */
 export async function backupLibrary(): Promise<BackupResult> {
-  const { data } = await client.post<BackupResult>('/settings/backup/full')
+  const { data } = await client.post<BackupResult>('/settings/backup/full', null, {
+    timeout: 15 * 60 * 1000,
+  })
+  return data
+}
+
+export async function prepareRestore(path: string): Promise<RestorePrepareResult> {
+  const { data } = await client.post<RestorePrepareResult>(
+    '/settings/restore/prepare',
+    { path },
+    { timeout: 15 * 60 * 1000 },
+  )
   return data
 }
 

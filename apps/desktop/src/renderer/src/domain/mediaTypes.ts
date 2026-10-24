@@ -54,6 +54,7 @@ export const FILE_ROLE = {
   COVER: 'cover',
   SUBTITLE: 'subtitle',
   THUMBNAIL: 'thumbnail',
+  PREVIEW: 'preview',
   LAUNCH: 'launch',
   PAGE: 'page',
   EPISODE: 'episode',

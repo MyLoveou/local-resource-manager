@@ -186,12 +186,13 @@ class AnimeTagger:
             tags = list(dict.fromkeys(selected))
             if not tags:
                 raise RuntimeError("动漫标签模型没有返回有效标签")
-            caption = "动漫插画，" + "，".join(tags[:8])
+            display_tags = [TAG_ZH.get(tag, tag) for tag in tags]
+            caption = "动漫插画，" + "，".join(display_tags[:8])
             return CaptionDocument(
                 caption=caption,
-                short_caption="，".join(tags[:3]),
-                tags=tags,
-                attributes={"tags": tags, "anime_tagger": MODEL_ID},
+                short_caption="，".join(display_tags[:3]),
+                tags=display_tags,
+                attributes={"tags": tags, "display_tags": display_tags, "anime_tagger": MODEL_ID},
                 model_id=MODEL_ID,
                 prompt_version="wd14-v1",
             )

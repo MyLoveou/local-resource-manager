@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     watch_dirs: dict[str, list[str]] = {}
     auto_index: bool = True
     auto_index_interval: int = 30
+    ollama_auto_start: bool = True
     ai_failure_retention_days: int = 30
     search_exploration_rate: float = 0.15
     # 可选本地 VLM：Ollama 地址、默认视觉模型与超时。

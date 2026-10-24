@@ -14,6 +14,8 @@ from app.ai.application.schemas import (
     AIJob,
     AIFeedbackRequest,
     AIIndexRequest,
+    AIPerformance,
+    AIPerformancePatch,
     AISearchResponse,
     AISimilarFileRequest,
     AISuggestionItem,
@@ -37,6 +39,22 @@ def _service(session: AsyncSession) -> AIService:
 @router.get("/status", response_model=AIStatus)
 async def get_status(session: AsyncSession = Depends(get_session)) -> AIStatus:
     return await _service(session).status()
+
+
+@router.get("/performance", response_model=AIPerformance)
+async def get_performance(session: AsyncSession = Depends(get_session)) -> AIPerformance:
+    return await _service(session).performance()
+
+
+@router.patch("/performance", response_model=AIPerformance)
+async def update_performance(
+    body: AIPerformancePatch,
+    session: AsyncSession = Depends(get_session),
+) -> AIPerformance:
+    try:
+        return await _service(session).update_performance(body)
+    except AIServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.post("/models/install", response_model=AIJob)
@@ -130,9 +148,10 @@ async def build_index(
 @router.get("/suggestions", response_model=list[AISuggestionItem])
 async def suggestions(
     limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> list[AISuggestionItem]:
-    return await _service(session).suggestions(limit)
+    return await _service(session).suggestions(limit, offset)
 
 
 @router.get("/jobs", response_model=list[AIJob])

@@ -85,6 +85,15 @@ class BackupResult(ApiModel):
     path: str
 
 
+class RestorePrepareRequest(ApiModel):
+    path: str
+
+
+class RestorePrepareResult(ApiModel):
+    path: str
+    restart_required: bool = True
+
+
 class SystemSettingPatch(ApiModel):
     db_path: str | None = None
     library_path: str | None = None

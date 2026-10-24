@@ -26,6 +26,26 @@ export interface AIVLMModelInfo {
   selected: boolean
 }
 
+export interface AIDeviceInfo {
+  cpuCount: number
+  memoryTotalBytes: number
+  memoryAvailableBytes: number
+  gpuName: string
+  vramTotalBytes: number
+  vramFreeBytes: number
+  platform: string
+}
+
+export interface AIPerformance {
+  device: AIDeviceInfo
+  mode: 'safe' | 'balanced' | 'max' | 'manual'
+  manual: number
+  effective: number
+  safe: number
+  balanced: number
+  max: number
+}
+
 export interface AIStatus {
   dependencyReady: boolean
   model: AIModelInfo
@@ -120,6 +140,19 @@ export interface AISearchResult {
 
 export async function getAIStatus(): Promise<AIStatus> {
   const { data } = await client.get<AIStatus>('/ai/status')
+  return data
+}
+
+export async function getAIPerformance(): Promise<AIPerformance> {
+  const { data } = await client.get<AIPerformance>('/ai/performance')
+  return data
+}
+
+export async function updateAIPerformance(payload: {
+  mode?: AIPerformance['mode']
+  manual?: number
+}): Promise<AIPerformance> {
+  const { data } = await client.patch<AIPerformance>('/ai/performance', payload)
   return data
 }
 
@@ -273,9 +306,9 @@ export async function analyzeAIImages(
   return data
 }
 
-export async function getAISuggestions(limit = 30): Promise<AISuggestionItem[]> {
+export async function getAISuggestions(limit = 30, offset = 0): Promise<AISuggestionItem[]> {
   const { data } = await client.get<AISuggestionItem[]>('/ai/suggestions', {
-    params: { limit },
+    params: { limit, offset },
   })
   return data
 }

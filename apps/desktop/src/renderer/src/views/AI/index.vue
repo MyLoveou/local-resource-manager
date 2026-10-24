@@ -581,6 +581,93 @@
         :height="6"
       />
       <p v-if="captionJobActive || vlmPullActive" class="ai-muted">{{ jobProgressText }}</p>
+      <div class="ai-panel__divider" />
+      <div class="ai-panel__row">
+        <strong>动漫标签兜底</strong>
+        <n-tag
+          size="small"
+          :bordered="false"
+          :type="ai.status?.animeTaggerReady ? 'success' : 'default'"
+        >
+          {{ ai.status?.animeTaggerReady ? '已安装' : '未安装' }}
+        </n-tag>
+      </div>
+      <p class="ai-muted">
+        WD14 用于动漫图片；当 VLM 触发 token repeat 时自动生成标签。约
+        {{ ai.status?.animeTaggerReady ? formatBytes(ai.status?.animeTaggerSize ?? 0) : '326 MB' }}，不随安装包提供。
+      </p>
+      <div class="ai-panel__actions">
+        <n-button
+          v-if="!ai.status?.animeTaggerReady"
+          size="small"
+          type="primary"
+          :loading="animeJobActive"
+          :disabled="ai.jobActive"
+          @click="installAnime"
+        >
+          安装 WD14（约 326 MB）
+        </n-button>
+        <span v-else class="ai-muted">VLM 连续失败时会自动使用 WD14。</span>
+      </div>
+      <n-progress
+        v-if="animeJobActive"
+        class="ai-panel__progress"
+        type="line"
+        :percentage="jobPercent"
+        :height="6"
+      />
+      <p v-if="animeJobActive" class="ai-muted">{{ jobProgressText }}</p>
+      <div class="ai-panel__divider" />
+      <div class="ai-panel__row">
+        <strong>AI 并发</strong>
+        <n-tag size="small" :bordered="false">
+          当前 {{ ai.performance?.effective ?? 1 }} 路
+        </n-tag>
+      </div>
+      <template v-if="ai.performance">
+        <p class="ai-muted">
+          CPU {{ ai.performance.device.cpuCount }} 核 ·
+          内存 {{ formatBytes(ai.performance.device.memoryAvailableBytes) }} 可用 /
+          {{ formatBytes(ai.performance.device.memoryTotalBytes) }}
+        </p>
+        <p class="ai-muted">
+          <template v-if="ai.performance.device.gpuName">
+            GPU {{ ai.performance.device.gpuName }} ·
+            {{ formatBytes(ai.performance.device.vramFreeBytes) }} 显存可用 /
+            {{ formatBytes(ai.performance.device.vramTotalBytes) }}
+          </template>
+          <template v-else>未检测到 NVIDIA GPU，按 CPU 保守设置</template>
+        </p>
+        <p class="ai-muted">
+          推荐：不影响其他应用 {{ ai.performance.safe }} 路、微加速
+          {{ ai.performance.balanced }} 路、全力 {{ ai.performance.max }} 路。
+        </p>
+        <div class="ai-performance-modes">
+          <n-button
+            v-for="mode in performanceModes"
+            :key="mode.key"
+            size="small"
+            :type="ai.performance.mode === mode.key ? 'primary' : 'default'"
+            :disabled="ai.performanceSaving || ai.jobActive"
+            @click="ai.savePerformance({ mode: mode.key })"
+          >
+            {{ mode.label }}
+          </n-button>
+          <n-input-number
+            v-if="ai.performance.mode === 'manual'"
+            size="small"
+            :min="1"
+            :max="4"
+            :value="ai.performance.manual"
+            :disabled="ai.performanceSaving || ai.jobActive"
+            style="width: 100px"
+            @update:value="(value: number | null) => value && ai.savePerformance({ manual: value })"
+          />
+        </div>
+        <p class="ai-muted">
+          并发过高可能让 Ollama 排队、显存不足或影响其他应用；建议先按推荐值测试。
+        </p>
+      </template>
     </section>
 
     <section v-else-if="activeTab === 'jobs'" class="ai-panel">
@@ -747,6 +834,15 @@
           </n-button>
         </article>
       </div>
+      <div v-if="ai.suggestionsHasMore" class="ai-panel__actions">
+        <n-button
+          size="small"
+          :loading="ai.suggestionsLoadingMore"
+          @click="ai.loadMoreSuggestions()"
+        >
+          加载更多建议
+        </n-button>
+      </div>
     </section>
   </div>
 </template>
@@ -784,6 +880,13 @@ const similarModes = [
   { value: 'auto', label: '综合' },
   { value: 'semantic', label: '语义' },
   { value: 'duplicate', label: '近似重复' },
+] as const
+
+const performanceModes = [
+  { key: 'safe', label: '不影响其他应用' },
+  { key: 'balanced', label: '微加速' },
+  { key: 'max', label: '全力' },
+  { key: 'manual', label: '手动' },
 ] as const
 
 type TabValue = (typeof tabs)[number]['value']
@@ -1002,7 +1105,7 @@ async function chooseFile(): Promise<void> {
     }
     fileInput.value?.click()
   } catch (error) {
-    similarError.value = error instanceof Error ? error.message : '??????'
+    similarError.value = error instanceof Error ? error.message : '相似搜索失败'
   }
 }
 
@@ -1123,7 +1226,7 @@ async function index(full = false): Promise<void> {
 
 async function rebuildIndex(): Promise<void> {
   if (ai.jobActive) return
-  if (!window.confirm('?????? CLIP ??????????????????')) return
+  if (!window.confirm('将重建全部 CLIP 索引，图片较多时可能需要几分钟。继续？')) return
   await ai.buildIndex(true)
 }
 
@@ -1218,7 +1321,7 @@ async function applyEntity(
         undefined,
         [entity.id],
       )
-      if (result.failed.length) window.alert(result.failed[0]?.message || '??????')
+      if (result.failed.length) window.alert(result.failed[0]?.message || '添加角色失败')
     } else {
       const result = await batchResources(
         'add_persons',
@@ -1228,7 +1331,7 @@ async function applyEntity(
         undefined,
         [entity.id],
       )
-      if (result.failed.length) window.alert(result.failed[0]?.message || '???????')
+      if (result.failed.length) window.alert(result.failed[0]?.message || '添加扮演者失败')
     }
     await ai.refreshSuggestions()
   } finally {
@@ -1242,7 +1345,7 @@ async function useRecentQuery(value: string): Promise<void> {
 }
 
 async function clearJobHistory(): Promise<void> {
-  if (!window.confirm('???? AI ?????')) return
+  if (!window.confirm('确定清空 AI 任务历史？')) return
   await ai.clearJobHistory()
 }
 
@@ -1335,6 +1438,7 @@ onMounted(async () => {
   await ai.refreshJobs()
   await ai.refreshSuggestions()
   await ai.refreshVLMRuntime()
+  await ai.refreshPerformance()
   const selected = ai.vlmModelDetails.find((model) => model.selected)?.name
   if (selected) vlmModel.value = selected
   const id = Number(route.query.resourceId)
@@ -1436,6 +1540,14 @@ onMounted(async () => {
 
 .ai-panel__actions {
   margin-top: 16px;
+}
+
+.ai-performance-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .ai-file-input {

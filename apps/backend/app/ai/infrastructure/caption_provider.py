@@ -20,7 +20,7 @@ from PIL import Image, ImageOps
 
 from app.shared.config import settings
 
-PROMPT_VERSION = "caption-v3"
+PROMPT_VERSION = "caption-v4"
 PROMPT = """
 请分析这张图片，只返回一个 JSON 对象，不要 markdown，不要解释。
 描述主体、人物、场景、动作、颜色、物体、服饰；无法判断的字段用 null。
@@ -38,6 +38,29 @@ JSON 格式：
   "tags": ["3到8个中文标签"]
 }
 """.strip()
+
+
+def _prompt_with_context(context: dict | None) -> str:
+    if not context:
+        return PROMPT
+    labels = (
+        ("categories", "分类"),
+        ("tags", "已有标签"),
+        ("characters", "角色"),
+        ("persons", "扮演者"),
+    )
+    lines: list[str] = []
+    for key, label in labels:
+        values = [str(value).strip() for value in context.get(key, []) if str(value).strip()]
+        if values:
+            lines.append(f"{label}：{'、'.join(values[:12])}")
+    if not lines:
+        return PROMPT
+    return (
+        f"{PROMPT}\n\n"
+        "以下是用户已整理的人工信息，仅作参考，不要机械重复，不要编造不存在的关系：\n"
+        + "\n".join(lines)
+    )
 
 
 @dataclass
@@ -278,23 +301,23 @@ class CaptionProvider:
         self._ready = None
         self.model = model
 
-    def _post_body(self, image_base64: str) -> dict:
+    def _post_body(self, image_base64: str, prompt: str) -> dict:
         return {
             "model": self.model,
-            "prompt": PROMPT,
+            "prompt": prompt,
             "images": [image_base64],
             "stream": False,
             "options": {"temperature": 0.2, "num_ctx": 4096, "num_predict": 512},
         }
 
-    def _openai_body(self, image_base64: str) -> dict:
+    def _openai_body(self, image_base64: str, prompt: str) -> dict:
         return {
             "model": self.model,
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": PROMPT},
+                        {"type": "text", "text": prompt},
                         {
                             "type": "image_url",
                             "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
@@ -306,11 +329,13 @@ class CaptionProvider:
             "max_tokens": 512,
         }
 
-    async def analyze(self, path: Path) -> CaptionDocument:
+    async def analyze(self, path: Path, context: dict | None = None) -> CaptionDocument:
+        prompt = _prompt_with_context(context)
         if not await self.available():
             raise RuntimeError(
-                f"尚未安装可用的 VLM 模型，请先运行：ollama pull {settings.vlm_model}"
+                f"未找到可用的 VLM 模型，请先运行：ollama pull {settings.vlm_model}"
             )
+
         with Image.open(path) as opened:
             image = ImageOps.exif_transpose(opened).convert("RGB")
             image.thumbnail((768, 768), Image.Resampling.LANCZOS)
@@ -327,7 +352,7 @@ class CaptionProvider:
                     if self._is_openai:
                         response = await client.post(
                             f"{self._base_url}/chat/completions",
-                            json=self._openai_body(image_base64),
+                            json=self._openai_body(image_base64, prompt),
                         )
                         response.raise_for_status()
                         payload = response.json()
@@ -340,7 +365,7 @@ class CaptionProvider:
                     else:
                         response = await client.post(
                             f"{self._base_url}/api/generate",
-                            json=self._post_body(image_base64),
+                            json=self._post_body(image_base64, prompt),
                         )
                         response.raise_for_status()
                         payload = response.json()
@@ -349,7 +374,13 @@ class CaptionProvider:
                 break
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 last_error = exc
-                status = getattr(getattr(exc, "response", None), "status_code", None)
+                response = getattr(exc, "response", None)
+                body = str(getattr(response, "text", "") or "")
+                if "token repeat limit" in body.lower():
+                    # The same sampling request will repeat again; let the
+                    # service switch to the optional anime tagger immediately.
+                    raise
+                status = getattr(response, "status_code", None)
                 retryable = isinstance(exc, ValueError) or status is None or status >= 500
                 if attempt == 0 and retryable:
                     await asyncio.sleep(1.5)
