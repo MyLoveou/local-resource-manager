@@ -9,16 +9,17 @@ from app.scrape.application.providers import enqueue_after_import
 from app.scrape.application.queue import enqueue_job, worker_is_running
 from app.scrape.domain.models import ScrapeJobStatus
 from app.shared.log import logger
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 
 async def enqueue_search_after_import(
-    session: AsyncSession, resource_id: int | None, type_: ResourceType
+    session: AsyncSession, resource_id: int | None, type_: ResourceType, query: str | None = None
 ) -> None:
     if resource_id is None or not enqueue_after_import(type_):
         return
     try:
-        job = await create_or_reuse_job(session, resource_id, force=False)
+        # 有精确 query（如文件名里的 BV）时 force 新建任务直搜
+        job = await create_or_reuse_job(session, resource_id, force=bool(query), query=query)
         if job.id is not None and job.status == ScrapeJobStatus.QUEUED and worker_is_running():
             await enqueue_job(job.id)
     except Exception:

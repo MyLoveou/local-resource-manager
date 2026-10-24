@@ -29,11 +29,27 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 
-const activeKey = computed(() => route.path)
+const activeKey = computed(() => {
+  if (route.path.startsWith('/library/')) return '/library'
+  if (route.path.startsWith('/collections/')) return '/collections'
+  if (route.path.startsWith('/characters/')) return '/characters'
+  if (route.path.startsWith('/persons/')) return '/persons'
+  if (route.path.startsWith('/timelines/')) return '/timelines'
+  if (route.path.startsWith('/maps/')) return '/maps'
+  return route.path
+})
 
 const menuOptions = computed<MenuOption[]>(() => props.items.map(toMenuOption))
 
 function toMenuOption(item: MenuItem): MenuOption {
+  if (item.type === 'group') {
+    return {
+      type: 'group',
+      key: item.key,
+      label: item.label,
+      children: item.children?.map(toMenuOption),
+    }
+  }
   return {
     key: item.key,
     label: item.label,

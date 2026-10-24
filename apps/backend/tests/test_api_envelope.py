@@ -7,7 +7,11 @@ import unittest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.shared.constants import API_CODE_OK, API_STATUS_ERROR, API_STATUS_SUCCESS
+from app.shared.constants import (
+    API_CODE_OK,
+    API_STATUS_ERROR,
+    API_STATUS_SUCCESS,
+)
 
 
 class ApiEnvelopeTests(unittest.TestCase):

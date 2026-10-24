@@ -8,7 +8,7 @@
           :title="items[vItem.index].title"
           :cover-url="items[vItem.index].coverUrl"
           :badge="items[vItem.index].badge"
-          :selected="isSelected(items[vItem.index].id)"
+          :selected="items[vItem.index].selectable !== false && isSelected(items[vItem.index].id)"
           @click="handleCardClick($event, items[vItem.index].id)"
         />
       </div>
@@ -31,6 +31,8 @@ export interface VirtualGridItem {
   title: string
   coverUrl: string
   badge?: string
+  /** 合集卡等不可选中项传 false */
+  selectable?: boolean
 }
 
 const PADDING = 8

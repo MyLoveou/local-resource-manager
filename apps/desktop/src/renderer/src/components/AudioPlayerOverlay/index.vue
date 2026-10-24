@@ -1,29 +1,51 @@
 <template>
   <div v-show="player.visible" class="audio-player-overlay" role="dialog" aria-modal="true">
     <div class="audio-player-overlay__panel">
-      <p class="audio-player-overlay__title">音频</p>
-      <input
-        class="audio-player-overlay__progress"
-        type="range"
-        min="0"
-        max="1000"
-        :value="progress"
-        @input="onSeek"
-      />
+      <input class="audio-player-overlay__progress" type="range" min="0" max="1000" :value="progress" @input="onSeek" />
       <div class="audio-player-overlay__row">
-        <n-button size="small" @click="togglePlay">{{ playing ? '暂停' : '播放' }}</n-button>
-        <input type="range" min="0" max="100" :value="volume" @input="onVolume" />
+        <n-button size="small" circle quaternary :disabled="!player.hasPrev" aria-label="上一首" @click="player.prev">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon icon="mdi:skip-previous" />
+            </n-icon>
+          </template>
+        </n-button>
+        <n-button size="small" circle quaternary :aria-label="playing ? '暂停' : '播放'" @click="togglePlay">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon :icon="playing ? 'mdi:pause' : 'mdi:play'" />
+            </n-icon>
+          </template>
+        </n-button>
+        <n-button size="small" circle quaternary :disabled="!player.hasNext" aria-label="下一首" @click="player.next">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon icon="mdi:skip-next" />
+            </n-icon>
+          </template>
+        </n-button>
+        <div class="audio-player-overlay__row-volume">
+          <n-icon :size="18">
+            <Icon icon="mdi:volume-high" />
+          </n-icon>
+          <input type="range" min="0" max="100" :value="volume" @input="onVolume" />
+        </div>
       </div>
     </div>
     <n-button class="audio-player-overlay__close" size="small" circle aria-label="关闭" @click="close">
-      ×
+      <template #icon>
+        <n-icon :size="16">
+          <Icon icon="mdi:close" />
+        </n-icon>
+      </template>
     </n-button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton } from 'naive-ui'
+import { NButton, NIcon } from 'naive-ui'
+import { Icon } from '@iconify/vue'
 import { Howl } from 'howler'
 import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
 import { resolveLibraryMediaUrl } from '@/infrastructure/http'
@@ -158,6 +180,18 @@ onUnmounted(() => {
   gap: 12px;
   align-items: center;
   margin-top: 12px;
+}
+
+.audio-player-overlay__row-volume {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.audio-player-overlay__row :deep(.n-button) {
+  color: #f9fafb;
 }
 
 .audio-player-overlay__close {

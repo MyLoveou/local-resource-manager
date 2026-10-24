@@ -4,6 +4,8 @@
  */
 
 import type { StorageKind } from './libraryTypes'
+import type { CharacterBrief } from './character'
+import type { PersonBrief } from './person'
 
 /** 资源类型。anime/av 是作品，不是单集。 */
 export type ResourceType =
@@ -48,6 +50,11 @@ export interface Resource {
   extra?: Record<string, unknown>
   /** 有未确认的刮削候选 */
   scrapePending?: boolean
+  /** 照片时间线：null/undefined=按 EXIF 自动；true/false=手动 */
+  timelineVisible?: boolean | null
+  mapVisible?: boolean | null
+  characters?: CharacterBrief[]
+  persons?: PersonBrief[]
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -56,7 +63,7 @@ export interface Resource {
   files?: ResourceFile[]
   todos?: ResourceTodo[]
   /** 独立分类词条，不是资源 type */
-  category?: Category | null
+  categories?: Category[]
   /** 仅 anime/av 详情：季集树 */
   seasons?: SeriesSeason[]
   extras?: SeriesExtra[]
@@ -122,6 +129,19 @@ export interface ResourceFile {
   bitrate?: number | null
   /** 图片拍摄时间（EXIF） */
   exifTakenAt?: string | null
+  /** WGS84 纬度 */
+  exifLat?: number | null
+  /** WGS84 经度 */
+  exifLng?: number | null
+  /** 机身 */
+  exifCamera?: string | null
+  /** 镜头 */
+  exifLens?: string | null
+  exifIso?: number | null
+  /** 光圈，如 f/2.8 */
+  exifAperture?: string | null
+  /** 快门，如 1/125 */
+  exifShutter?: string | null
   createdAt?: string | null
 }
 
@@ -138,6 +158,10 @@ export interface ResourceTodo {
 export interface Category {
   id?: number
   name: string
+  type?: ResourceType
+  parentId?: number | null
+  sort?: number
+  isSystem?: boolean
 }
 
 /** 标签 */
@@ -153,7 +177,7 @@ export interface MetadataDraft {
   synopsis: string
   author: string
   ratingStars: number
-  categoryName: string | null
+  categoryIds: number[]
   tagNames: string[]
   tagInput: string
   pendingCoverPath: string | null
@@ -185,6 +209,21 @@ export interface ResourcePageQuery {
   afterKey?: string | null
   q?: string
   tagIds?: number[]
+  categoryId?: number | null
+  categoryIds?: number[]
+  uncategorized?: boolean
+  dateFrom?: string
+  dateTo?: string
+  takenDate?: string
+  untimed?: boolean
+  timelineVisible?: boolean
+  timelineMedia?: boolean
+  mapVisible?: boolean
+  mapOnly?: boolean
+  characterIds?: number[]
+  personIds?: number[]
+  /** 主库默认隐藏合集成员；true 时一并返回 */
+  includeCollected?: boolean
   sort?: string
   order?: 'asc' | 'desc'
 }

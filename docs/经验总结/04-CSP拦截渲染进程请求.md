@@ -19,13 +19,26 @@
 
 ## 修复
 
+当前 `apps/desktop/src/renderer/index.html`：
+
 ```html
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: http://127.0.0.1:*" />
+  content="default-src 'self';
+    connect-src 'self' http://127.0.0.1:* http://localhost:* https://tile.openstreetmap.org https://server.arcgisonline.com;
+    script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval';
+    worker-src 'self' blob:;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob: http://127.0.0.1:* http://localhost:* https://tile.openstreetmap.org https://server.arcgisonline.com https://picsum.photos https://fastly.picsum.photos;
+    media-src 'self' blob: http://127.0.0.1:* http://localhost:*" />
 ```
 
-- 端口动态 → 用 `http://127.0.0.1:*` 通配
-- `img-src` 也放行本机，供后续封面/缩略图本地服务
+- 端口动态 → 用 `http://127.0.0.1:*` 通配；
+- 地图瓦片（Leaflet）需要放行 `tile.openstreetmap.org` 和 Esri 域名；否则地图区域空白但没有后端请求。
+- `script-src` 允许 wasm/eval，模型预览/部分库需要；
+- `img-src`/`media-src` 放行本机缩略图/视频，以及演示封面域名；
+- 生产环境若不再使用 picsum，可移除对应域名，收紧 CSP。
+
+> 注意：`default-src 'self'` 会兜底限制 `connect-src`。只改 `connect-src` 不要忘了 `img-src`/`media-src` 也有各自来源。
 
 ## 排查方法论（最重要）
 

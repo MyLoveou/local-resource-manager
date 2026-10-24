@@ -6,17 +6,19 @@ import os
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.settings.application.errors import SettingsError
-from app.settings.application.schemas import ScrapeSettingsPatch
+from app.settings.application.schemas import ScrapeSettingsPatch, SystemSettingPatch
 from app.settings.application.secrets import invalidate_secret_cache, tmdb_api_key
-from app.settings.application.service import backup_database, get_view, patch_scrape
+from app.settings.application.service import backup_database, backup_library, get_view, patch_scrape, pathc_system_settings
 from app.shared.db.migrations import migrate
 from app.shared import config
+from app.shared.runtime_paths import set_library_root
 
 
 class SettingsTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +44,7 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self) -> None:
         self._env.stop()
         self._db_patch.stop()
+        set_library_root(None)
         invalidate_secret_cache()
         await self.engine.dispose()
         self._tmp.cleanup()
@@ -76,6 +79,30 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(view.scrape.tmdb.env_locked)
         self.assertEqual(tmdb_api_key(), "fromenv1234")
 
+    async def test_system_paths_roundtrip(self) -> None:
+        library = self.root / "media"
+        extra = self.root / "logs-custom"
+        library.mkdir()
+        extra.mkdir()
+        async with self.factory() as session:
+            view = await pathc_system_settings(
+                session,
+                SystemSettingPatch(library_path=str(library), log_dir=str(extra)),
+                self.db_path,
+                "0.0.0",
+            )
+            self.assertEqual(Path(view.system.library_path), library.resolve())
+            self.assertEqual(Path(view.system.log_dir), extra.resolve())
+            self.assertEqual(Path(view.system.db_path), self.db_path.resolve())
+            again = await pathc_system_settings(
+                session,
+                SystemSettingPatch(backup_dir=str(self.root / "bak")),
+                self.db_path,
+                "0.0.0",
+            )
+            self.assertEqual(Path(again.system.library_path), library.resolve())
+            self.assertTrue(again.system.backup_dir.endswith("bak"))
+
     def test_backup_readable(self) -> None:
         result = backup_database(self.db_path)
         dest = Path(result.path)
@@ -86,3 +113,15 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreaterEqual(count, 0)
         finally:
             conn.close()
+
+    def test_full_backup_contains_database_and_library(self) -> None:
+        thumb = self.root / "library" / "image" / "1" / "thumbs" / "grid.webp"
+        thumb.parent.mkdir(parents=True)
+        thumb.write_bytes(b"thumb")
+        result = backup_library(self.db_path)
+        dest = Path(result.path)
+        self.assertTrue(dest.is_file())
+        with zipfile.ZipFile(dest) as archive:
+            names = set(archive.namelist())
+        self.assertIn("library.db", names)
+        self.assertIn("library/image/1/thumbs/grid.webp", names)

@@ -39,6 +39,43 @@
           </n-space>
         </n-radio-group>
       </template>
+      <div v-if="isTimelineMedia" class="timeline-toggle">
+        <n-checkbox
+          :checked="timelineVisible"
+          :disabled="busy"
+          @update:checked="(checked: boolean) => (timelineVisible = checked)"
+        >
+          计入时间线（默认按拍摄时间）
+        </n-checkbox>
+      </div>
+      <div v-if="isMapMedia" class="timeline-toggle">
+        <n-checkbox
+          :checked="mapVisible"
+          :disabled="busy"
+          @update:checked="(checked: boolean) => (mapVisible = checked)"
+        >
+          加入地图（需要 GPS）
+        </n-checkbox>
+      </div>
+      <p class="hint">整理信息（可选，应用整批）</p>
+      <n-select
+        v-model:value="categoryIds"
+        multiple
+        filterable
+        clearable
+        placeholder="导入后加入分类"
+        :options="categoryOptions"
+        :disabled="busy"
+      />
+      <n-select
+        v-model:value="tagIds"
+        multiple
+        filterable
+        clearable
+        placeholder="导入后添加标签"
+        :options="tagOptions"
+        :disabled="busy"
+      />
       <div class="actions">
         <n-button :disabled="busy" @click="step = 'type'">上一步</n-button>
         <n-button type="primary" :disabled="busy" @click="pickAndImport">选择并导入</n-button>
@@ -73,7 +110,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NModal, NButton, NRadio, NRadioGroup, NSpace, NProgress } from 'naive-ui'
+import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSelect, NSpace, NProgress } from 'naive-ui'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
 import { SourceKind } from '@/domain'
 
@@ -83,6 +120,12 @@ const {
   resourceType,
   sourceKind,
   storageKind,
+  timelineVisible,
+  mapVisible,
+  categoryIds,
+  tagIds,
+  categoryOptions,
+  tagOptions,
   job,
   busy,
   errorMessage,
@@ -93,6 +136,13 @@ const {
   goSource,
   pickAndImport,
 } = useLibraryImport()
+
+const isTimelineMedia = computed(
+  () => resourceType.value === 'image' || resourceType.value === 'video'
+)
+const isMapMedia = computed(
+  () => resourceType.value === 'image' || resourceType.value === 'video'
+)
 
 const percent = computed(() => {
   if (!job.value || job.value.total <= 0) return busy.value ? 10 : 0
@@ -107,6 +157,9 @@ const phaseLabel = computed(() => {
   if (job.value.phase === 'copy') return '正在复制…'
   if (job.value.phase === 'probe') return '正在计算元数据…'
   if (job.value.phase === 'hash') return '正在校验文件…'
+  if (job.value.phase === 'cover') return '正在生成封面…'
+  if (job.value.phase === 'thumb') return '正在生成缩略图…'
+  if (job.value.phase === 'index') return '正在加入抓取队列…'
   return '正在导入…'
 })
 

@@ -19,8 +19,12 @@ from app.scrape.application.providers.base import MetadataProvider, SearchHit
 from app.scrape.application.providers.tmdb import TmdbProvider
 from app.scrape.infrastructure.repo import ScrapeRepository
 from app.shared.db.migrations import migrate
-from app.shared.media_types import FILE_ROLE_PRIMARY
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.media_types import FILE_ROLE_PRIMARY
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 
 _BV = "BV1xx411c7mD"

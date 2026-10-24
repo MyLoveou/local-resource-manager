@@ -29,6 +29,8 @@
 11. 库列表深分页用 keyset；导入在后台 job 中进行，不挡住列表请求（`app-performance`）。
 12. 图片查看器只盖主网格；关闭与切张在图上；信息栏底栏主操作以外收进「更多」。
 13. 分类与标签是独立词表；换封面不替换主文件（`metadata-panel`）。
+14. 常驻文件监视仅限**用户显式添加**的源目录，事件驱动增量入库；入库仍复制进 owned 包。不得把源目录登记为可反复全量重扫的库根（D-20260927-01）。
+15. 后端在配置了 `BACKEND_TOKEN` 时校验 `Authorization: Bearer`；豁免清单集中在 `shared/constants.py`（健康检查后缀 `/health`、OpenAPI 文档、媒体流后缀 `/content`、`/scrape/proxy-image`）。token 为空 = 未启用鉴权（仅开发态，启动打 WARN）（D-20260927-06）。
 
 ## 禁止（已确认）
 
@@ -38,7 +40,7 @@
 - 把推测写成 `facts.md` 已确认句
 - 为本地 sidecar 先上 `/v1`（未另拍板前）
 - WCH / 词表治理需求仍为草案时当已定稿开工
-- 常驻文件监视、多用户账号
+- 多用户账号
 - 渲染进程对库目录做复制/移动/哈希（入库 IO 只在后端）
 - 把用户源目录登记为可重复扫描的库根（导入是一次性复制）
 
@@ -47,6 +49,10 @@
 ```powershell
 pnpm --filter desktop typecheck
 pnpm --filter desktop lint
+# OpenSpec CLI（仓库根 devDependency，勿依赖全局安装）
+pnpm exec openspec list
+# 后端测试（venv 已建 + pytest 已装）
+apps/backend/.venv/Scripts/python.exe -m pytest -q apps/backend/tests
 # 后端冒烟（venv 已建）
 apps/backend/.venv/Scripts/python -c "from app.main import app"
 # 开发启动

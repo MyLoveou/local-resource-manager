@@ -32,6 +32,9 @@ function isEnvelope(payload: unknown): payload is ApiEnvelope {
 const client = axios.create({
   baseURL: window.electron?.backend?.baseUrl ?? DEFAULT_BASE_URL,
   timeout: 10000,
+  // 数组参数序列化为重复键（tagIds=1&tagIds=2），FastAPI 的 list[int] Query 才能解析；
+  // 默认的 tagIds[]=1 形式会被静默丢弃，导致标签筛选不生效
+  paramsSerializer: { indexes: null },
 })
 
 /** 请求拦截：注入 token 鉴权头 */

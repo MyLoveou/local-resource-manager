@@ -3,7 +3,8 @@
 from pydantic import Field
 
 from app.scrape.domain.models import Candidate, ScrapeJob
-from app.shared.models import ApiModel, WorkCatalog
+from app.shared.models import ApiModel
+from app.library.domain.models import WorkCatalog
 
 
 class ScrapeJobCreate(ApiModel):

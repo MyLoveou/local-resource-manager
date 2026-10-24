@@ -2,10 +2,23 @@
  * 资源列表端点（infrastructure/http · 后端 /library/resources）
  */
 import client from './client'
+import { invalidateTags } from './vocab'
 import type { ResourcePage, ResourcePageQuery, Resource } from '@/domain'
 
 const DETAIL_CACHE_LIMIT = 50
 const detailCache = new Map<number, Resource>()
+
+/** 监视导入修订号（后端 /library/watch-revision） */
+export interface WatchRevision {
+  revision: number
+  type: string | null
+}
+
+/** 获取监视导入修订号：前端轮询，变化时刷新对应类型列表 */
+export async function getWatchRevision(): Promise<WatchRevision> {
+  const { data } = await client.get<WatchRevision>('/library/watch-revision')
+  return data
+}
 
 export function invalidateResourceCache(resourceId?: number): void {
   if (resourceId === undefined) {
@@ -32,9 +45,13 @@ export interface ResourcePatch {
   synopsis?: string | null
   author?: string | null
   rating?: number | null
-  categoryName?: string | null
+  categoryIds?: number[]
   tagNames?: string[]
   exifTakenAt?: string | null
+  timelineVisible?: boolean | null
+  mapVisible?: boolean | null
+  characterIds?: number[]
+  personIds?: number[]
 }
 
 /** 分页获取资源 */
@@ -50,6 +67,20 @@ export async function getResources(query: ResourcePageQuery = {}): Promise<Resou
       afterKey: query.afterKey,
       q: query.q,
       tagIds: query.tagIds,
+      categoryId: query.categoryId,
+      categoryIds: query.categoryIds,
+      uncategorized: query.uncategorized,
+      includeCollected: query.includeCollected,
+      takenDate: query.takenDate,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+      untimed: query.untimed,
+      timelineVisible: query.timelineVisible,
+      timelineMedia: query.timelineMedia,
+      mapVisible: query.mapVisible,
+      mapOnly: query.mapOnly,
+      characterIds: query.characterIds,
+      personIds: query.personIds,
       sort: query.sort,
       order: query.order,
     },
@@ -66,6 +97,7 @@ export async function getResource(resourceId: number): Promise<Resource> {
 
 export async function patchResource(resourceId: number, patch: ResourcePatch): Promise<Resource> {
   const { data } = await client.patch<Resource>(`/library/resources/${resourceId}`, patch)
+  if (patch.tagNames !== undefined) invalidateTags()
   return rememberDetail(data)
 }
 
@@ -122,7 +154,17 @@ export async function purgeResource(resourceId: number): Promise<{ ok: boolean }
   return data
 }
 
-export type ResourceBatchAction = 'trash' | 'restore' | 'purge'
+export type ResourceBatchAction =
+  | 'trash'
+  | 'restore'
+  | 'purge'
+  | 'add_tags'
+  | 'add_categories'
+  | 'remove_categories'
+  | 'add_characters'
+  | 'remove_characters'
+  | 'add_persons'
+  | 'remove_persons'
 
 export interface ResourceBatchFailedItem {
   id: number
@@ -136,9 +178,21 @@ export interface ResourceBatchResult {
 
 export async function batchResources(
   action: ResourceBatchAction,
-  ids: number[]
+  ids: number[],
+  tagNames?: string[],
+  categoryIds?: number[],
+  characterIds?: number[],
+  personIds?: number[],
 ): Promise<ResourceBatchResult> {
-  const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', { action, ids })
+  const { data } = await client.post<ResourceBatchResult>('/library/resources/batch', {
+    action,
+    ids,
+    ...(tagNames ? { tagNames } : {}),
+    ...(categoryIds ? { categoryIds } : {}),
+    ...(characterIds ? { characterIds } : {}),
+    ...(personIds ? { personIds } : {}),
+  })
   for (const id of ids) invalidateResourceCache(id)
+  if (action === 'add_tags') invalidateTags()
   return data
 }

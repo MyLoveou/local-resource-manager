@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 
 from app.shared.config import settings
-from app.shared.infrastructure.settings_repo import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB
+from app.settings.domain.constants import KEY_BANGUMI, KEY_MIKAN, KEY_TMDB
 
 DEFAULT_MIKAN = "https://mikanani.kas.pub"
 

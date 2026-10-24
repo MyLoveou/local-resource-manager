@@ -16,7 +16,11 @@ from app.library.application.use_cases import LibraryQueryService
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.main import app
 from app.shared.db.migrations import migrate
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 
 class LibrarySearchSortTests(unittest.IsolatedAsyncioTestCase):

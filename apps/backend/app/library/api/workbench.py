@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.workbench import add_work_directory, add_work_note, delete_work_note, record_consumption
 from app.shared.db.db import get_session
-from app.shared.models import ApiModel, Resource
+from app.shared.models import ApiModel
+from app.library.domain.models import Resource
 
 router = APIRouter(tags=["library-workbench"])
 

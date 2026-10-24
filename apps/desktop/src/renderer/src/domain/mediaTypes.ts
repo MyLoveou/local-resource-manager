@@ -4,6 +4,7 @@
  */
 import type { ResourceType } from './resource'
 import { TYPE_PROFILES, profileFor } from './libraryTypes'
+import { isSectionHidden } from './visibility'
 
 export {
   AUDIO_EXTENSIONS,
@@ -42,7 +43,7 @@ export const SUBTITLE_FILE_FILTER: FileDialogFilter = {
 export const COVER_FILE_FILTER: FileDialogFilter = RESOURCE_FILE_FILTERS.image
 
 export const ENABLED_IMPORT_TYPES: { value: ResourceType; label: string }[] = TYPE_PROFILES.filter(
-  (p) => p.type !== 'work_directory'
+  (p) => p.type !== 'work_directory' && !isSectionHidden(p.routePath)
 ).map((p) => ({
   value: p.type,
   label: p.label,
@@ -53,6 +54,7 @@ export const FILE_ROLE = {
   COVER: 'cover',
   SUBTITLE: 'subtitle',
   THUMBNAIL: 'thumbnail',
+  PREVIEW: 'preview',
   LAUNCH: 'launch',
   PAGE: 'page',
   EPISODE: 'episode',

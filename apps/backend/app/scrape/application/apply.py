@@ -15,7 +15,10 @@ from app.scrape.application.images import fetch_poster_bytes, normalize_https, u
 from app.scrape.application.providers.base import ScrapeDetail
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import Resource, WorkCatalog
+from app.library.domain.models import (
+    Resource,
+    WorkCatalog,
+)
 
 
 def _allowed_cover_set(detail: ScrapeDetail) -> set[str]:

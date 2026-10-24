@@ -38,10 +38,37 @@ class ConsumeSettingsOut(ApiModel):
     channels: dict[str, ChannelSetting]
 
 
+class WatchSettingsOut(ApiModel):
+    """监视目录：资源类型 → 目录列表。"""
+
+    dirs: dict[str, list[str]]
+    env_locked: bool = False
+
+
+class ParseRulesOut(ApiModel):
+    """视频文件名解析规则（每行一条正则，命名组 title/author/bv/ep/date）。"""
+
+    rules: list[str] = []
+    title_with_ep: bool = False
+    auto_collection: bool = False
+
+
 class SettingsView(ApiModel):
     scrape: ScrapeSettingsOut
     system: SystemSettingsOut
     consume: ConsumeSettingsOut
+    watch: WatchSettingsOut
+    parse: ParseRulesOut
+
+
+class WatchSettingsPatch(ApiModel):
+    dirs: dict[str, list[str]]
+
+
+class ParseRulesPatch(ApiModel):
+    rules: list[str] | None = None
+    title_with_ep: bool | None = None
+    auto_collection: bool | None = None
 
 
 class ConsumeSettingsPatch(ApiModel):
@@ -56,3 +83,20 @@ class ScrapeSettingsPatch(ApiModel):
 
 class BackupResult(ApiModel):
     path: str
+
+
+class RestorePrepareRequest(ApiModel):
+    path: str
+
+
+class RestorePrepareResult(ApiModel):
+    path: str
+    restart_required: bool = True
+
+
+class SystemSettingPatch(ApiModel):
+    db_path: str | None = None
+    library_path: str | None = None
+    log_dir: str | None = None
+    download_dir: str | None = None
+    backup_dir: str | None = None

@@ -30,3 +30,5 @@
 - 新路由挂对应域 `APIRouter`，由 `main.py` `include_router`
 - 迁移：`apps/backend/app/shared/db/migrations/`
 - 不把 seed 做成公开 POST
+- **`async def` 里不得直接调用同步阻塞 IO**（`os.walk` / `iterdir` / `shutil.*` / `subprocess.run` / `PIL.Image.open` 等）；必须 `await asyncio.to_thread(...)`。单进程单事件循环，一处阻塞会拖住同一进程的 `/health` 与列表请求（D-20260927-06、`platform-performance`）
+- 鉴权豁免清单集中在 `shared/constants.py` 的 `AUTH_EXEMPT_*` + `is_auth_exempt()`；不得在路由里写路径条件

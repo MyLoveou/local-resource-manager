@@ -1,19 +1,70 @@
 <template>
   <div class="resource-browser">
-    <BrowseControls :type="type" :status="status" :placeholder="searchPlaceholder" />
-    <p v-if="batchMessage" class="resource-browser__hint">{{ batchMessage }}</p>
-    <div v-if="loading && items.length === 0" class="resource-browser__state">加载中…</div>
-    <div v-else-if="error && items.length === 0" class="resource-browser__state">
-      <p>加载失败</p>
-      <button type="button" class="resource-browser__retry" @click="reset">重试</button>
+    <BrowseControls
+      v-if="!hideControls"
+      :type="type"
+      :status="status"
+      :placeholder="searchPlaceholder"
+    />
+    <p
+      v-if="batchMessage"
+      class="resource-browser__hint"
+    >
+      {{ batchMessage }}
+    </p>
+    <div
+      v-if="loading && items.length === 0"
+      class="resource-browser__state"
+    >
+      加载中…
     </div>
-    <EmptyGuide v-else-if="!loading && total === 0" :hint="resolvedEmptyHint" />
+    <div
+      v-else-if="error && items.length === 0"
+      class="resource-browser__state"
+    >
+      <p>加载失败</p>
+      <button
+        type="button"
+        class="resource-browser__retry"
+        @click="reset"
+      >
+        重试
+      </button>
+    </div>
+    <EmptyGuide
+      v-else-if="!loading && total === 0"
+      :hint="resolvedEmptyHint"
+    />
     <!-- 根据类型判断显示什么资源 --->
-    <VirtualGrid v-else class="resource-browser__grid" :items="gridItems" :selected-ids="gridSelectedIds"
-      @near-end="loadMore" @card-click="handleCardClick">
+    <JustifiedMediaGrid
+      v-else-if="useJustified"
+      class="resource-browser__grid"
+      :tiles="justifiedTiles"
+      :selected-ids="gridSelectedIds"
+      :has-more="hasMore"
+      :loading-more="loadingMore"
+      :total="total"
+      interactive="grid"
+      @near-end="loadMore"
+      @load-more="loadMore"
+      @card-click="handleCardClick"
+    />
+    <VirtualGrid
+      v-else
+      class="resource-browser__grid"
+      :items="gridItems"
+      :selected-ids="gridSelectedIds"
+      @near-end="loadMore"
+      @card-click="handleCardClick"
+    >
       <template #footer>
         <span v-if="loadingMore">加载中…</span>
-        <button v-else-if="error && items.length > 0" type="button" class="resource-browser__retry" @click="loadMore">
+        <button
+          v-else-if="error && items.length > 0"
+          type="button"
+          class="resource-browser__retry"
+          @click="loadMore"
+        >
           加载失败，点击重试
         </button>
         <span v-else-if="!hasMore && total > 0">已加载全部 {{ total }} 项</span>
@@ -23,31 +74,45 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import VirtualGrid from '@/components/VirtualGrid/index.vue'
+import JustifiedMediaGrid from '@/components/JustifiedMediaGrid/index.vue'
 import EmptyGuide from '@/components/EmptyGuide/index.vue'
 import BrowseControls from '@/components/BrowseControls/index.vue'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
+import { useViewOptionsStore } from '@/application/stores/viewOptions'
 import { useResourcePage } from '@/hooks/useResourcePage'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
 import { useSelectionStore } from '@/application/stores/selection'
-import { useLibraryStore } from '@/application/stores/library'
+import { useLibraryStore, type LibraryInvalidation } from '@/application/stores/library'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
 import { getResources, resolveCardImageUrl } from '@/infrastructure/http'
-import { consumeResource } from '@/infrastructure/consume/consumeResource'
-import { storeToRefs } from 'pinia'
-import type { ResourceStatus, ResourceType } from '@/domain'
+import { consumeKindOf, isCollectionCard, TYPE_PROFILES, type PhotoTile, type ResourceStatus, type ResourceType } from '@/domain'
 import type { ResourceBatchAction } from '@/infrastructure/http'
-import { PlayerByConsume } from '@/static'
+import { openResource } from '@/infrastructure/consume/consumeResource'
+import { PlayerByConsume } from '@/infrastructure/consume/players'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
-import { consumeKindOf } from '@/domain'
+import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
+import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
+import { useModelPreviewStore } from '@/application/stores/modelPreview'
+import { storeToRefs } from 'pinia'
 const BATCH_LIMIT = 200
 
 const props = defineProps<{
   type?: ResourceType
   status?: ResourceStatus
   emptyHint: string
+  /** ???????????????????? */
+  hideControls?: boolean
+  takenDate?: string
+  untimed?: boolean
+  timelineVisible?: boolean
+  timelineMedia?: boolean
+  includeCollectedOverride?: boolean
+  categoryIdsOverride?: number[]
+  ignoreUncategorized?: boolean
+  tagIdsOverride?: number[]
 }>()
 
 const isTrash = computed(() => props.status === 'trashed')
@@ -55,12 +120,15 @@ const selection = useSelectionStore()
 const library = useLibraryStore()
 const shellBatch = useShellBatchStore()
 const browse = useBrowseQueryStore()
+const viewOptions = useViewOptionsStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const searchPlaceholder = computed(() => (props.type ? '在本类中搜索' : isTrash.value ? '在回收站中搜索' : '在结果中筛选'))
 const resolvedEmptyHint = computed(() =>
-  session.value.q.trim() || session.value.tagIds.length ? '无匹配' : props.emptyHint
+  session.value.q.trim() || session.value.tagIds.length
+    ? '无匹配 · 搜索范围：标题 / 作者 / 描述 / 分类 / 标签 / 文件名'
+    : props.emptyHint
 )
-const { selectedIds } = storeToRefs(selection)
+const { selectedIds, selectedId } = storeToRefs(selection)
 const { batchMode, message: batchMessage, busy: batchBusy } = storeToRefs(shellBatch)
 const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = useResourcePage({
   type: () => props.type,
@@ -68,31 +136,82 @@ const { items, total, hasMore, loading, loadingMore, error, reset, loadMore } = 
   q: () => session.value.q,
   sort: () => session.value.sort,
   order: () => session.value.order,
-  tagIds: () => session.value.tagIds,
+  tagIds: () => props.tagIdsOverride ?? session.value.tagIds,
+  characterIds: () => session.value.characterIds,
+  personIds: () => session.value.personIds,
+  categoryIds: () => props.categoryIdsOverride ?? session.value.categoryIds,
+  uncategorized: () =>
+    props.ignoreUncategorized === true ? false : session.value.uncategorized,
+  includeCollected: () =>
+    props.includeCollectedOverride === true ? true : viewOptions.includeCollected,
+  takenDate: () => props.takenDate,
+  untimed: () => props.untimed ?? false,
+  timelineVisible: () => (props.timelineVisible === true ? true : undefined),
+  timelineMedia: () => props.timelineMedia ?? false,
 })
 const { batchResources } = useResourceHandle()
 const imageViewer = useImageViewerStore()
+const videoPlayer = useVideoPlayerStore()
+const audioPlayer = useAudioPlayerStore()
+const modelPreview = useModelPreviewStore()
 const route = useRoute()
+const router = useRouter()
 
-imageViewer.bindPager({
-  hasMore: () => hasMore.value,
-  loadingMore: () => loadingMore.value,
-  loadMore,
-  imageIds: () => ids('image'),
+function pagerFor(resourceType: ResourceType) {
+  return {
+    hasMore: () => hasMore.value,
+    loadingMore: () => loadingMore.value,
+    loadMore,
+    imageIds: () => ids(resourceType),
+  }
+}
+
+function typesForPager(): readonly ResourceType[] {
+  return props.type ? [props.type] : TYPE_PROFILES.map((profile) => profile.type)
+}
+
+function unbindPagers(): void {
+  for (const type of typesForPager()) {
+    const kind = consumeKindOf(type)
+    if (kind) PlayerByConsume[kind].unbindPager?.()
+  }
+}
+
+const useJustified = computed(() => props.type === 'image' || props.timelineMedia === true)
+
+const gridSelectedIds = computed(() => {
+  if (batchMode.value) return selectedIds.value
+  return selectedId.value === null ? [] : [selectedId.value]
 })
 
-const gridSelectedIds = computed(() => (batchMode.value ? selectedIds.value : []))
+const selectableOrderedIds = computed(() =>
+  items.value.flatMap((item) =>
+    item.id !== undefined && !isCollectionCard(item) ? [item.id] : []
+  )
+)
 
-function handleCardClick(_event: MouseEvent, itemId: number | undefined): void {
+function handleCardClick(event: MouseEvent, itemId: number | undefined): void {
   if (itemId === undefined) return
-  if (batchMode.value) {
-    selection.toggle(itemId)
+  const item = items.value.find((row) => row.id === itemId)
+  // 合集卡：点击进入成员页
+  if (item && isCollectionCard(item)) {
+    void router.push(`/collections/${item.id}`)
     return
   }
-  const item = items.value.find((row) => row.id === itemId)
+  if (batchMode.value) {
+    if (event.shiftKey) {
+      selection.selectRange(selectableOrderedIds.value, itemId)
+    } else {
+      selection.toggle(itemId)
+    }
+    return
+  }
   if (selection.selectedId === itemId) {
     if (!item) return
-    void consumeResource(item, ids(item.type))
+    void openResource(item, {
+      playlist: ids(item.type),
+      pager: pagerFor(item.type),
+    })
     return
   }
   selection.select(itemId)
@@ -110,28 +229,76 @@ watch(
 
 function ids(type: ResourceType): number[] {
   return items.value.flatMap((item) =>
-    item.id !== undefined && item.type === type ? [item.id] : []
+    item.id !== undefined && !isCollectionCard(item) && item.type === type ? [item.id] : []
   )
 }
 
-async function runBatch(action: ResourceBatchAction): Promise<void> {
+async function runBatch(
+  action: ResourceBatchAction,
+  tagNames?: string[],
+  categoryIds?: number[],
+  characterIds?: number[],
+  personIds?: number[],
+): Promise<boolean> {
   const ids = [...selectedIds.value]
-  if (ids.length === 0) return
+  if (ids.length === 0) {
+    batchMessage.value = '没有选中的资源'
+    return false
+  }
   const live = shellBatch.ticket()
   batchBusy.value = true
   batchMessage.value = ''
+  let ok = 0
+  let failed = 0
   try {
-    const result = await batchResources(action, ids)
-    library.bump(null)
-    if (!shellBatch.isLive(live)) return
-    shellBatch.exit()
-    if (result.failed.length > 0) {
-      batchMessage.value = `完成 ${result.ok.length} 项，失败 ${result.failed.length} 项`
+    for (let index = 0; index < ids.length; index += BATCH_LIMIT) {
+      const result = await batchResources(
+        action,
+        ids.slice(index, index + BATCH_LIMIT),
+        tagNames,
+        categoryIds,
+        characterIds,
+        personIds,
+      )
+      ok += result.ok.length
+      failed += result.failed.length
     }
+    const scope: LibraryInvalidation = {
+      resources: props.type ? [props.type] : true,
+      home: true,
+    }
+    if (action === 'add_categories' || action === 'remove_categories') {
+      scope.categories = props.type ? [props.type] : true
+    }
+    if (action === 'add_tags') scope.tags = true
+    if (
+      action === 'add_characters' ||
+      action === 'remove_characters' ||
+      action === 'add_persons' ||
+      action === 'remove_persons'
+    ) scope.savedViews = true
+    if (action === 'trash' || action === 'restore' || action === 'purge') {
+      scope.collections = true
+    }
+    library.invalidate(scope)
+    if (!shellBatch.isLive(live)) return false
+    if (action === 'add_tags') {
+      batchMessage.value = failed > 0
+        ? `已为 ${ok} 项添加标签，失败 ${failed} 项`
+        : `已为 ${ok} 项添加标签`
+      if (failed === 0) selection.clear()
+    } else {
+      if (failed === 0) shellBatch.exit()
+      batchMessage.value = failed > 0
+        ? `完成 ${ok} 项，失败 ${failed} 项`
+        : `已完成 ${ok} 项`
+    }
+    return ok > 0 && failed === 0
   } catch (err) {
-    if (!shellBatch.isLive(live)) return
+    if (!shellBatch.isLive(live)) return false
     batchMessage.value = '批量操作失败'
     console.error(err)
+    return false
   } finally {
     if (shellBatch.isLive(live)) batchBusy.value = false
   }
@@ -169,7 +336,12 @@ async function emptyTrash(): Promise<void> {
       const result = await batchResources('purge', chunk)
       failed += result.failed.length
     }
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     if (!shellBatch.isLive(live)) return
     shellBatch.exit()
     if (failed > 0) {
@@ -216,13 +388,6 @@ watch(
 )
 
 watch(
-  () => library.revision,
-  () => {
-    if (imageViewer.visible) imageViewer.close()
-  }
-)
-
-watch(
   () => [imageViewer.visible, imageViewer.currentId, items.value, hasMore.value] as const,
   () => {
     if (!imageViewer.visible) return
@@ -241,27 +406,75 @@ watch(
   }
 )
 
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !batchMode.value) return
+  if (
+    imageViewer.visible ||
+    videoPlayer.visible ||
+    audioPlayer.visible ||
+    modelPreview.visible ||
+    document.querySelector('.n-modal, .n-drawer')
+  ) {
+    return
+  }
+  shellBatch.exit()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
+})
+
 onUnmounted(() => {
-  imageViewer.unbindPager()
+  window.removeEventListener('keydown', onGlobalKeydown)
+  unbindPagers()
   if (imageViewer.visible) imageViewer.close()
   shellBatch.unbind()
   const kind = props.type ? consumeKindOf(props.type) : undefined
   if (kind) PlayerByConsume[kind].close()
 })
 
+const justifiedTiles = computed<PhotoTile[]>(() =>
+  items.value.flatMap((item) => {
+    if (item.id === undefined || isCollectionCard(item)) return []
+    const primary = item.files?.find((file) => file.role === 'primary')
+    return [
+      {
+        id: item.id,
+        title: item.title,
+        kind: item.type === 'video' ? 'video' : 'image',
+        width: primary?.width ?? null,
+        height: primary?.height ?? null,
+        duration: primary?.duration ?? null,
+        thumbnailPath: item.thumbnailPath ?? null,
+        takenAt: primary?.exifTakenAt ?? null,
+      },
+    ]
+  })
+)
+
 const gridItems = computed(() =>
-  items.value.flatMap((item) =>
-    item.id === undefined
-      ? []
-      : [
+  items.value.flatMap((item) => {
+    if (item.id === undefined) return []
+    if (isCollectionCard(item)) {
+      return [
         {
           id: item.id,
           title: item.title,
           coverUrl: resolveCardImageUrl(item),
-          badge: item.scrapePending ? '候选' : undefined,
+          badge: `合集 · ${item.memberCount}`,
+          selectable: false,
         },
       ]
-  )
+    }
+    return [
+      {
+        id: item.id,
+        title: item.title,
+        coverUrl: resolveCardImageUrl(item),
+        badge: item.scrapePending ? '候选' : undefined,
+      },
+    ]
+  })
 )
 </script>
 

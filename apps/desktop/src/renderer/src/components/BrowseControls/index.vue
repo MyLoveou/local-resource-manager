@@ -15,7 +15,10 @@
       :value="session.sort"
       @update:value="(value: string) => patch({ sort: value })"
     />
-    <n-button size="small" @click="toggleOrder">
+    <n-button
+      size="small"
+      @click="toggleOrder"
+    >
       {{ session.order === 'desc' ? '降序' : '升序' }}
     </n-button>
     <n-select
@@ -29,15 +32,47 @@
       :value="session.tagIds"
       @update:value="(value: number[]) => patch({ tagIds: value ?? [] })"
     />
+    <n-select
+      size="small"
+      class="browse-controls__characters"
+      multiple
+      filterable
+      clearable
+      placeholder="角色"
+      :options="characterOptions"
+      :value="session.characterIds"
+      @update:value="(value: number[]) => patch({ characterIds: value ?? [] })"
+    />
+    <n-select
+      size="small"
+      class="browse-controls__characters"
+      multiple
+      filterable
+      clearable
+      placeholder="扮演者"
+      :options="personOptions"
+      :value="session.personIds"
+      @update:value="(value: number[]) => patch({ personIds: value ?? [] })"
+    />
+    <n-checkbox
+      v-if="props.status !== 'trashed' && !session.q"
+      size="small"
+      :checked="viewOptions.includeCollected"
+      @update:checked="(checked: boolean) => viewOptions.setIncludeCollected(checked)"
+    >
+      显示合集内资源
+    </n-checkbox>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton, NInput, NSelect } from 'naive-ui'
-import { getTags } from '@/infrastructure/http'
+import { NButton, NCheckbox, NInput, NSelect } from 'naive-ui'
+import { getTags, listCharacters, listPersons } from '@/infrastructure/http'
 import { SORT_LABELS, allowedSortKeys, type ResourceStatus, type ResourceType } from '@/domain'
 import { useBrowseQueryStore } from '@/application/stores/browseQuery'
+import { useViewOptionsStore } from '@/application/stores/viewOptions'
+import { useLibraryStore } from '@/application/stores/library'
 
 const props = defineProps<{
   type?: ResourceType
@@ -46,9 +81,13 @@ const props = defineProps<{
 }>()
 
 const browse = useBrowseQueryStore()
+const viewOptions = useViewOptionsStore()
+const library = useLibraryStore()
 const session = computed(() => browse.ensure(props.type, props.status))
 const localQ = ref(session.value.q)
 const tagOptions = ref<{ label: string; value: number }[]>([])
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personOptions = ref<{ label: string; value: number }[]>([])
 let timer: ReturnType<typeof setTimeout> | undefined
 
 const sortOptions = computed(() =>
@@ -66,18 +105,69 @@ watch(
 )
 
 onMounted(() => {
-  void getTags().then((tags) => {
-    tagOptions.value = tags.flatMap((tag) =>
-      tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
-    )
-  })
+  void loadTags()
+  void loadCharacters()
+  void loadPersons()
 })
+
+watch(
+  () => props.type,
+  () => {
+    void loadTags()
+  }
+)
+
+watch(
+  () => library.tagsRevision,
+  () => {
+    void loadTags()
+  }
+)
+
+async function loadCharacters(): Promise<void> {
+  try {
+    const characters = await listCharacters()
+    characterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} · ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch {
+    characterOptions.value = []
+  }
+}
+
+async function loadPersons(): Promise<void> {
+  try {
+    const persons = await listPersons()
+    personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
+  } catch {
+    personOptions.value = []
+  }
+}
+
+async function loadTags(): Promise<void> {
+  // 本类标签：给类型时只拉该类型实际打过的标签；全库页不传类型（全部标签）
+  const tags = await getTags(props.type)
+  tagOptions.value = tags.flatMap((tag) =>
+    tag.id === undefined ? [] : [{ label: tag.name, value: tag.id }]
+  )
+}
 
 onUnmounted(() => {
   if (timer) clearTimeout(timer)
 })
 
-function patch(partial: { q?: string; sort?: string; order?: 'asc' | 'desc'; tagIds?: number[] }): void {
+function patch(partial: {
+  q?: string
+  sort?: string
+  order?: 'asc' | 'desc'
+  tagIds?: number[]
+  characterIds?: number[]
+  personIds?: number[]
+  categoryIds?: number[]
+  uncategorized?: boolean
+  includeCollected?: boolean
+}): void {
   browse.patch(props.type, props.status, partial)
 }
 
@@ -115,6 +205,11 @@ function toggleOrder(): void {
 
 .browse-controls__tags {
   min-width: 160px;
+  flex: 1;
+}
+
+.browse-controls__characters {
+  min-width: 150px;
   flex: 1;
 }
 </style>

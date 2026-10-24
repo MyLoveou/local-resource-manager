@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.library.domain.type_profile import profile_for
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 SHARED_SORT: frozenset[str] = frozenset({"createdAt", "updatedAt", "title", "rating", "size"})
 CLARITY_PX: frozenset[int] = frozenset({480, 720, 1080, 1440, 2160, 4320})

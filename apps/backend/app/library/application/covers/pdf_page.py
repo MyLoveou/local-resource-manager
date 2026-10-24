@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.shared.log import logger
-from app.shared.media_types import THUMB_MAX_EDGE_PX
+from app.library.domain.media_types import THUMB_MAX_EDGE_PX
 
 
 def render_pdf_first_page(pdf: Path, dest_jpg: Path) -> bool:

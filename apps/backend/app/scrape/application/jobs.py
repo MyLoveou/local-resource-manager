@@ -18,7 +18,10 @@ from app.scrape.application.schemas import ScrapeCurrent, ScrapePreview
 from app.scrape.domain.models import ScrapeJob, ScrapeJobStatus
 from app.scrape.infrastructure.repo import ScrapeRepository
 from app.shared.log import logger
-from app.shared.models import Resource, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceType,
+)
 
 
 class ScrapeError(Exception):

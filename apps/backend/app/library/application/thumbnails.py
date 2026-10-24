@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.shared.log import logger
+from app.shared.image_support import register_optional_image_decoders
 from app.library.domain.type_profile import profile_for
-from app.shared.media_types import FILE_ROLE_COVER, FILE_ROLE_PRIMARY, THUMB_MAX_EDGE_PX, THUMB_WEBP_QUALITY
-from app.shared.models import ResourceType
+from app.library.domain.media_types import (
+    FILE_ROLE_COVER,
+    FILE_ROLE_PRIMARY,
+    THUMB_MAX_EDGE_PX,
+    THUMB_WEBP_QUALITY,
+)
+from app.library.domain.models import ResourceType
 
 
 def source_for_grid_thumbnail(type_: ResourceType, role_paths: dict[str, Path]) -> Path | None:
@@ -25,10 +31,12 @@ def source_for_grid_thumbnail(type_: ResourceType, role_paths: dict[str, Path]) 
 
 def write_grid_thumbnail(source: Path, dest: Path) -> Path | None:
     """把源图缩到最大边后写成 WebP。失败返回 None，不留半文件。"""
+    register_optional_image_decoders()
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".tmp")
     try:
         with Image.open(source) as image:
+            image = ImageOps.exif_transpose(image)
             image.load()
             frame = image.convert("RGBA") if image.mode in ("P", "RGBA", "LA") else image.convert("RGB")
             frame.thumbnail((THUMB_MAX_EDGE_PX, THUMB_MAX_EDGE_PX))

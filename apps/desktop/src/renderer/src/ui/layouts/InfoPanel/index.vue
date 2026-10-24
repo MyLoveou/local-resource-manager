@@ -1,7 +1,20 @@
 <template>
   <aside class="info-panel">
     <div v-if="resource" class="info-panel-content">
+      <div class="info-panel-tabs">
+        <button
+          v-for="tab in inspectorTabs"
+          :key="tab.value"
+          type="button"
+          class="info-panel-tab"
+          :class="{ 'info-panel-tab--active': inspectorTab === tab.value }"
+          @click="inspectorTab = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
       <div class="info-panel-body">
+        <template v-if="inspectorTab === 'detail'">
         <section class="info-panel-section">
           <img v-if="coverUrl" class="info-panel-cover" :class="{ 'info-panel-cover--open': isImage }" :src="coverUrl"
             alt="封面" decoding="async" @click="openViewerFromCover" />
@@ -42,7 +55,7 @@
             </button>
           </template>
           <template v-else>
-            <div class="info-panel-meta">格式 {{ formatLabel }}</div>
+            <div v-if="shown(formatLabel)" class="info-panel-meta">格式 {{ formatLabel }}</div>
             <div class="info-panel-meta">大小 {{ sizeLabel }}</div>
           </template>
           <div class="info-panel-meta">创建 {{ resource.createdAt || '—' }}</div>
@@ -50,16 +63,58 @@
             删除 {{ resource.deletedAt || '—' }}
           </div>
           <template v-if="isImage">
-            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-            <div class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div v-if="shown(cameraLabel)" class="info-panel-meta">机身 {{ cameraLabel }}</div>
+            <div v-if="shown(lensLabel)" class="info-panel-meta">镜头 {{ lensLabel }}</div>
+            <div v-if="shown(isoLabel)" class="info-panel-meta">ISO {{ isoLabel }}</div>
+            <div v-if="shown(apertureLabel)" class="info-panel-meta">光圈 {{ apertureLabel }}</div>
+            <div v-if="shown(shutterLabel)" class="info-panel-meta">快门 {{ shutterLabel }}</div>
+            <div class="info-panel-meta">
+              <n-checkbox
+                :checked="timelineEffective"
+                :disabled="timelineBusy"
+                @update:checked="toggleTimeline"
+              >
+                计入时间线
+              </n-checkbox>
+            </div>
+            <div v-if="hasGps || resource.mapVisible === true" class="info-panel-meta">
+              <n-checkbox
+                :checked="mapEffective"
+                :disabled="mapBusy"
+                @update:checked="toggleMap"
+              >
+                加入地图
+              </n-checkbox>
+            </div>
           </template>
           <template v-else-if="isVideo">
-            <div class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
-            <div class="info-panel-meta">清晰度 {{ clarityText }}</div>
-            <div class="info-panel-meta">时长 {{ durationLabel }}</div>
-            <div class="info-panel-meta">帧率 {{ fpsLabel }}</div>
-            <div class="info-panel-meta">码率 {{ bitrateLabel }}</div>
-            <div class="info-panel-meta">画质 {{ qualityText }}</div>
+            <div v-if="shown(resolutionLabel)" class="info-panel-meta">分辨率 {{ resolutionLabel }}</div>
+            <div v-if="shown(clarityText)" class="info-panel-meta">清晰度 {{ clarityText }}</div>
+            <div v-if="shown(durationLabel)" class="info-panel-meta">时长 {{ durationLabel }}</div>
+            <div v-if="shown(fpsLabel)" class="info-panel-meta">帧率 {{ fpsLabel }}</div>
+            <div v-if="shown(bitrateLabel)" class="info-panel-meta">码率 {{ bitrateLabel }}</div>
+            <div v-if="shown(qualityText)" class="info-panel-meta">画质 {{ qualityText }}</div>
+            <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
+            <div class="info-panel-meta">
+              <n-checkbox
+                :checked="timelineEffective"
+                :disabled="timelineBusy"
+                @update:checked="toggleTimeline"
+              >
+                计入时间线
+              </n-checkbox>
+            </div>
+            <div v-if="hasGps || resource.mapVisible === true" class="info-panel-meta">
+              <n-checkbox
+                :checked="mapEffective"
+                :disabled="mapBusy"
+                @update:checked="toggleMap"
+              >
+                加入地图
+              </n-checkbox>
+            </div>
             <div v-if="subtitleNames.length" class="info-panel-meta">
               字幕 {{ subtitleNames.join('、') }}
             </div>
@@ -84,33 +139,39 @@
         </section>
         <section class="info-panel-section">
           <div class="info-panel-section-title">编辑</div>
-          <div class="info-panel-label">作品简介</div>
-          <n-input
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 5 }"
-            :value="draft.synopsis"
-            placeholder="站点或自行填写的作品简介"
-            @update:value="draft.synopsis = $event"
-          />
-          <div class="info-panel-label">我的评价</div>
-          <n-input
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 5 }"
-            :value="draft.description"
-            placeholder="你对这部作品的评价，刮削不会覆盖"
-            @update:value="draft.description = $event"
-          />
-          <div class="info-panel-label">作者</div>
-        <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
-        <template v-if="isImage">
-          <div class="info-panel-label">拍摄</div>
-          <input
-            class="info-panel-taken"
-            type="datetime-local"
-            :value="draft.takenAtLocal"
-            @input="onTakenAtInput"
-          />
-        </template>
+          <template v-if="shown(draft.synopsis)">
+            <div class="info-panel-label">作品简介</div>
+            <n-input
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+              :value="draft.synopsis"
+              placeholder="站点或自行填写的作品简介"
+              @update:value="draft.synopsis = $event"
+            />
+          </template>
+          <template v-if="shown(draft.description)">
+            <div class="info-panel-label">我的评价</div>
+            <n-input
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+              :value="draft.description"
+              placeholder="你对这部作品的评价，刮削不会覆盖"
+              @update:value="draft.description = $event"
+            />
+          </template>
+          <template v-if="shown(draft.author)">
+            <div class="info-panel-label">作者</div>
+            <n-input :value="draft.author" placeholder="可选" @update:value="draft.author = $event" />
+          </template>
+          <template v-if="isImage && shown(draft.takenAtLocal)">
+            <div class="info-panel-label">拍摄</div>
+            <input
+              class="info-panel-taken"
+              type="datetime-local"
+              :value="draft.takenAtLocal"
+              @input="onTakenAtInput"
+            />
+          </template>
         <div class="info-panel-label">待办</div>
         <div class="info-panel-todos">
           <div v-for="todo in resource.todos ?? []" :key="todo.id ?? todo.content" class="info-panel-todo">
@@ -155,12 +216,17 @@
             />
           </div>
         </template>
+        </section>
+        </template>
+        <template v-else-if="inspectorTab === 'relation'">
+        <section class="info-panel-section">
+        <div class="info-panel-section-title">组织</div>
         <!-- 分类是独立词表，不是 type -->
         <div class="info-panel-label">评分</div>
         <n-rate allow-half :count="5" :value="draft.ratingStars" @update:value="draft.ratingStars = $event" />
         <div class="info-panel-label">分类</div>
-        <n-select filterable tag clearable :options="categoryOptions" :value="draft.categoryName"
-          @update:value="draft.categoryName = $event" />
+        <n-select multiple filterable clearable :options="categoryOptions" :value="draft.categoryIds"
+          @update:value="(value: number[]) => (draft.categoryIds = value ?? [])" />
         <div class="info-panel-label">标签（Enter 切词）</div>
         <div class="info-panel-tags">
           <n-tag v-for="name in draft.tagNames" :key="name" closable @close="removeTag(name)">
@@ -169,11 +235,50 @@
           <n-input :value="draft.tagInput" placeholder="回车添加" size="small" style="width: 120px"
             @update:value="draft.tagInput = $event" @keydown.enter.prevent="commitTagInput" />
         </div>
+        <div class="info-panel-label">角色</div>
+        <n-select
+          multiple
+          filterable
+          clearable
+          :options="characterOptions"
+          :value="characterIds"
+          :loading="characterBusy"
+          @update:value="(value: number[]) => void updateCharacters(value ?? [])"
+        />
+        <div class="info-panel-label">扮演者</div>
+        <n-select
+          multiple
+          filterable
+          clearable
+          :options="personOptions"
+          :value="personIds"
+          :loading="personBusy"
+          @update:value="(value: number[]) => void updatePersons(value ?? [])"
+        />
         </section>
+        </template>
+        <template v-else>
+        <section class="info-panel-section info-panel-ai-empty">
+          <div class="info-panel-section-title">AI</div>
+          <p>文字搜图、以图搜图、近似重复和 AI 建议可以在 AI 中心使用。</p>
+          <div class="info-panel-ai-actions">
+            <n-button v-if="resource?.type === 'image'" size="small" @click="openSimilar">找相似</n-button>
+            <n-button size="small" @click="openAICenter">打开 AI 中心</n-button>
+          </div>
+        </section>
+        </template>
       </div>
-      <div class="info-panel-footer">
+      <div v-if="inspectorTab !== 'ai'" class="info-panel-footer">
         <div class="info-panel-actions">
           <n-button size="small" :loading="saving" :disabled="!dirty" @click="savePanel">保存</n-button>
+          <n-button
+            v-if="resource?.type === 'image'"
+            size="small"
+            :loading="thumbnailBusy"
+            @click="rebuildCurrentThumbnail"
+          >
+            重建缩略图
+          </n-button>
           <n-input
             v-if="needsScrapeQuery"
             size="small"
@@ -183,28 +288,12 @@
             @update:value="scrapeQuery = $event"
           />
           <n-button
-            v-if="canScrape"
-            size="small"
-            :disabled="scrapeBusy"
-            @click="openScrape(false)"
-          >
-            {{ resource?.scrapePending ? '查看候选' : '获取元数据' }}
-          </n-button>
-          <n-button
             v-if="isShellOpen"
             size="small"
             :disabled="!canShellOpen || shellBusy"
             @click="onOpenDefault"
           >
             {{ shellActionLabel }}
-          </n-button>
-          <n-button
-            size="small"
-            :disabled="!canReveal || shellBusy"
-            :title="revealHint"
-            @click="onReveal"
-          >
-            {{ revealLabel }}
           </n-button>
           <n-button size="small" @click="openModal">编辑</n-button>
           <n-dropdown v-if="moreOptions.length > 0" trigger="click" :options="moreOptions" @select="onMoreSelect">
@@ -234,8 +323,61 @@
         <p v-if="errorMessage" class="info-panel-error">{{ errorMessage }}</p>
       </div>
       <EditResourceModal :show="editOpen" :draft="draft" :category-options="categoryOptions" :cover-url="modalCoverUrl"
-        :saving="saving" :allow-cover="canChangeCover" @update:show="onModalShow" @save="saveModal"
-        @cancel="cancelModal" @pick-cover="pickCoverForModal" />
+        :saving="saving" :allow-cover="canChangeCover" :show-taken-at="isImage" @update:show="onModalShow"
+        @save="saveModal" @cancel="cancelModal" @pick-cover="pickCoverForModal" />
+      <n-modal
+        :show="collectionOpen"
+        preset="card"
+        title="加入合集"
+        style="width: 360px"
+        :mask-closable="!collectionBusy"
+        :close-on-esc="!collectionBusy"
+        @update:show="onCollectionShow"
+      >
+        <p class="info-panel-collection-hint">
+          勾选后点「确定」保存；取消不会改动。
+        </p>
+        <div
+          v-for="collection in collectionList"
+          :key="collection.id"
+          class="info-panel-collection-row"
+        >
+          <n-checkbox
+            :checked="collectionMemberIds.has(collection.id)"
+            :disabled="collectionBusy"
+            @update:checked="(checked: boolean) => toggleCollection(collection.id, checked)"
+          >
+            {{ collection.title }}（{{ collection.memberCount }}）
+          </n-checkbox>
+        </div>
+        <div class="info-panel-collection-add">
+          <n-input
+            v-model:value="newCollectionTitle"
+            size="small"
+            placeholder="新合集名称"
+            :disabled="collectionBusy"
+            @keydown.enter.prevent="createAndAdd"
+          />
+          <n-button
+            size="small"
+            type="primary"
+            :disabled="!newCollectionTitle.trim() || collectionBusy"
+            @click="createAndAdd"
+          >
+            新建并加入
+          </n-button>
+        </div>
+        <template #footer>
+          <div class="info-panel-collection-actions">
+            <n-button size="small" :disabled="collectionBusy" @click="collectionOpen = false">
+              取消
+            </n-button>
+            <n-button size="small" type="primary" :loading="collectionBusy" @click="saveCollections">
+              确定
+            </n-button>
+          </div>
+        </template>
+      </n-modal>
       <ScrapeConfirmQueue
         v-model:show="scrapeOpen"
         :resource-ids="scrapeIds"
@@ -253,15 +395,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { NButton, NCheckbox, NDropdown, NInput, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
-import { getResource, getCategories, invalidateCategories, invalidateResourceCache, resolveCardImageUrl } from '@/infrastructure/http'
+import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, rebuildThumbnail, resolveCardImageUrl } from '@/infrastructure/http'
+import { openResource } from '@/infrastructure/consume/consumeResource'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
+import {
+  addCollectionItem,
+  createCollection,
+  listCollections,
+  removeCollectionItem,
+  resourceCollections,
+} from '@/infrastructure/http/collections'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
+import { useCategoryTreeStore } from '@/application/stores/categoryTree'
 import { useImageViewerStore } from '@/application/stores/imageViewer'
 import { useVideoPlayerStore } from '@/application/stores/videoPlayer'
 import {
@@ -273,8 +425,9 @@ import {
   revealablePath,
 } from '@/infrastructure/shell/openLibraryFile'
 import { useResourceHandle } from '@/hooks/useResourceHandle'
+import { notify } from '@/application/notify'
 import { storeToRefs } from 'pinia'
-import type { Category, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
+import type { CategoryNode, Collection, MetadataDraft, Resource, ResourceFile, ResourceTodo, SeriesEpisode } from '@/domain'
 import {
   COVER_FILE_FILTER,
   FILE_ROLE,
@@ -295,6 +448,7 @@ import {
 
 const selection = useSelectionStore()
 const library = useLibraryStore()
+const categoryStore = useCategoryTreeStore()
 const imageViewer = useImageViewerStore()
 const videoPlayer = useVideoPlayerStore()
 const shellBusy = ref(false)
@@ -303,9 +457,17 @@ const { deleteResource, restoreResource, purgeResource, patchResource, replaceCo
   useResourceHandle()
 
 const resource = ref<Resource | null>(null)
-const categories = ref<Category[]>([])
+const inspectorTab = ref<'detail' | 'relation' | 'ai'>('detail')
+const router = useRouter()
+const inspectorTabs = [
+  { value: 'detail', label: '详情' },
+  { value: 'relation', label: '关联' },
+  { value: 'ai', label: 'AI' },
+] as const
+const categories = ref<CategoryNode[]>([])
 const deleting = ref(false)
 const saving = ref(false)
+const thumbnailBusy = ref(false)
 const errorMessage = ref('')
 const editOpen = ref(false)
 const modalTextSnapshot = ref<{ title: string; description: string; synopsis: string } | null>(null)
@@ -314,6 +476,12 @@ let loadGen = 0
 const todoInput = ref('')
 const todoBusy = ref(false)
 const subtitleBusy = ref(false)
+const timelineBusy = ref(false)
+const mapBusy = ref(false)
+const characterBusy = ref(false)
+const characterOptions = ref<{ label: string; value: number }[]>([])
+const personBusy = ref(false)
+const personOptions = ref<{ label: string; value: number }[]>([])
 
 const draft = reactive<MetadataDraft>({
   title: '',
@@ -321,7 +489,7 @@ const draft = reactive<MetadataDraft>({
   synopsis: '',
   author: '',
   ratingStars: 0,
-  categoryName: null,
+  categoryIds: [],
   tagNames: [],
   tagInput: '',
   pendingCoverPath: null,
@@ -334,7 +502,7 @@ function applyResourceToDraft(row: Resource): void {
   draft.synopsis = row.synopsis ?? ''
   draft.author = row.author ?? ''
   draft.ratingStars = (row.rating ?? 0) / 2
-  draft.categoryName = row.category?.name ?? null
+  draft.categoryIds = (row.categories ?? []).map((category) => category.id).filter((id): id is number => id != null)
   draft.tagNames = (row.tags ?? []).map((t) => t.name)
   draft.tagInput = ''
   draft.pendingCoverPath = null
@@ -347,12 +515,14 @@ function snapshotEqualsSaved(): boolean {
   if (!row) return true
   const savedTags = (row.tags ?? []).map((t) => t.name).join('\0')
   const draftTags = [...draft.tagNames].join('\0')
+  const savedCategories = (row.categories ?? []).map((category) => category.id ?? 0).sort().join(',')
+  const draftCategories = [...draft.categoryIds].sort().join(',')
   return (
     draft.ratingStars === (row.rating ?? 0) / 2 &&
     (draft.description ?? '') === (row.description ?? '') &&
     (draft.synopsis ?? '') === (row.synopsis ?? '') &&
     (draft.author ?? '') === (row.author ?? '') &&
-    (draft.categoryName ?? '') === (row.category?.name ?? '') &&
+    savedCategories === draftCategories &&
     savedTags === draftTags &&
     draft.tagInput.trim() === '' &&
     draft.takenAtLocal === takenAtToLocalInput(primaryTakenAt(row))
@@ -456,20 +626,163 @@ async function onScrapeApplied(): Promise<void> {
 const moreOptions = computed((): DropdownOption[] => {
   const items: DropdownOption[] = []
   if (canChangeCover.value) items.push({ label: '更换封面', key: 'cover' })
-  if (canScrape.value) items.push({ label: '重新搜索元数据', key: 'scrapeForce', disabled: scrapeBusy.value })
+  if (canScrape.value) {
+    items.push({
+      label: resource.value?.scrapePending ? '查看候选' : '获取元数据',
+      key: 'scrape',
+      disabled: scrapeBusy.value,
+    })
+    if (resource.value?.scrapePending) {
+      items.push({ label: '重新搜索元数据', key: 'scrapeForce', disabled: scrapeBusy.value })
+    }
+  }
+  items.push({ label: '加入合集', key: 'collections' })
   if (isVideo.value) items.push({ label: '添加字幕', key: 'subtitle', disabled: subtitleBusy.value })
   if (isImage.value || isShellOpen.value || consume.value === 'overlay-model') {
-    items.push({ label: '用外部应用打开', key: 'openDefault', disabled: shellBusy.value })
+    items.push({ label: '打开默认应用', key: 'openDefault', disabled: shellBusy.value })
     if (!isWork.value) {
-      items.push({ label: '选择其他应用', key: 'openWith', disabled: shellBusy.value })
+      items.push({ label: '用其他应用打开', key: 'openWith', disabled: shellBusy.value })
     }
+  }
+  if (canReveal.value) {
+    items.push({ label: revealLabel.value, key: 'reveal', disabled: shellBusy.value })
   }
   return items
 })
 
+
 function primaryTakenAt(row: Resource): string | null | undefined {
   const files = row.files ?? []
   return (files.find((f) => f.role === FILE_ROLE.PRIMARY) ?? files[0])?.exifTakenAt
+}
+
+const timelineEffective = computed(() => {
+  const row = resource.value
+  if (!row || (row.type !== 'image' && row.type !== 'video')) return false
+  if (row.timelineVisible === true) return true
+  if (row.timelineVisible === false) return false
+  return Boolean(primaryTakenAt(row))
+})
+
+const hasGps = computed(() => {
+  const file = primaryFile()
+  return file?.exifLat != null && file?.exifLng != null
+})
+
+const characterIds = computed(() =>
+  (resource.value?.characters ?? []).map((character) => character.id),
+)
+const personIds = computed(() =>
+  (resource.value?.persons ?? []).map((person) => person.id),
+)
+
+async function loadCharacterOptions(): Promise<void> {
+  try {
+    const characters = await listCharacters()
+    characterOptions.value = characters.map((character) => ({
+      label: character.workName ? `${character.name} ? ${character.workName}` : character.name,
+      value: character.id,
+    }))
+  } catch {
+    characterOptions.value = []
+  }
+}
+
+async function loadPersonOptions(): Promise<void> {
+  try {
+    const persons = await listPersons()
+    personOptions.value = persons.map((person) => ({ label: person.name, value: person.id }))
+  } catch {
+    personOptions.value = []
+  }
+}
+
+async function updatePersons(ids: number[]): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  personBusy.value = true
+  try {
+    const patched = await patchResource(id, { personIds: ids })
+    resource.value = patched
+    library.invalidate({ resources: [patched.type], home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新人物失败' })
+  } finally {
+    personBusy.value = false
+  }
+}
+
+async function updateCharacters(ids: number[]): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  characterBusy.value = true
+  try {
+    const patched = await patchResource(id, { characterIds: ids })
+    resource.value = patched
+    library.invalidate({ resources: [patched.type], home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新角色失败' })
+  } finally {
+    characterBusy.value = false
+  }
+}
+
+async function rebuildCurrentThumbnail(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  thumbnailBusy.value = true
+  try {
+    const result = await rebuildThumbnail(id)
+    invalidateResourceCache(id)
+    resource.value = await getResource(id)
+    if (result.failed) notify.toast.error('缩略图重建失败')
+    else if (result.skipped) notify.toast.warning('没有可用的源图')
+    else notify.toast.success('缩略图已重建')
+  } catch (error) {
+    notify.fromError(error, { context: '重建缩略图' })
+  } finally {
+    thumbnailBusy.value = false
+  }
+}
+
+const mapEffective = computed(() => {
+  const row = resource.value
+  if (!row || (row.type !== 'image' && row.type !== 'video')) return false
+  if (row.mapVisible === true) return true
+  if (row.mapVisible === false) return false
+  return hasGps.value
+})
+
+async function toggleTimeline(checked: boolean): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  timelineBusy.value = true
+  try {
+    const patched = await patchResource(id, { timelineVisible: checked })
+    resource.value = patched
+    applyResourceToDraft(patched)
+    library.invalidate({ resources: [patched.type], home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新地图状态失败' })
+  } finally {
+    timelineBusy.value = false
+  }
+}
+
+async function toggleMap(checked: boolean): Promise<void> {
+  const id = selectedId.value
+  if (id === null) return
+  mapBusy.value = true
+  try {
+    const patched = await patchResource(id, { mapVisible: checked })
+    resource.value = patched
+    applyResourceToDraft(patched)
+    library.invalidate({ resources: [patched.type], savedViews: true, home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '更新地图状态失败' })
+  } finally {
+    mapBusy.value = false
+  }
 }
 
 function onTakenAtInput(event: Event): void {
@@ -488,6 +801,14 @@ const takenAtLabel = computed(() => {
   const local = takenAtToLocalInput(primaryFile()?.exifTakenAt)
   return local ? local.replace('T', ' ') : '—'
 })
+const cameraLabel = computed(() => primaryFile()?.exifCamera || '—')
+const lensLabel = computed(() => primaryFile()?.exifLens || '—')
+const isoLabel = computed(() => {
+  const iso = primaryFile()?.exifIso
+  return iso != null && iso > 0 ? String(iso) : '—'
+})
+const apertureLabel = computed(() => primaryFile()?.exifAperture || '—')
+const shutterLabel = computed(() => primaryFile()?.exifShutter || '—')
 const durationLabel = computed(() => formatDuration(primaryFile()?.duration))
 const fpsLabel = computed(() => formatFps(primaryFile()?.fps))
 const bitrateLabel = computed(() => formatBitrate(primaryFile()?.bitrate))
@@ -539,10 +860,25 @@ const catalogInfobox = computed(() => {
 const modalCoverUrl = computed(() => coverUrl.value)
 
 const categoryOptions = computed(() => {
-  const names = new Set(categories.value.map((c) => c.name))
-  if (draft.categoryName) names.add(draft.categoryName)
-  return [...names].sort().map((name) => ({ label: name, value: name }))
+  const out: { label: string; value: number }[] = []
+  const walk = (nodes: CategoryNode[], prefix = ''): void => {
+    for (const node of nodes) {
+      const path = prefix ? `${prefix} / ${node.name}` : node.name
+      out.push({ label: path, value: node.id })
+      if (node.children?.length) walk(node.children, path)
+    }
+  }
+  walk(categories.value)
+  return out
 })
+
+watch(
+  () => (resource.value ? categoryStore.trees[resource.value.type] : undefined),
+  (tree) => {
+    if (tree) categories.value = tree
+  },
+  { deep: true },
+)
 
 watch(
   selectedId,
@@ -565,7 +901,7 @@ watch(
       if (gen !== loadGen) return
       resource.value = row
       applyResourceToDraft(row)
-      void getCategories().then((cats) => {
+      void getCategoryTree(row.type).then((cats) => {
         if (gen !== loadGen) return
         categories.value = cats
       })
@@ -580,7 +916,7 @@ watch(
 )
 
 watch(
-  () => library.revision,
+  () => (resource.value ? library.resourceRevision(resource.value.type) : 0),
   async () => {
     const id = selectedId.value
     if (id === null || editOpen.value) return
@@ -598,11 +934,25 @@ watch(
   }
 )
 
+watch(
+  () => (resource.value ? library.categoryRevision(resource.value.type) : 0),
+  () => {
+    const type = resource.value?.type
+    if (type) void categoryStore.load(type, true)
+  }
+)
+
 function formatBytes(n: number | null | undefined): string {
   if (n == null || n <= 0) return '—'
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** 空值（''/占位 '—'）不展示：次要字段美观收敛 */
+function shown(text: string): boolean {
+  const value = text.trim()
+  return value !== '' && value !== '—'
 }
 
 function commitTagInput(): void {
@@ -636,18 +986,20 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
       synopsis: draft.synopsis || null,
       author: draft.author || null,
       rating: draft.ratingStars * 2,
-      categoryName: draft.categoryName,
+      categoryIds: [...draft.categoryIds],
       tagNames: [...draft.tagNames],
       ...(row.type === 'image' ? { exifTakenAt: localInputToTakenAt(draft.takenAtLocal) } : {}),
     })
     resource.value = patched
-    invalidateCategories()
     const pending = draft.pendingCoverPath
     applyResourceToDraft(patched)
     draft.pendingCoverPath = pending
-    if (includeTextFields || patched.coverPath !== row.coverPath) {
-      library.bump(patched.type)
-    }
+    library.invalidate({
+      resources: [patched.type],
+      categories: [patched.type],
+      tags: true,
+      home: true,
+    })
     return true
   } catch (error) {
     errorMessage.value = '保存失败'
@@ -660,6 +1012,18 @@ async function persist(includeTextFields: boolean): Promise<boolean> {
 
 async function savePanel(): Promise<void> {
   await persist(false)
+}
+
+function openAICenter(): void {
+  void router.push({ path: '/ai', query: { tab: 'search' } })
+}
+
+function openSimilar(): void {
+  if (resource.value?.id == null) return
+  void router.push({
+    path: '/ai',
+    query: { tab: 'similar', resourceId: String(resource.value.id) },
+  })
 }
 
 function openModal(): void {
@@ -683,7 +1047,7 @@ async function saveModal(): Promise<void> {
       const updated = await replaceCover(id, pending)
       resource.value = updated
       applyResourceToDraft(updated)
-      library.bump(updated.type)
+      library.invalidate({ resources: [updated.type], home: true })
     } catch (error) {
       errorMessage.value = '更换封面失败'
       draft.pendingCoverPath = pending
@@ -720,7 +1084,7 @@ async function pickCoverImmediate(): Promise<void> {
     const updated = await replaceCover(id, path)
     resource.value = updated
     applyResourceToDraft(updated)
-    library.bump(updated.type)
+    library.invalidate({ resources: [updated.type], home: true })
   } catch (error) {
     errorMessage.value = '更换封面失败'
     console.error(error)
@@ -850,13 +1214,14 @@ function openViewerFromCover(): void {
   if (id == null || row?.type !== 'image') return
   const bound = imageViewer.boundImageIds()
   const ids = bound.includes(id) ? bound : [id]
-  imageViewer.open(id, ids)
+  void openResource(row, { playlist: ids })
 }
 
 function playEpisode(fileId: number): void {
-  const id = resource.value?.id
-  if (id == null) return
-  videoPlayer.open(id, [id], fileId)
+  const row = resource.value
+  const id = row?.id
+  if (id == null || !row) return
+  void openResource(row, { playlist: [id], fileId })
 }
 
 function episodeButtonLabel(ep: SeriesEpisode): string {
@@ -905,7 +1270,7 @@ async function addNote(): Promise<void> {
     resource.value = await createWorkNote(id, noteTitle.value, noteContent.value)
     noteTitle.value = ''
     noteContent.value = ''
-    library.bump('work_directory')
+    library.invalidate({ resources: ['work_directory'], home: true })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '备注保存失败'
   } finally {
@@ -920,11 +1285,95 @@ async function removeNote(noteId: string): Promise<void> {
   errorMessage.value = ''
   try {
     resource.value = await deleteWorkNote(id, noteId)
-    library.bump('work_directory')
+    library.invalidate({ resources: ['work_directory'], home: true })
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '备注删除失败'
   } finally {
     noteBusy.value = false
+  }
+}
+
+const collectionOpen = ref(false)
+const collectionList = ref<Collection[]>([])
+/** 弹窗打开时的成员快照；确认时与勾选状态做差集 */
+const collectionOriginalIds = ref(new Set<number>())
+/** 勾选中的待提交状态（取消即丢弃） */
+const collectionMemberIds = ref(new Set<number>())
+const newCollectionTitle = ref('')
+const collectionBusy = ref(false)
+
+async function openCollections(): Promise<void> {
+  const id = resource.value?.id
+  if (id == null) return
+  collectionOpen.value = true
+  try {
+    const [all, mine] = await Promise.all([listCollections(), resourceCollections(id)])
+    collectionList.value = all
+    const ids = mine.map((collection) => collection.id)
+    collectionOriginalIds.value = new Set(ids)
+    collectionMemberIds.value = new Set(ids)
+  } catch (error) {
+    notify.fromError(error, { context: '读取合集' })
+  }
+}
+
+function onCollectionShow(value: boolean): void {
+  collectionOpen.value = value
+}
+
+function toggleCollection(collectionId: number, checked: boolean): void {
+  if (collectionBusy.value) return
+  const next = new Set(collectionMemberIds.value)
+  if (checked) next.add(collectionId)
+  else next.delete(collectionId)
+  collectionMemberIds.value = next
+}
+
+async function saveCollections(): Promise<void> {
+  const id = resource.value?.id
+  if (id == null) return
+  const toAdd = [...collectionMemberIds.value].filter(
+    (collectionId) => !collectionOriginalIds.value.has(collectionId)
+  )
+  const toRemove = [...collectionOriginalIds.value].filter(
+    (collectionId) => !collectionMemberIds.value.has(collectionId)
+  )
+  if (toAdd.length === 0 && toRemove.length === 0) {
+    collectionOpen.value = false
+    return
+  }
+  collectionBusy.value = true
+  try {
+    for (const collectionId of toAdd) await addCollectionItem(collectionId, id)
+    for (const collectionId of toRemove) await removeCollectionItem(collectionId, id)
+    collectionOpen.value = false
+    library.invalidate({ collections: true, resources: true, home: true })
+    notify.toast.success('已更新合集')
+  } catch (error) {
+    notify.fromError(error, { context: '更新合集' })
+  } finally {
+    collectionBusy.value = false
+  }
+}
+
+async function createAndAdd(): Promise<void> {
+  const id = resource.value?.id
+  const title = newCollectionTitle.value.trim()
+  if (id == null || !title) return
+  collectionBusy.value = true
+  try {
+    const created = await createCollection({ title })
+    await addCollectionItem(created.id, id)
+    newCollectionTitle.value = ''
+    const all = await listCollections()
+    collectionList.value = all
+    collectionOriginalIds.value = new Set([...collectionOriginalIds.value, created.id])
+    collectionMemberIds.value = new Set([...collectionMemberIds.value, created.id])
+    library.invalidate({ collections: true, resources: true, home: true })
+  } catch (error) {
+    notify.fromError(error, { context: '新建合集' })
+  } finally {
+    collectionBusy.value = false
   }
 }
 
@@ -933,8 +1382,20 @@ function onMoreSelect(key: string | number): void {
     void pickCoverImmediate()
     return
   }
+  if (key === 'scrape') {
+    openScrape(false)
+    return
+  }
   if (key === 'scrapeForce') {
     openScrape(true)
+    return
+  }
+  if (key === 'collections') {
+    openCollections()
+    return
+  }
+  if (key === 'reveal') {
+    onReveal()
     return
   }
   if (key === 'subtitle') {
@@ -958,7 +1419,12 @@ async function handleDelete(): Promise<void> {
   errorMessage.value = ''
   try {
     await deleteResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: [row.type],
+      categories: [row.type],
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()
@@ -977,7 +1443,12 @@ async function handleRestore(): Promise<void> {
   errorMessage.value = ''
   try {
     await restoreResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()
@@ -996,7 +1467,12 @@ async function handlePurge(): Promise<void> {
   errorMessage.value = ''
   try {
     await purgeResource(id)
-    library.bump(null)
+    library.invalidate({
+      resources: true,
+      categories: true,
+      collections: true,
+      home: true,
+    })
     imageViewer.close()
     videoPlayer.close()
     selection.clear()
@@ -1007,6 +1483,10 @@ async function handlePurge(): Promise<void> {
     deleting.value = false
   }
 }
+onMounted(() => {
+  void loadCharacterOptions()
+  void loadPersonOptions()
+})
 </script>
 
 <style scoped lang="less">
@@ -1035,11 +1515,58 @@ async function handlePurge(): Promise<void> {
   flex-direction: column;
 }
 
+.info-panel-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding-bottom: var(--sm-space-2);
+  border-bottom: 1px solid var(--sm-color-border);
+}
+
+.info-panel-tab {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sm-color-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.info-panel-tab:hover {
+  background: var(--sm-color-bg-muted);
+  color: var(--sm-color-text);
+}
+
+.info-panel-tab--active {
+  background: var(--sm-color-bg-muted);
+  color: var(--sm-color-text);
+  font-weight: 600;
+}
+
 .info-panel-body {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  padding-top: var(--sm-space-1);
+}
+
+.info-panel-ai-empty {
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+
+  p {
+    margin: 8px 0 12px;
+  }
+}
+
+.info-panel-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .info-panel-body :deep(.n-input),
@@ -1079,6 +1606,10 @@ async function handlePurge(): Promise<void> {
   &--open {
     cursor: zoom-in;
   }
+}
+
+.info-panel-characters {
+  margin-top: 8px;
 }
 
 .info-panel-title {
@@ -1214,5 +1745,27 @@ async function handlePurge(): Promise<void> {
   grid-column: 1;
   color: var(--sm-color-text-muted);
   font-size: 12px;
+}
+
+.info-panel-collection-hint {
+  margin: 0 0 10px;
+  color: var(--sm-color-text-muted);
+  font-size: 12px;
+}
+
+.info-panel-collection-row {
+  margin-bottom: 6px;
+}
+
+.info-panel-collection-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.info-panel-collection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

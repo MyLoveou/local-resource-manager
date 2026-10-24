@@ -58,8 +58,8 @@ def public_image_url(url: str | None) -> str | None:
         return None
     if allowed_poster(normalized):
         return normalized
-    from app.download.application.errors import DownloadError
-    from app.download.application.ssrf import validate_http_url
+    from app.shared.errors import DownloadError
+    from app.shared.utils.ssrf import validate_http_url
 
     try:
         validate_http_url(normalized)

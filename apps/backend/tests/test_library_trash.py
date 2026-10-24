@@ -20,7 +20,11 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.shared.db.migrations import migrate
 from app.shared.errors import InvalidStateError
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 from fastapi.testclient import TestClient
 
 from app.main import app
