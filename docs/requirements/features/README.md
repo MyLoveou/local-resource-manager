@@ -4,13 +4,14 @@
 
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## video-management（**L1 评审中** · 2026-10-25 · D-20261025-01）
+## video-management（**L1 已定稿 · S1 L3 已出** · 2026-10-25 · D-20261025-01）
 
 > 图片库阶段手验通过后的下一阶段。播放进度与续播（S1）→ 播放器体验与字幕（S2）→ 视频专属维度与刮削（S3）。
 
 | 文档 | 内容 |
 |------|------|
-| [`video-management/需求.md`](video-management/需求.md) | 现状与缺口、5 块 IN/OUT、切片顺序、V1–V14 验收、Q1–Q5 开放问题 |
+| [`video-management/需求.md`](video-management/需求.md) | 现状与缺口、5 块 IN/OUT、切片顺序、V1–V14 验收、Q1–Q5 已拍板 |
+| [`video-management/实现方案.md`](video-management/实现方案.md) | S1 L3：`0031` 迁移、4 个接口契约、文件清单、数据流、验收映射 |
 
 ## photo-management-next（**R1 已落地 · R2–R4 需求收集** · 2026-10-18）
 
