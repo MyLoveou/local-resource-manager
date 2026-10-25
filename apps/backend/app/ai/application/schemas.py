@@ -152,11 +152,20 @@ class AIEntitySuggestion(ApiModel):
     confidence: float | None = None  # 分类建议用；实体建议保持 None
 
 
+class AITagCandidate(ApiModel):
+    """AI 提议、但不在词表里的标签；`similar_to` 是最近义的用户标签。"""
+
+    name: str
+    similar_to: str | None = None
+    similarity: float | None = None
+
+
 class AISuggestionItem(ApiModel):
     resource_id: int
     title: str
     thumbnail_path: str | None = None
     tags: list[str] = []
+    new_tags: list[AITagCandidate] = []
     categories: list[AIEntitySuggestion] = []
     characters: list[AIEntitySuggestion] = []
     persons: list[AIEntitySuggestion] = []

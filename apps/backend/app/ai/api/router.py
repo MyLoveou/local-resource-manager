@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.application.schemas import (
     AIAnalyzeRequest,
     AIEntitySuggestion,
+    AITagCandidate,
     AIFusionRequest,
     AIFusionResponse,
     AIJob,
@@ -28,6 +29,7 @@ from app.ai.application.schemas import (
     VLMSelectRequest,
 )
 from app.ai.application.category_hint import suggest_categories
+from app.ai.application.tag_hint import new_tag_candidates
 from app.ai.application.service import AIService, AIServiceError
 from app.shared.db.db import get_session
 
@@ -155,11 +157,17 @@ async def suggestions(
 ) -> list[AISuggestionItem]:
     items = await _service(session).suggestions(limit, offset)
     # 分类建议在应用层补齐：service.py 已顶到文件规模基线，不往里加行
-    hints = await suggest_categories(session, [item.resource_id for item in items])
+    resource_ids = [item.resource_id for item in items]
+    hints = await suggest_categories(session, resource_ids)
+    new_tags = await new_tag_candidates(session, resource_ids)
     for item in items:
         item.categories = [
             AIEntitySuggestion(id=hit["id"], name=hit["name"], confidence=hit["confidence"])
             for hit in hints.get(item.resource_id, [])
+        ]
+        item.new_tags = [
+            AITagCandidate(name=hit["name"], similar_to=hit["similar_to"], similarity=hit["similarity"])
+            for hit in new_tags.get(item.resource_id, [])
         ]
     return items
 

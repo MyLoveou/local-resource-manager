@@ -66,6 +66,25 @@
               清空
             </button>
           </div>
+          <div v-if="item.newTags.length" class="ai-suggestion__group">
+            <span>AI 新词（未在你的词表）</span>
+            <button
+              v-for="cand in item.newTags"
+              :key="`newtag-${item.resourceId}-${cand.name}`"
+              type="button"
+              class="ai-suggestion__apply"
+              :disabled="suggestionBusy === item.resourceId"
+              :title="
+                cand.similarTo
+                  ? `将添加你词表里的「${cand.similarTo}」（相似度 ${Math.round((cand.similarity ?? 0) * 100)}%）`
+                  : '词表里没有相近的词，点击会新建该标签'
+              "
+              @click="applyNewTag(item, cand)"
+            >
+              <template v-if="cand.similarTo">≈ {{ cand.similarTo }}</template>
+              <template v-else>+ {{ cand.name }}</template>
+            </button>
+          </div>
           <div v-if="item.categories.length" class="ai-suggestion__group">
             <span>分类</span>
             <button
@@ -194,6 +213,25 @@ function clearSelectedTags(item: AISuggestionItem): void {
   selectedSuggestionTags.value = {
     ...selectedSuggestionTags.value,
     [item.resourceId]: [],
+  }
+}
+
+async function applyNewTag(
+  item: AISuggestionItem,
+  cand: { name: string; similarTo?: string | null; similarity?: number | null },
+): Promise<void> {
+  if (item.resourceId == null) return
+  const tag = cand.similarTo || cand.name
+  suggestionBusy.value = item.resourceId
+  try {
+    const result = await batchResources('add_tags', [item.resourceId], [tag])
+    if (result.failed.length) {
+      notify.toast.error(result.failed[0]?.message || '应用标签失败')
+      return
+    }
+    await ai.refreshSuggestions()
+  } finally {
+    suggestionBusy.value = 0
   }
 }
 

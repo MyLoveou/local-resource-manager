@@ -99,11 +99,19 @@ export interface AIEntitySuggestion {
   confidence?: number | null
 }
 
+export interface AITagCandidate {
+  name: string
+  /** 词表里最接近的标签；没有则为 null */
+  similarTo?: string | null
+  similarity?: number | null
+}
+
 export interface AISuggestionItem {
   resourceId: number
   title: string
   thumbnailPath: string | null
   tags: string[]
+  newTags: AITagCandidate[]
   categories: AIEntitySuggestion[]
   characters: AIEntitySuggestion[]
   persons: AIEntitySuggestion[]
