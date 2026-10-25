@@ -95,6 +95,8 @@ export interface AIQueryInsight {
 export interface AIEntitySuggestion {
   id: number
   name: string
+  /** 分类建议带置信度；实体建议为 null */
+  confidence?: number | null
 }
 
 export interface AISuggestionItem {
@@ -102,6 +104,7 @@ export interface AISuggestionItem {
   title: string
   thumbnailPath: string | null
   tags: string[]
+  categories: AIEntitySuggestion[]
   characters: AIEntitySuggestion[]
   persons: AIEntitySuggestion[]
   collections: AIEntitySuggestion[]

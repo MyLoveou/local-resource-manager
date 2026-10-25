@@ -66,6 +66,24 @@
               清空
             </button>
           </div>
+          <div v-if="item.categories.length" class="ai-suggestion__group">
+            <span>分类</span>
+            <button
+              v-for="entity in item.categories"
+              :key="`category-${item.resourceId}-${entity.id}`"
+              type="button"
+              class="ai-suggestion__apply"
+              :disabled="suggestionBusy === item.resourceId"
+              :title="
+                entity.confidence
+                  ? `置信度 ${Math.round(entity.confidence * 100)}%（同标签资源的分类）`
+                  : undefined
+              "
+              @click="applyEntity(item, 'categories', entity)"
+            >
+              + {{ entity.name }}
+            </button>
+          </div>
           <div v-if="item.characters.length" class="ai-suggestion__group">
             <span>角色</span>
             <button
@@ -198,7 +216,7 @@ async function applyTags(item: AISuggestionItem): Promise<void> {
 
 async function applyEntity(
   item: AISuggestionItem,
-  kind: 'characters' | 'persons' | 'collections',
+  kind: 'categories' | 'characters' | 'persons' | 'collections',
   entity: AIEntitySuggestion,
 ): Promise<void> {
   if (item.resourceId == null) return
@@ -206,6 +224,11 @@ async function applyEntity(
   try {
     if (kind === 'collections') {
       await addCollectionItems(entity.id, [item.resourceId])
+    } else if (kind === 'categories') {
+      const result = await batchResources('add_categories', [item.resourceId], undefined, [
+        entity.id,
+      ])
+      if (result.failed.length) notify.toast.error(result.failed[0]?.message || '设置分类失败')
     } else if (kind === 'characters') {
       const result = await batchResources(
         'add_characters',
