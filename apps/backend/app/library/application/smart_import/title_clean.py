@@ -45,6 +45,16 @@ _NOISE_CJK = ("字幕组", "字幕", "压制", "搬运", "生肉", "熟肉", "�
 # 尾部署编号：` - 01`、` 01`、`_01`、` 第01话`、` 第3集`
 _TRAILING_EP = re.compile(r"(?:[\s_\-–—]+|^)(?:第\s*)?(\d{1,4})(?:\s*[话集期])?\s*$")
 
+# 季/集标记：属于系列结构，不进作品标题
+_SERIES_MARKERS = (
+    re.compile(r"第\s*\d{1,2}\s*[季部章]"),
+    re.compile(r"\bseason\s*\d{1,2}\b", re.IGNORECASE),
+    re.compile(r"\bs\d{1,2}e\d{1,3}\b", re.IGNORECASE),
+    re.compile(r"\bs\d{1,2}\b", re.IGNORECASE),
+    re.compile(r"\be(?:p)?\d{1,3}\b", re.IGNORECASE),
+    re.compile(r"\bepisode\s*\d{1,3}\b", re.IGNORECASE),
+)
+
 
 @dataclass(frozen=True)
 class CleanResult:
@@ -115,6 +125,13 @@ def clean_release_name(raw: str, *, prefer_ep: bool = False) -> CleanResult:
 
     pieces.append(source[cursor:])
     title = "".join(pieces)
+
+    # 季/集标记属于系列结构，不进作品标题（单文件视频同样适用）
+    for pattern in _SERIES_MARKERS:
+        found = [match.group(0).strip() for match in pattern.finditer(title)]
+        if found:
+            removed.extend(found)
+            title = pattern.sub(" ", title)
 
     match = _TRAILING_EP.search(title)
     if match is not None:

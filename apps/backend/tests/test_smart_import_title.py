@@ -70,3 +70,17 @@ class CleanReleaseNameTests(unittest.TestCase):
     def test_does_not_touch_non_bracket_prefix(self) -> None:
         result = clean_release_name("Frieren 葬送的芙莉莲 S01E02 1080p")
         self.assertTrue(result.title.startswith("Frieren"))
+
+    def test_season_marker_removed(self) -> None:
+        """番剧目录名带 S01 时，季号不进作品标题。"""
+        result = clean_release_name("葬送的芙莉莲 S01")
+        self.assertEqual(result.title, "葬送的芙莉莲")
+        self.assertIn("S01", " ".join(result.removed))
+
+    def test_season_episode_removed(self) -> None:
+        result = clean_release_name("[VCB-Studio] Frieren S01E02 [1080p]")
+        self.assertEqual(result.title, "Frieren")
+
+    def test_chinese_season_and_episode_removed(self) -> None:
+        result = clean_release_name("葬送的芙莉莲 第2季 第05话 [1080p]")
+        self.assertEqual(result.title, "葬送的芙莉莲")
