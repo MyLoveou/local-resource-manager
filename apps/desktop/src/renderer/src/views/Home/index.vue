@@ -26,6 +26,30 @@
         </div>
       </section>
 
+      <section v-if="resumeList.length" class="home__section">
+        <div class="home__section-head">
+          <h2>继续观看</h2>
+        </div>
+        <div class="home__resume">
+          <button
+            v-for="item in resumeList"
+            :key="item.fileId"
+            type="button"
+            class="home__resume-item"
+            :title="item.title"
+            @click="resumePlayback(item)"
+          >
+            <span class="home__resume-track">
+              <span class="home__resume-fill" :style="{ width: `${item.percent}%` }" />
+            </span>
+            <span class="home__resume-text">
+              <strong>{{ item.title || '未命名' }}</strong>
+              <span>{{ resumeLabel(item) }}</span>
+            </span>
+          </button>
+        </div>
+      </section>
+
       <section v-if="collections.length" class="home__section">
         <div class="home__section-head">
           <h2>合集</h2>
@@ -160,7 +184,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHome, resolveCardImageUrl, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getHome, getResumeList, resolveCardImageUrl, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import type { ResumeItem } from '@/domain/progress'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import type { ConsumptionItem, HomeSummary, Resource, ResourceType, SavedView } from '@/domain'
 import { profileFor } from '@/domain'
@@ -180,6 +205,7 @@ const ACTION_LABEL: Record<string, string> = {
 }
 
 const overviewData = ref<HomeSummary | null>(null)
+const resumeList = ref<ResumeItem[]>([])
 const router = useRouter()
 const activeWork = computed(() => overviewData.value?.activeWork ?? [])
 const recentConsumption = computed(() => overviewData.value?.recentConsumption ?? [])
@@ -203,7 +229,8 @@ const hasOverviewData = computed(() => {
     savedTimelines.value.length > 0 ||
     visibleStats.value.some((item) => item.count > 0) ||
     activeWork.value.length > 0 ||
-    recentConsumption.value.length > 0
+    recentConsumption.value.length > 0 ||
+    resumeList.value.length > 0
   )
 })
 
@@ -250,6 +277,22 @@ function openRecent(item: Resource): void {
   void openResource(item, { playlist: [item.id] })
 }
 
+function resumeLabel(item: ResumeItem): string {
+  const parts: string[] = []
+  if (item.seasonNumber) parts.push(`第 ${item.seasonNumber} 季`)
+  if (item.episodeNumber) parts.push(`第 ${item.episodeNumber} 集`)
+  const remain = item.duration ? Math.max(0, Math.round(item.duration - item.position)) : 0
+  parts.push(remain > 0 ? `剩余 ${formatDuration(remain)}` : `${Math.round(item.percent)}%`)
+  return parts.join(' · ')
+}
+
+function resumePlayback(item: ResumeItem): void {
+  void openResource(
+    { id: item.resourceId, type: item.type as ResourceType },
+    { playlist: [item.resourceId], fileId: item.fileId },
+  )
+}
+
 function openLibrary(): void {
   void router.push('/library/image')
 }
@@ -263,6 +306,11 @@ const initOverviewData = async (): Promise<void> => {
     overviewData.value = await getHome()
   } catch (err) {
     notify.fromError(err, { context: '读取首页数据失败' })
+  }
+  try {
+    resumeList.value = (await getResumeList(8)).items
+  } catch {
+    resumeList.value = []
   }
 }
 
@@ -306,6 +354,60 @@ watch(
     color: var(--sm-color-text-muted);
     font-size: 12px;
     cursor: pointer;
+  }
+
+  .home__resume {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+
+  .home__resume-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--sm-color-border);
+    border-radius: 8px;
+    background: var(--sm-color-bg-surface);
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+      border-color: var(--sm-color-primary);
+    }
+  }
+
+  .home__resume-track {
+    position: relative;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--sm-color-border);
+    overflow: hidden;
+  }
+
+  .home__resume-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--sm-color-primary);
+  }
+
+  .home__resume-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+
+    strong {
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      color: var(--sm-color-text-muted);
+    }
   }
 
   .home__recent {

@@ -64,6 +64,13 @@ export {
   batchResources,
 } from './resources'
 export { createImport, getImportJob } from './imports'
+export {
+  getPlaybackProgress,
+  putPlaybackProgress,
+  clearPlaybackProgress,
+  getResumeList,
+} from './progress'
+export type { PlaybackProgress, PlaybackProgressInput, ResumeItem, ResumePage } from '@/domain/progress'
 export { getPhotoTimeline, backfillPhotos, backfillThumbnails, rebuildThumbnail } from './photos'
 export { getTags, invalidateTags } from './vocab'
 export { resolveLibraryMediaUrl, resolveCardImageUrl } from './mediaUrl'
