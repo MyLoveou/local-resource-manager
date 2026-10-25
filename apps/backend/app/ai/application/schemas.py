@@ -149,6 +149,7 @@ class AISimilarResponse(ApiModel):
 class AIEntitySuggestion(ApiModel):
     id: int
     name: str
+    confidence: float | None = None  # 分类建议用；实体建议保持 None
 
 
 class AISuggestionItem(ApiModel):
@@ -156,6 +157,7 @@ class AISuggestionItem(ApiModel):
     title: str
     thumbnail_path: str | None = None
     tags: list[str] = []
+    categories: list[AIEntitySuggestion] = []
     characters: list[AIEntitySuggestion] = []
     persons: list[AIEntitySuggestion] = []
     collections: list[AIEntitySuggestion] = []
