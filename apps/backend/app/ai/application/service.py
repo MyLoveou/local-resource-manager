@@ -43,6 +43,7 @@ from app.ai.infrastructure.image_hash import dhash_many
 from app.ai.infrastructure.person_detector import person_detector
 from app.ai.infrastructure.runtime import runtime
 from app.library.domain.models import ResourceStatus, ResourceType
+from app.library.infrastructure.media_paths import resource_thumb_url
 from app.library.infrastructure.orm import FileRow, ResourceRow
 from app.shared.config import settings
 from app.shared.db.db import get_session_factory
@@ -219,10 +220,9 @@ class AIService(SearchMixin):
             rid = int(resource_id)
             if rid in thumbnails:
                 continue
-            if role == "thumbnail":
-                thumbnails[rid] = f"/library/resources/{rid}/files/{int(file_id)}/content"
-            else:
-                thumbnails[rid] = f"/library/resources/{rid}/content"
+            thumbnails[rid] = resource_thumb_url(
+                rid, int(file_id) if role == "thumbnail" else None
+            )
 
         character_rows = (
             await self.session.execute(
