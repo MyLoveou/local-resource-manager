@@ -63,6 +63,9 @@ class PlaybackProgressRepository:
             },
         )
         await self.session.commit()
+        # 裸 SQL 更新不会让身份映射里的旧实例失效，而 session 又是
+        # expire_on_commit=False：不显式过期，随后的 get() 会读回旧值。
+        self.session.expire_all()
 
     async def delete(self, resource_id: int, file_id: int | None = None) -> int:
         stmt = delete(PlaybackProgressRow).where(
@@ -72,6 +75,7 @@ class PlaybackProgressRepository:
             stmt = stmt.where(PlaybackProgressRow.file_id == file_id)
         result = await self.session.execute(stmt)
         await self.session.commit()
+        self.session.expire_all()
         return int(result.rowcount or 0)
 
     def _resume_stmt(self, min_seconds: float, limit: int | None) -> tuple[Any, dict]:

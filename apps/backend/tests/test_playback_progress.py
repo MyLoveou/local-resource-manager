@@ -93,10 +93,11 @@ class PlaybackProgressTests(unittest.IsolatedAsyncioTestCase):
             resource_id = await self._seed_resource(session)
             file_id = await self._seed_file(session, resource_id, "a.mkv")
             service = await self._service(session)
-            saved = await service.record(resource_id, file_id, 120, 600)
-            assert saved is not None
-            self.assertAlmostEqual(saved.position, 120)
-            self.assertFalse(saved.completed)
+            result = await service.record(resource_id, file_id, 120, 600)
+            self.assertEqual(result.status, "saved")
+            assert result.progress is not None
+            self.assertAlmostEqual(result.progress.position, 120)
+            self.assertFalse(result.progress.completed)
             loaded = await service.get(resource_id, file_id)
             assert loaded is not None
             self.assertAlmostEqual(loaded.position, 120)
@@ -106,7 +107,8 @@ class PlaybackProgressTests(unittest.IsolatedAsyncioTestCase):
             resource_id = await self._seed_resource(session)
             file_id = await self._seed_file(session, resource_id, "a.mkv")
             service = await self._service(session)
-            self.assertIsNone(await service.record(resource_id, file_id, 3, 600))
+            result = await service.record(resource_id, file_id, 3, 600)
+            self.assertEqual(result.status, "skipped")
             self.assertIsNone(await service.get(resource_id, file_id))
 
     async def test_completed_resets_position(self) -> None:
@@ -114,10 +116,10 @@ class PlaybackProgressTests(unittest.IsolatedAsyncioTestCase):
             resource_id = await self._seed_resource(session)
             file_id = await self._seed_file(session, resource_id, "a.mkv")
             service = await self._service(session)
-            saved = await service.record(resource_id, file_id, 590, 600)
-            assert saved is not None
-            self.assertTrue(saved.completed)
-            self.assertEqual(saved.position, 0.0)
+            result = await service.record(resource_id, file_id, 590, 600)
+            assert result.progress is not None
+            self.assertTrue(result.progress.completed)
+            self.assertEqual(result.progress.position, 0.0)
 
     async def test_each_episode_keeps_its_own_position(self) -> None:
         """同一个资源下的两集互不覆盖（进度按 file_id 记）。"""
@@ -142,7 +144,10 @@ class PlaybackProgressTests(unittest.IsolatedAsyncioTestCase):
             trashed_file = await self._seed_file(session, trashed_id, "b.mkv")
             service = await self._service(session)
             await service.record(active_id, active_file, 300, 600)
-            self.assertIsNone(await service.record(trashed_id, trashed_file, 300, 600))
+            self.assertEqual(
+                (await service.record(trashed_id, trashed_file, 300, 600)).status,
+                "not_found",
+            )
             page = await service.resume()
             self.assertEqual([item.file_id for item in page.items], [active_file])
             self.assertEqual(page.total, 1)
@@ -166,10 +171,30 @@ class PlaybackProgressTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await service.clear(resource_id, file_id), 1)
             self.assertIsNone(await service.get(resource_id, file_id))
 
+    async def test_second_report_returns_fresh_values(self) -> None:
+        """同一 session 内二次上报不能读回身份映射里的旧值。
+
+        应用 session 是 expire_on_commit=False，裸 SQL 更新后若不过期，
+        随后的 get() 会拿到更新前的实例。
+        """
+        async with self.factory() as session:
+            resource_id = await self._seed_resource(session)
+            file_id = await self._seed_file(session, resource_id, "a.mkv")
+            service = await self._service(session)
+            first = await service.record(resource_id, file_id, 120, 600)
+            assert first.progress is not None
+            self.assertAlmostEqual(first.progress.position, 120)
+            second = await service.record(resource_id, file_id, 590, 600)
+            assert second.progress is not None
+            self.assertTrue(second.progress.completed)
+            self.assertEqual(second.progress.position, 0.0)
+
     async def test_rejects_file_from_another_resource(self) -> None:
         async with self.factory() as session:
             first = await self._seed_resource(session)
             second = await self._seed_resource(session)
             other_file = await self._seed_file(session, second, "b.mkv")
             service = await self._service(session)
-            self.assertIsNone(await service.record(first, other_file, 300, 600))
+            self.assertEqual(
+                (await service.record(first, other_file, 300, 600)).status, "not_found"
+            )

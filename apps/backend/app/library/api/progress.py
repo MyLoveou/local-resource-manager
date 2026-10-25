@@ -29,13 +29,16 @@ async def put_progress(
     resource_id: int,
     body: PlaybackProgressIn,
     session: AsyncSession = Depends(get_session),
-) -> PlaybackProgressOut:
+) -> PlaybackProgressOut | Response:
     result = await _service(session).record(
         resource_id, body.file_id, body.position, body.duration
     )
-    if result is None:
+    if result.status == "not_found":
         raise HTTPException(status_code=404, detail="resource or file not found")
-    return result
+    if result.status == "skipped" or result.progress is None:
+        # 未达阈值：正常丢弃，不是错误
+        return Response(status_code=204)
+    return result.progress
 
 
 @resource_router.get(

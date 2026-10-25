@@ -20,6 +20,19 @@ COMPLETE_RATIO = 0.95
 
 
 @dataclass(frozen=True)
+class RecordResult:
+    """上报结果。
+
+    - `saved`：已写入
+    - `skipped`：未达阈值，正常丢弃（不是错误）
+    - `not_found`：资源不可用或文件不属于该资源
+    """
+
+    status: str
+    progress: PlaybackProgressOut | None = None
+
+
+@dataclass(frozen=True)
 class NormalizedProgress:
     position: float
     completed: bool
@@ -73,18 +86,18 @@ class ProgressService:
         file_id: int,
         position: float | None,
         duration: float | None,
-    ) -> PlaybackProgressOut | None:
+    ) -> RecordResult:
         status = await self._repo.resource_status(resource_id)
         if status != "active":
-            return None
+            return RecordResult("not_found")
         if not await self._repo.file_belongs_to(resource_id, file_id):
-            return None
+            return RecordResult("not_found")
         existing = await self._repo.get(file_id)
         normalized = normalize_progress(
             position, duration, has_existing=existing is not None
         )
         if normalized.skip:
-            return None
+            return RecordResult("skipped")
         await self._repo.upsert(
             resource_id,
             file_id,
@@ -93,7 +106,7 @@ class ProgressService:
             normalized.completed,
         )
         row = await self._repo.get(file_id)
-        return _to_out(row) if row is not None else None
+        return RecordResult("saved", _to_out(row) if row is not None else None)
 
     async def get(self, resource_id: int, file_id: int) -> PlaybackProgressOut | None:
         if not await self._repo.file_belongs_to(resource_id, file_id):
