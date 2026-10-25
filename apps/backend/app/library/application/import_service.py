@@ -20,12 +20,13 @@ from app.library.application.ingest.placement import (
     normalize_path,
 )
 from app.library.domain.type_profile import ingest_kind, profile_for
-from app.library.application.thumbnails import source_for_grid_thumbnail
+from app.library.application.thumbnails import source_for_grid_thumbnail, try_register_thumbnail
 from app.library.application.packages import ResourcePackage, layout_for
 from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.smart_import.pipeline import suggest_after_ingest
 from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
@@ -229,71 +230,6 @@ class ImportService:
         await self._ingest_series(self._resources, job, type_, layout, root, videos)
         job.done = 1
 
-    async def _try_register_preview(
-        self,
-        resources: ResourceRepository,
-        resource_id: int,
-        package: ResourcePackage,
-        role_paths: dict[str, Path],
-    ) -> None:
-        primary = role_paths.get(FILE_ROLE_PRIMARY)
-        if primary is None or primary.suffix.lower() not in {".heic", ".heif"}:
-            return
-        existing = await resources.get_file_by_role(resource_id, FILE_ROLE_PREVIEW)
-        if existing is not None:
-            return
-        try:
-            preview_dest = await asyncio.to_thread(package.put_preview, primary)
-            if preview_dest is None:
-                return
-            size = (await asyncio.to_thread(preview_dest.stat)).st_size
-            await resources.add_file(
-                resource_id,
-                path=str(preview_dest),
-                sha256=None,
-                size=size,
-                format_="jpg",
-                role=FILE_ROLE_PREVIEW,
-                commit=True,
-            )
-        except Exception as exc:
-            logger.warning("预览图登记失败 resource=%s: %s", resource_id, exc)
-            await resources.rollback()
-
-    async def _try_register_thumbnail(
-        self,
-        resources: ResourceRepository,
-        resource_id: int,
-        package: ResourcePackage,
-        type_: ResourceType,
-        role_paths: dict[str, Path],
-    ) -> None:
-        """缩略图失败只记日志，不回滚已复制的资源。"""
-        await self._try_register_preview(resources, resource_id, package, role_paths)
-        thumb_src = source_for_grid_thumbnail(type_, role_paths)
-        if thumb_src is None:
-            return
-        existing_thumb = await resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
-        if existing_thumb is not None:
-            return
-        try:
-            thumb_dest = await asyncio.to_thread(package.put_thumbnail, thumb_src)
-            if thumb_dest is None:
-                return
-            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
-            await resources.add_file(
-                resource_id,
-                path=str(thumb_dest),
-                sha256=None,
-                size=thumb_size,
-                format_=thumb_dest.suffix.lower().lstrip("."),
-                role=FILE_ROLE_THUMBNAIL,
-                commit=True,
-            )
-        except Exception as exc:
-            logger.warning("缩略图登记失败 resource=%s: %s", resource_id, exc)
-            await resources.rollback()
-
     async def _ingest_one(
         self,
         resources: ResourceRepository,
@@ -427,7 +363,11 @@ class ImportService:
                 audio_path=primary if type_ == ResourceType.AUDIO else None,
             )
             job.phase = "thumb"
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await suggest_after_ingest(
+                resources, job_id=getattr(job, "id", None), resource_id=resource.id,
+                type_=type_, source_name=source.name, dir_name=source.parent.name,
+            )
             job.phase = "index"
             if parsed_name is not None and parsed_name.bv:
                 # 文件名带 BV：直接按 BV 获取元数据（监视与手动导入一致）
@@ -579,7 +519,11 @@ class ImportService:
                 episode_duration=None if first_ep is None else first_ep[3],
             )
             job.phase = "thumb"
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await suggest_after_ingest(
+                resources, job_id=getattr(job, "id", None), resource_id=resource.id,
+                type_=type_, source_name=root.name, dir_name=root.name,
+            )
             job.phase = "index"
             if auto_scrape:
                 from app.scrape.application.enqueue import enqueue_search_after_import
@@ -717,7 +661,7 @@ class ImportService:
                 resources, resource, package, type_, role_paths=role_paths, source_root=root
             )
             job.phase = "thumb"
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
@@ -810,7 +754,7 @@ class ImportService:
                 launch_path=launch_store,
             )
             job.phase = "thumb"
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
             if package is not None and storage == StorageKind.OWNED:

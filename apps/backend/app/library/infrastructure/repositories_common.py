@@ -68,6 +68,7 @@ def _orm_to_resource(row: ResourceRow) -> Resource:
         deleted_at=row.deleted_at,
         last_scraped_at=row.last_scraped_at,
         scraped_source=row.scraped_source,
+        source_name=row.source_name,
         extra=rest,
         timeline_visible=(
             None if row.timeline_visible is None else bool(row.timeline_visible)

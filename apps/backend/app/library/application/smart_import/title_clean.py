@@ -1,0 +1,144 @@
+"""发布组命名清洗（纯函数，不碰 DB 与网络）。
+
+只处理「文件名 / 目录名 → 更像标题的字符串」，不改磁盘文件名。
+置信度用于前端分档：>=0.85 默认勾选，0.5–0.85 展示不勾，<0.5 折叠。
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+# 方括号 / 圆括号 / 全角括号
+_BRACKET = re.compile(r"[\[\(（【]([^\[\]\(\)（）【】]*)[\]\)）】]")
+
+_TOKEN_SPLIT = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
+_HAS_CJK = re.compile(r"[\u4e00-\u9fff]")
+_DIGITS_ONLY = re.compile(r"^\d{1,4}$")
+
+_NOISE_TOKENS = frozenset(
+    {
+        # 分辨率
+        "480p", "720p", "1080p", "1080i", "2160p", "1440p",
+        "4k", "8k", "uhd", "hd", "fhd", "qhd",
+        # 编码 / 位深
+        "x264", "x265", "h264", "h265", "hevc", "avc", "av1", "vp9",
+        "ma10p", "hi10p", "10bit", "8bit", "10bits",
+        # 音轨
+        "aac", "ac3", "eac3", "dts", "dtshd", "flac", "opus", "mp3",
+        "mp4a", "truehd", "lpcm", "atmos",
+        # 来源
+        "webdl", "webrip", "web", "dl", "rip", "bd", "bdrip", "bdremux",
+        "bluray", "blu", "hdtv", "dvdrip", "remux", "dvd",
+        # 语言 / 字幕
+        "chs", "cht", "gb", "big5", "jpn", "eng", "sc", "tc", "jpsc", "jptc",
+        # 容器
+        "mp4", "mkv", "avi", "flv", "ts", "m4v", "mov", "wmv",
+        # 站点
+        "baha", "bilibili", "cr", "adn", "nf", "amzn", "dsnp", "abema",
+    }
+)
+
+# 中文噪音：字幕组 / 压制 / 搬运等
+_NOISE_CJK = ("字幕组", "字幕", "压制", "搬运", "生肉", "熟肉", "汉化", "翻译")
+
+# 尾部署编号：` - 01`、` 01`、`_01`、` 第01话`、` 第3集`
+_TRAILING_EP = re.compile(r"(?:[\s_\-–—]+|^)(?:第\s*)?(\d{1,4})(?:\s*[话集期])?\s*$")
+
+
+@dataclass(frozen=True)
+class CleanResult:
+    """清洗结果。`removed` 是被人话解释用的原始片段。"""
+
+    title: str
+    removed: tuple[str, ...]
+    confidence: float
+
+
+def _tokens(segment: str) -> list[str]:
+    return [t.lower() for t in _TOKEN_SPLIT.split(segment) if t]
+
+
+def _is_noise_tokens(segment: str) -> bool:
+    if any(marker in segment for marker in _NOISE_CJK):
+        return True
+    tokens = _tokens(segment)
+    if not tokens:
+        return True
+    return all(token in _NOISE_TOKENS or token.isdigit() for token in tokens)
+
+
+def _looks_like_group(segment: str) -> bool:
+    """首个方括号段、无中文、短、像发布组。"""
+    text = segment.strip()
+    if not text or _HAS_CJK.search(text):
+        return False
+    if len(text) > 24:
+        return False
+    if any(token in _NOISE_TOKENS for token in _tokens(text)):
+        return False
+    return True
+
+
+def clean_release_name(raw: str, *, prefer_ep: bool = False) -> CleanResult:
+    """去掉发布组、参数、语言、容器等噪音，保留标题。
+
+    `prefer_ep=True` 时保留尾部集号（对应设置里的 `titleWithEp`）。
+    """
+    source = (raw or "").strip()
+    if not source:
+        return CleanResult(title="", removed=(), confidence=0.0)
+
+    removed: list[str] = []
+    pieces: list[str] = []
+    cursor = 0
+    first_bracket = True
+
+    for match in _BRACKET.finditer(source):
+        pieces.append(source[cursor:match.start()])
+        cursor = match.end()
+        inner = match.group(1).strip()
+
+        if _DIGITS_ONLY.match(inner):
+            if prefer_ep:
+                pieces.append(inner)
+            else:
+                removed.append(match.group(0))
+            first_bracket = False
+            continue
+
+        if _is_noise_tokens(inner) or (first_bracket and _looks_like_group(inner)):
+            removed.append(match.group(0))
+        else:
+            pieces.append(inner)
+        first_bracket = False
+
+    pieces.append(source[cursor:])
+    title = "".join(pieces)
+
+    match = _TRAILING_EP.search(title)
+    if match is not None:
+        if prefer_ep:
+            # 保留集号：什么都不做
+            pass
+        else:
+            removed.append(match.group(0).strip())
+            title = title[: match.start()]
+
+    title = re.sub(r"\s+", " ", title).strip(" -–—_·.")
+    if not title:
+        return CleanResult(title=source, removed=tuple(removed), confidence=0.1)
+
+    if not removed:
+        return CleanResult(title=title, removed=(), confidence=0.0)
+
+    confidence = min(0.95, 0.55 + 0.1 * len(removed))
+    return CleanResult(title=title, removed=tuple(removed), confidence=confidence)
+
+
+def describe_removed(removed: tuple[str, ...]) -> str:
+    """把被去掉的片段写成一句人话，供建议的 reason 使用。"""
+    if not removed:
+        return ""
+    parts = "、".join(f"`{item}`" for item in removed)
+    return f"去掉了 {parts}"

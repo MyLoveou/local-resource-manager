@@ -14,6 +14,7 @@ from app.library.api import (
     progress,
     resources,
     saved_views,
+    suggestions,
     tags,
     timeline_notes,
     todos,
@@ -28,6 +29,7 @@ router.include_router(imports.router)
 router.include_router(resources.router)
 router.include_router(progress.resource_router)
 router.include_router(progress.router)
+router.include_router(suggestions.router)
 router.include_router(photos.router)
 router.include_router(collections.router)
 router.include_router(collections.resource_collections_router)

@@ -27,6 +27,7 @@ class ResourceRow(Base):
     created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
     sha256: Mapped[str] = mapped_column(String, nullable=False, default="")
+    source_name: Mapped[str | None] = mapped_column(String)
     timeline_visible: Mapped[int | None] = mapped_column(Integer)
     map_visible: Mapped[int | None] = mapped_column(Integer)
 
