@@ -90,10 +90,12 @@ def _looks_like_group(segment: str) -> bool:
     return True
 
 
-def clean_release_name(raw: str, *, prefer_ep: bool = False) -> CleanResult:
+def clean_release_name(raw: str, *, keep_episode: bool = True) -> CleanResult:
     """去掉发布组、参数、语言、容器等噪音，保留标题。
 
-    `prefer_ep=True` 时保留尾部集号（对应设置里的 `titleWithEp`）。
+    `keep_episode=True`（默认）保留季/集标记与尾部编号：单文件视频每个文件
+    就是一个独立资源，编号是它唯一的区分依据，剥掉会让多集同名。
+    `keep_episode=False` 用于系列作品标题：集号属于季/集树，不进作品名。
     """
     source = (raw or "").strip()
     if not source:
@@ -110,7 +112,7 @@ def clean_release_name(raw: str, *, prefer_ep: bool = False) -> CleanResult:
         inner = match.group(1).strip()
 
         if _DIGITS_ONLY.match(inner):
-            if prefer_ep:
+            if keep_episode:
                 pieces.append(inner)
             else:
                 removed.append(match.group(0))
@@ -126,18 +128,20 @@ def clean_release_name(raw: str, *, prefer_ep: bool = False) -> CleanResult:
     pieces.append(source[cursor:])
     title = "".join(pieces)
 
-    # 季/集标记属于系列结构，不进作品标题（单文件视频同样适用）
-    for pattern in _SERIES_MARKERS:
-        found = [match.group(0).strip() for match in pattern.finditer(title)]
-        if found:
-            removed.extend(found)
-            title = pattern.sub(" ", title)
+    # 季/集标记属于系列结构；单文件视频靠它区分集，必须保留
+    if not keep_episode:
+        for pattern in _SERIES_MARKERS:
+            found = [match.group(0).strip() for match in pattern.finditer(title)]
+            if found:
+                removed.extend(found)
+                title = pattern.sub(" ", title)
 
     match = _TRAILING_EP.search(title)
     if match is not None:
-        if prefer_ep:
-            # 保留集号：什么都不做
-            pass
+        if keep_episode:
+            # 归一成两位编号，但保留集号本身
+            number = int(match.group(1))
+            title = f"{title[: match.start()].rstrip()} {number:02d}"
         else:
             removed.append(match.group(0).strip())
             title = title[: match.start()]

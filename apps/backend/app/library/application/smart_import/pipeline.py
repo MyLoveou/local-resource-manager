@@ -36,7 +36,6 @@ async def suggest_after_ingest(
     type_: ResourceType,
     source_name: str | None,
     dir_name: str | None = None,
-    prefer_episode_in_title: bool = False,
 ) -> int:
     """导入收尾钩子：写源名称 + 产出建议。任何失败都只记日志。"""
     try:
@@ -48,7 +47,6 @@ async def suggest_after_ingest(
             type=type_,
             file_stem=stem,
             dir_name=dir_name,
-            prefer_episode_in_title=prefer_episode_in_title,
         )
         suggestions = evaluate(ctx)
         if not suggestions:

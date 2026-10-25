@@ -17,7 +17,6 @@ class ActionContext:
     file_stem: str
     dir_name: str | None = None
     existing_categories: tuple[str, ...] = ()
-    prefer_episode_in_title: bool = False
 
 
 @dataclass(frozen=True)

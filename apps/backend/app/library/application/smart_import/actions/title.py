@@ -18,6 +18,9 @@ from app.library.domain.models import ResourceType
 
 _DIR_MIN_CONFIDENCE = 0.5
 
+# 系列作品的集号在季/集树里；单文件视频每个文件就是一条资源，编号是身份
+_SERIES_TYPES = frozenset({ResourceType.ANIME, ResourceType.AV})
+
 
 class CleanTitleAction:
     field = "title"
@@ -31,15 +34,14 @@ class CleanTitleAction:
     )
 
     def evaluate(self, ctx: ActionContext) -> list[Suggestion]:
+        keep_episode = ctx.type not in _SERIES_TYPES
         chosen = None
         if ctx.dir_name:
-            by_dir = clean_release_name(ctx.dir_name)
+            by_dir = clean_release_name(ctx.dir_name, keep_episode=keep_episode)
             if by_dir.title and by_dir.confidence >= _DIR_MIN_CONFIDENCE:
                 chosen = by_dir
         if chosen is None:
-            by_file = clean_release_name(
-                ctx.file_stem, prefer_ep=ctx.prefer_episode_in_title
-            )
+            by_file = clean_release_name(ctx.file_stem, keep_episode=keep_episode)
             if by_file.confidence > 0:
                 chosen = by_file
 

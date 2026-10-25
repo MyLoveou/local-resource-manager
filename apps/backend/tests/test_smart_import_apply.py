@@ -81,12 +81,12 @@ class SmartImportApplyTests(unittest.IsolatedAsyncioTestCase):
             first = await self._seed(session)
             second = await self._seed(session)
             await self._suggest(session, first, "[VCB-Studio] Frieren [01][1080p].mkv")
-            await self._suggest(session, second, "[VCB-Studio] Frieren [02][1080p].mkv")
+            await self._suggest(session, second, "[Lilith-Raws] Frieren [01][720p].mkv")
             rows = await SuggestionRepository(session).list_pending("j1")
             groups = group_pending(rows)
             self.assertEqual(len(groups), 1)
             self.assertEqual(groups[0]["count"], 2)
-            self.assertEqual(groups[0]["value"]["text"], "Frieren")
+            self.assertEqual(groups[0]["value"]["text"], "Frieren 01")
 
     async def test_group_confidence_is_minimum(self) -> None:
         async with self.factory() as session:
@@ -104,13 +104,13 @@ class SmartImportApplyTests(unittest.IsolatedAsyncioTestCase):
             rid = await self._seed(session)
             await self._suggest(session, rid, "[VCB-Studio] Frieren [01][1080p].mkv")
             repo = SuggestionRepository(session)
-            result = await repo.apply(groups=[("title", {"text": "Frieren"})])
+            result = await repo.apply(groups=[("title", {"text": "Frieren 01"})])
             self.assertEqual(result["accepted"], 1)
             self.assertEqual(result["updated_resources"], 1)
             title = await session.scalar(
                 text("SELECT title FROM resources WHERE id = :id"), {"id": rid}
             )
-            self.assertEqual(title, "Frieren")
+            self.assertEqual(title, "Frieren 01")
             status = await session.scalar(
                 text("SELECT status FROM import_suggestions WHERE resource_id = :id"),
                 {"id": rid},
@@ -143,8 +143,10 @@ class SmartImportApplyTests(unittest.IsolatedAsyncioTestCase):
         async with self.factory() as session:
             strong = await self._seed(session)
             weak = await self._seed(session)
-            await self._suggest(session, strong, "[VCB-Studio] Frieren [01][1080p].mkv")
-            await self._suggest(session, weak, "夏日海边 01.mkv")
+            await self._suggest(
+                session, strong, "[VCB-Studio] Frieren [01][Ma10p_1080p][x265].mkv"
+            )
+            await self._suggest(session, weak, "夏日海边 - 01 [1080p].mkv")
             summary = await SuggestionRepository(session).summary()
             self.assertEqual(summary["pending"], 2)
             self.assertEqual(summary["highConfidence"], 1)
