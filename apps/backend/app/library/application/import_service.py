@@ -367,6 +367,10 @@ class ImportService:
             await suggest_after_ingest(
                 resources, job_id=getattr(job, "id", None), resource_id=resource.id,
                 type_=type_, source_name=source.name, dir_name=source.parent.name,
+                # parse_settings 只在 VIDEO 分支赋值，用短路表达式避免 NameError
+                prefer_episode_in_title=(
+                    parse_settings.title_with_ep if type_ == ResourceType.VIDEO else False
+                ),
             )
             job.phase = "index"
             if parsed_name is not None and parsed_name.bv:
