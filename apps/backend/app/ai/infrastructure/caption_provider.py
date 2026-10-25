@@ -58,7 +58,9 @@ def _prompt_with_context(context: dict | None) -> str:
         return PROMPT
     return (
         f"{PROMPT}\n\n"
-        "以下是用户已整理的人工信息，仅作参考，不要机械重复，不要编造不存在的关系：\n"
+        "以下是用户已经维护的词表与人工信息。若图中内容与其中某个词条吻合，"
+        "请**直接使用列表里的原词**，不要另造近义词或新写法；都不吻合时才自行命名。"
+        "不要编造不存在的角色或关系。\n"
         + "\n".join(lines)
     )
 

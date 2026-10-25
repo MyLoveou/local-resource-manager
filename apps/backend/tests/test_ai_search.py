@@ -238,9 +238,20 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
                 {"rid": resource_id},
             )
             await session.execute(
+                text("INSERT INTO tags (name) VALUES ('猫耳')"),
+            )
+            await session.execute(
                 text(
                     "INSERT INTO ai_tags (resource_id, tag, source) "
                     "VALUES (:rid, '猫耳', 'vlm')"
+                ),
+                {"rid": resource_id},
+            )
+            # 不在词表里的泛词不应进入建议（闭集）
+            await session.execute(
+                text(
+                    "INSERT INTO ai_tags (resource_id, tag, source) "
+                    "VALUES (:rid, '白色', 'vlm')"
                 ),
                 {"rid": resource_id},
             )
@@ -251,6 +262,7 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result[0]["resource_id"], resource_id)
         self.assertEqual(result[0]["thumbnail_path"], f"/library/resources/{resource_id}/content")
         self.assertIn("猫耳", result[0]["tags"])
+        self.assertNotIn("白色", result[0]["tags"])
 
     async def test_feedback_replaces_and_can_be_removed(self) -> None:
         vector = np.zeros(512, dtype="float32")
