@@ -69,7 +69,12 @@ export async function openResource(
   const command = configured?.command ?? ''
   const kind = consumeKindOf(row.type)
   const playlist = options.playlist?.length ? options.playlist : [row.id]
-  if (mode === 'embedded' && (kind == null || kind === 'overlay-series')) return false
+  // 系列必须带具体集；只拿到作品卡时给出可执行提示，而不是静默失败
+  const seriesNeedsFile = kind === 'overlay-series' && options.fileId == null
+  if (mode === 'embedded' && (kind == null || seriesNeedsFile)) {
+    if (seriesNeedsFile) fail('请从选集里选择一集播放')
+    return false
+  }
   void postConsumption(row.id, mode).catch(() => undefined)
   if (mode === 'workbench') return false
   if (mode === 'command') {
@@ -96,7 +101,7 @@ export async function openResource(
     if (message) fail(message)
     return !message
   }
-  if (kind == null || kind === 'overlay-series') return false
+  if (kind == null || seriesNeedsFile) return false
   if (kind === 'shell-open') {
     const message = await openAny(row)
     if (message) fail(message)

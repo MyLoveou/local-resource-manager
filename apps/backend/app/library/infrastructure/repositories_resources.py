@@ -1387,7 +1387,7 @@ class ResourceRepository:
     async def previews_by_type(self, limit: int = 3) -> dict[str, list[str]]:
         """Recent thumbnail stack per media type for the home overview."""
         previews: dict[str, list[str]] = {}
-        for type_ in (ResourceType.IMAGE, ResourceType.VIDEO):
+        for type_ in (ResourceType.IMAGE, ResourceType.VIDEO, ResourceType.ANIME, ResourceType.AV):
             stmt = (
                 select(ResourceRow.id, FileRow.id)
                 .join(FileRow, FileRow.resource_id == ResourceRow.id)

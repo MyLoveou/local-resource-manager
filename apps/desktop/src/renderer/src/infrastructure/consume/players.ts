@@ -45,8 +45,9 @@ function playerByConsume(): Record<ConsumeKind, PlayerApi> {
       open: modelPreview.open,
     },
     'overlay-series': {
-      close: () => undefined,
-      open: () => undefined,
+      // 系列（番剧/AV）复用视频播放器：选集点击带 fileId 打开对应集
+      close: videoPlayer.close,
+      open: (id, ids, fileId) => videoPlayer.open(id, ids, fileId),
     },
     'shell-open': {
       close: () => undefined,

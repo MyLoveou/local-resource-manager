@@ -248,6 +248,14 @@ async function applyEntity(
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+
+  > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .ai-panel__actions {
