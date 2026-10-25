@@ -8,13 +8,13 @@
       </n-button>
     </div>
     <p class="ai-muted">
-      审核后应用。标签和实体只会添加，不会覆盖已有内容；不会自动创建角色或合集。
+      审核后应用。标签只从你已有的词表里挑选——模型新造的泛词不会出现在这里；实体只会添加，不覆盖已有内容。
     </p>
     <div v-if="ai.suggestionsLoading" class="ai-empty">
       <n-spin size="small" /> 正在读取建议
     </div>
     <div v-else-if="!ai.suggestions.length" class="ai-empty">
-      暂无建议。先在图片任务里完成 VLM 文案分析，或补充已有角色/扮演者/合集。
+      暂无建议。这里只显示「你词表里已有、但这张图还没加」的标签；先把常用标签用起来，或补充角色 / 扮演者 / 合集。
     </div>
     <div v-else class="ai-suggestion-list">
       <article
