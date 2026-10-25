@@ -189,31 +189,42 @@ async def _search_channels(resource: Resource, job_query: str | None) -> list[Se
     return await _collect_hits(providers, title_q, title_q)
 
 
+# 每个渠道单独配额：否则前一个渠道结果一多，后面的会被总上限直接挤掉
+_PER_PROVIDER_CAP = 10
+_OVERALL_CAP = 20
+
+
 async def _collect_hits(
     providers: list[MetadataProvider],
     title: str,
     bili_blob: str,
 ) -> list[SearchHit]:
-    hits: list[SearchHit] = []
+    uniq: list[SearchHit] = []
+    seen: set[str] = set()
     errors: list[str] = []
     for provider in providers:
         query = bili_blob if isinstance(provider, BilibiliProvider) else title
         if isinstance(provider, TmdbProvider):
             query = title
         try:
-            hits.extend(await provider.search(query))
+            found = await provider.search(query)
         except Exception as exc:
             name = type(provider).__name__
-            errors.append(f"{name}: {exc}")
-            logger.warning("刮削渠道失败 %s: %s", name, exc)
-    uniq: list[SearchHit] = []
-    seen: set[str] = set()
-    for hit in hits:
-        if hit.key in seen:
+            # 只带 str(exc) 常常是空的，补上类型名才能定位
+            detail = f"{type(exc).__name__}: {exc}".strip()
+            errors.append(f"{name}: {detail}")
+            logger.warning("刮削渠道失败 %s: %s", name, detail)
             continue
-        seen.add(hit.key)
-        uniq.append(hit)
-        if len(uniq) >= 20:
+        added = 0
+        for hit in found:
+            if hit.key in seen:
+                continue
+            seen.add(hit.key)
+            uniq.append(hit)
+            added += 1
+            if added >= _PER_PROVIDER_CAP or len(uniq) >= _OVERALL_CAP:
+                break
+        if len(uniq) >= _OVERALL_CAP:
             break
     if not uniq and errors:
         raise RuntimeError("；".join(errors))
