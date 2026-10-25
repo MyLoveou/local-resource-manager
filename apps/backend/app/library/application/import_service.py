@@ -393,6 +393,9 @@ class ImportService:
                     codec=probed.codec,
                     fps=probed.fps,
                     bitrate=probed.bitrate,
+                    audio_codec=probed.audio_codec,
+                    audio_channels=probed.audio_channels,
+                    audio_language=probed.audio_language,
                     exif_taken_at=probed.exif_taken_at,
                     exif_lat=probed.exif_lat,
                     exif_lng=probed.exif_lng,
@@ -534,6 +537,9 @@ class ImportService:
                     codec=probed.codec,
                     fps=probed.fps,
                     bitrate=probed.bitrate,
+                    audio_codec=probed.audio_codec,
+                    audio_channels=probed.audio_channels,
+                    audio_language=probed.audio_language,
                     commit=False,
                 )
                 if item.kind == "episode":

@@ -209,6 +209,9 @@ class FileRow(Base):
     codec: Mapped[str | None] = mapped_column(String)
     fps: Mapped[float | None] = mapped_column(Float)
     bitrate: Mapped[int | None] = mapped_column(Integer)
+    audio_codec: Mapped[str | None] = mapped_column(String)
+    audio_channels: Mapped[int | None] = mapped_column(Integer)
+    audio_language: Mapped[str | None] = mapped_column(String)
     exif_taken_at: Mapped[str | None] = mapped_column(String)
     exif_lat: Mapped[float | None] = mapped_column(Float)
     exif_lng: Mapped[float | None] = mapped_column(Float)
@@ -218,6 +221,25 @@ class FileRow(Base):
     exif_aperture: Mapped[str | None] = mapped_column(String)
     exif_shutter: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str | None] = mapped_column(String)
+
+
+class PlaybackProgressRow(Base):
+    """播放进度。按 file_id 记，一个番剧作品的每一集各有一条。"""
+
+    __tablename__ = "playback_progress"
+
+    file_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True
+    )
+    resource_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("resources.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    duration: Mapped[float | None] = mapped_column(Float)
+    completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=_SQLITE_NOW
+    )
 
 
 class ResourceTodoRow(Base):

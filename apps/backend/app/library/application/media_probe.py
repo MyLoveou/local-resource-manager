@@ -32,6 +32,9 @@ class ProbeFields:
     fps: float | None = None
     bitrate: int | None = None
     codec: str | None = None
+    audio_codec: str | None = None
+    audio_channels: int | None = None
+    audio_language: str | None = None
     exif_taken_at: str | None = None
     exif_lat: float | None = None
     exif_lng: float | None = None
@@ -382,6 +385,7 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
         return ProbeFields()
     streams = payload.get("streams") or []
     video = next((s for s in streams if s.get("codec_type") == "video"), None) or {}
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None) or {}
     fmt = payload.get("format") or {}
     width = video.get("width")
     height = video.get("height")
@@ -404,6 +408,9 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
     tags = {**stream_tags, **format_tags}
     taken_at = _video_taken_at(tags.get("creation_time"))
     lat, lng = _video_gps(tags)
+    audio_tags = audio.get("tags") if isinstance(audio.get("tags"), dict) else {}
+    audio_language = audio_tags.get("language")
+    audio_channels = audio.get("channels")
     return ProbeFields(
         width=int(width) if isinstance(width, int) else None,
         height=int(height) if isinstance(height, int) else None,
@@ -411,6 +418,9 @@ def probe_video(path: Path, *, ffprobe_bin: str | None = None) -> ProbeFields:
         fps=fps,
         bitrate=bitrate,
         codec=str(codec) if codec else None,
+        audio_codec=str(audio["codec_name"]) if audio.get("codec_name") else None,
+        audio_channels=audio_channels if isinstance(audio_channels, int) else None,
+        audio_language=str(audio_language) if audio_language else None,
         exif_taken_at=taken_at,
         exif_lat=lat,
         exif_lng=lng,

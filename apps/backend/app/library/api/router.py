@@ -11,6 +11,7 @@ from app.library.api import (
     overview,
     persons,
     photos,
+    progress,
     resources,
     saved_views,
     tags,
@@ -25,6 +26,8 @@ router.include_router(health.router)
 router.include_router(overview.router)
 router.include_router(imports.router)
 router.include_router(resources.router)
+router.include_router(progress.resource_router)
+router.include_router(progress.router)
 router.include_router(photos.router)
 router.include_router(collections.router)
 router.include_router(collections.resource_collections_router)

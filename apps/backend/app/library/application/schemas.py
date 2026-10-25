@@ -438,3 +438,45 @@ class ImportJob(ApiModel):
     message: str | None = None
     code: str | None = None
     details: list[str] = Field(default_factory=list)
+
+
+class PlaybackProgressIn(ApiModel):
+    """上报播放进度。"""
+
+    file_id: int
+    position: float = 0.0
+    duration: float | None = None
+
+
+class PlaybackProgressOut(ApiModel):
+    """单个文件的播放进度。"""
+
+    file_id: int
+    resource_id: int
+    position: float
+    duration: float | None = None
+    completed: bool = False
+    updated_at: str | None = None
+
+
+class ResumeItem(ApiModel):
+    """继续观看条目。"""
+
+    resource_id: int
+    file_id: int
+    title: str
+    type: str
+    cover_path: str | None = None
+    position: float
+    duration: float | None = None
+    percent: float = 0.0
+    season_number: int | None = None
+    episode_number: int | None = None
+    updated_at: str | None = None
+
+
+class ResumePage(ApiModel):
+    """继续观看列表。"""
+
+    items: list[ResumeItem] = Field(default_factory=list)
+    total: int = 0
