@@ -59,7 +59,7 @@ class PhotoTimelineTests(unittest.IsolatedAsyncioTestCase):
         self._tmp.cleanup()
 
     def _png(self, name: str, seed: int = 0) -> Path:
-        # ???????? JPEG??????? sha256 ???
+        # 生成最小尺寸的 JPEG，仅用于计算 sha256 去重
         path = self.root / (name.rsplit(".", 1)[0] + ".jpg")
         path.parent.mkdir(parents=True, exist_ok=True)
         color = ((seed * 60) % 256, (seed * 90) % 256, (seed * 30) % 256)

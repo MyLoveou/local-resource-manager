@@ -341,7 +341,7 @@ class AIService(SearchMixin):
         operations_logger.info("ai.ollama.select path=%s", raw)
         candidate = Path(raw).expanduser()
         if not raw or not candidate.is_file():
-            raise AIServiceError("??? Ollama ???????? ollama.exe", 400)
+            raise AIServiceError("无效的 Ollama 程序路径，请选择 ollama.exe", 400)
         await self.session.execute(
             text(
                 "INSERT INTO ai_preferences (key, value, updated_at) "
@@ -361,11 +361,11 @@ class AIService(SearchMixin):
         )
         binary = ollama_runtime.detect_binary(str(preferred or ""))
         if not binary:
-            raise AIServiceError("???? Ollama???????? ollama.exe", 400)
+            raise AIServiceError("未检测到 Ollama，请先安装或指定 ollama.exe", 400)
         try:
             data = await ollama_runtime.start_runtime(binary)
         except Exception as exc:
-            raise AIServiceError(str(exc) or "Ollama ????", 400) from exc
+            raise AIServiceError(str(exc) or "Ollama 启动失败", 400) from exc
         return AIVLMRuntime(**data)
 
     async def clear_jobs(self) -> None:
@@ -789,19 +789,19 @@ class AIService(SearchMixin):
     async def install_anime_tagger(self) -> AIJob:
         operations_logger.info("ai.anime_tagger.install requested")
         if anime_tagger.is_installed():
-            raise AIServiceError("?????????")
+            raise AIServiceError("动漫标签模型已安装")
         if jobs.has_active():
-            raise AIServiceError("?? AI ?????")
+            raise AIServiceError("已有 AI 任务进行中")
         job = jobs.create("anime-install")
         jobs.start(job, self._run_anime_install)
         return job_schema(job)
 
     async def _run_anime_install(self, job: Job) -> None:
         def progress(done: int, total: int) -> None:
-            jobs.update(job, total=total, done=done, message="????????")
+            jobs.update(job, total=total, done=done, message="正在下载模型文件")
 
         await anime_tagger.download(progress)
-        jobs.update(job, done=job.total or job.done, message="??????????")
+        jobs.update(job, done=job.total or job.done, message="动漫标签模型安装完成")
 
     async def pull_vlm(self, model: str) -> AIJob:
         operations_logger.info("ai.vlm.pull model=%s", model)

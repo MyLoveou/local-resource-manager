@@ -295,7 +295,7 @@ def probe_image(path: Path) -> ProbeFields:
 
 
 def _video_taken_at(raw: str | None) -> str | None:
-    """ffprobe creation_time(?? UTC) ???? YYYY-MM-DDTHH:MM:SS?"""
+    """ffprobe creation_time（可能为 UTC）转成 YYYY-MM-DDTHH:MM:SS。"""
     if not isinstance(raw, str) or not raw.strip():
         return None
     text = raw.strip()

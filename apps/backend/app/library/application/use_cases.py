@@ -85,7 +85,7 @@ class LibraryQueryService:
         self._saved_views = saved_views or SavedViewRepository(resources.session)
 
     async def overview(self) -> Overview:
-        """????:?? + ???? + ?? + ?? + ???"""
+        """首页概览：统计 + 预览图 + 最近添加 + 合集 + 已保存时间线。"""
         stats = await self._resources.stats()
         stats["previews_by_type"] = await self._resources.previews_by_type()
         return Overview(

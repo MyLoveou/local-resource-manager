@@ -179,7 +179,7 @@ class AISearchTests(unittest.IsolatedAsyncioTestCase):
                     return_value=np.stack([text_vec]),
                 ),
             ):
-                result = await AIService(session).fusion(source, "??", 10)
+                result = await AIService(session).fusion(source, "海边", 10)
 
         self.assertNotIn(source, [item.id for item in result.items])
         self.assertTrue(result.items)

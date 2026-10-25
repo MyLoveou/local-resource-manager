@@ -247,9 +247,9 @@ class CaptionProvider:
         details = await self.list_model_details()
         matched = next((item for item in details if item["name"] == model), None)
         if matched is None:
-            raise ValueError("??????")
+            raise ValueError("未找到该模型")
         if not matched["supports_vision"]:
-            raise ValueError("??????????")
+            raise ValueError("该模型不支持视觉能力")
         self.model = model
         self._ready = None
         return matched
@@ -286,7 +286,7 @@ class CaptionProvider:
 
     async def pull(self, model: str, progress) -> None:
         if self._is_openai:
-            raise RuntimeError("OpenAI-compatible ?????????????????")
+            raise RuntimeError("OpenAI-compatible 模式不支持自动下载，请手动安装模型")
         if not await self.runtime_available():
             raise RuntimeError(
                 f"未检测到 Ollama，请先启动本地服务：{settings.vlm_url}"
@@ -391,7 +391,7 @@ class CaptionProvider:
                     continue
                 raise
         if value is None:
-            raise RuntimeError(f"VLM ?????{last_error}")
+            raise RuntimeError(f"VLM 生成失败：{last_error}")
         tags: list[str] = []
         for item in _string_list(value.get("tags")):
             if item not in tags:

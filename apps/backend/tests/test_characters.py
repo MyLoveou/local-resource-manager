@@ -82,7 +82,7 @@ class CharacterTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_add_characters(self) -> None:
         async with self.factory() as session:
             repo = CharacterRepository(session)
-            character = await repo.create("?? C", None, None, None, [])
+            character = await repo.create("角色 C", None, None, None, [])
             assert character.id is not None
             resource_id = await self._create_resource(session, "batch")
             service = LibraryQueryService(

@@ -99,7 +99,7 @@ export const useAIStore = defineStore('ai', () => {
       await clearAIJobs()
       jobHistory.value = []
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? AI ??????'
+      error.value = err instanceof Error ? err.message : '清空 AI 任务历史失败'
     }
   }
 
@@ -134,7 +134,7 @@ export const useAIStore = defineStore('ai', () => {
     try {
       vlmRuntime.value = await getVLMRuntime()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? Ollama ????'
+      error.value = err instanceof Error ? err.message : '读取 Ollama 状态失败'
     }
   }
 
@@ -167,7 +167,7 @@ export const useAIStore = defineStore('ai', () => {
       vlmRuntime.value = await selectOllamaBinary(path)
       await refresh()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? Ollama ????'
+      error.value = err instanceof Error ? err.message : '选择 Ollama 程序失败'
     }
   }
 
@@ -177,7 +177,7 @@ export const useAIStore = defineStore('ai', () => {
       vlmRuntime.value = await startOllamaRuntime()
       await refresh()
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? Ollama ??'
+      error.value = err instanceof Error ? err.message : '启动 Ollama 失败'
     }
   }
 
@@ -185,7 +185,7 @@ export const useAIStore = defineStore('ai', () => {
     try {
       jobHistory.value = await getAIJobs(20)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '?? AI ??????'
+      error.value = err instanceof Error ? err.message : '获取 AI 任务列表失败'
     }
   }
 
@@ -236,7 +236,7 @@ export const useAIStore = defineStore('ai', () => {
       job.value = await installAnimeTagger()
       await track(job.value.id)
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '??????????'
+      error.value = err instanceof Error ? err.message : '安装动漫标签模型失败'
     }
   }
 

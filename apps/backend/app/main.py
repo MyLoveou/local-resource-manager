@@ -183,7 +183,7 @@ async def lifespan(_: FastAPI):
             await session.execute(
                 text(
                     "UPDATE ai_jobs SET status = 'error', "
-                    "message = '???????????', "
+                    "message = '应用重启，任务已中断', "
                     "updated_at = datetime('now') "
                     "WHERE status IN ('queued', 'running')"
                 )

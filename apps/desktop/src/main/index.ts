@@ -75,7 +75,7 @@ function registerDialogIpc(): void {
       const path = result.filePaths[0]
       const data = readFileSync(path)
       if (data.length > 32 * 1024 * 1024) {
-        throw new Error('???? 32 MB???????')
+        throw new Error('文件超过 32 MB，无法导入')
       }
       return { name: basename(path), dataBase64: data.toString('base64') }
     }

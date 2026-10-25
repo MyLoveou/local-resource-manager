@@ -675,7 +675,7 @@ class ResourceRepository:
         character_ids: list[int] | None = None,
         person_ids: list[int] | None = None,
     ) -> int:
-        """? list ????????"""
+        """按 list 筛选条件统计资源数量。"""
         stmt = self._filter(
             select(func.count()).select_from(ResourceRow),
             type_,
@@ -1371,7 +1371,7 @@ class ResourceRepository:
         return (await self._session.execute(stmt)).scalars().first()
 
     async def recent(self, limit: int = 12) -> list[Resource]:
-        """??????????"""
+        """获取最近添加的资源。"""
         stmt = (
             select(ResourceRow)
             .where(ResourceRow.status == ResourceStatus.ACTIVE.value)

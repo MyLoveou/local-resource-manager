@@ -23,7 +23,7 @@ from app.shared.value_objects import Rating
 
 
 class ResourceStats(ApiModel):
-    """?????"""
+    """资源库统计概览。"""
 
     by_type: dict[str, int] = Field(default_factory=dict)
     previews_by_type: dict[str, list[str]] = Field(default_factory=dict)
@@ -41,7 +41,7 @@ class TaskSummary(ApiModel):
 
 
 class ConsumptionItem(ApiModel):
-    """????/?????"""
+    """最近消费/打开记录。"""
 
     id: int
     resource_id: int

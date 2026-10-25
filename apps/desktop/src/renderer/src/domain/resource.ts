@@ -114,7 +114,7 @@ export interface ResourceFile {
   resourceId: number
   path: string
   contentUrl?: string | null
-  /** ????,???????? */
+  /** 文件哈希，用于去重与完整性校验 */
   sha256?: string | null
   size?: number | null
   format?: string | null
