@@ -76,7 +76,7 @@ async def apply_scrape_detail(
         resource.title = detail.title
     if apply_synopsis:
         resource.synopsis = detail.synopsis
-    if apply_catalog:
+    if apply_catalog and detail.catalog:
         resource.catalog = detail.catalog
     if apply_author:
         up = up_from_catalog(detail.catalog)

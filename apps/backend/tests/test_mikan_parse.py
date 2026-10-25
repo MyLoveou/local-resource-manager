@@ -33,3 +33,23 @@ class MikanParseTests(unittest.TestCase):
         html = '<a href="https://bgm.tv/subject/12345">x</a>'
         _, _, bgm = parse_bangumi_page(html, "273", BASE)
         self.assertEqual(bgm, "12345")
+
+    def test_attribute_order_does_not_matter(self) -> None:
+        """content 写在 property 前面也必须解析出来。"""
+        props_first = (
+            '<meta property="og:title" content="D-fragments">'
+            '<meta property="og:image" content="https://x/a.jpg">'
+        )
+        content_first = (
+            '<meta content="D-fragments" property="og:title">'
+            '<meta content="https://x/a.jpg" property="og:image">'
+        )
+        for html in (props_first, content_first):
+            title, poster, _ = parse_bangumi_page(html, "273", BASE)
+            self.assertEqual(title, "D-fragments")
+            self.assertEqual(poster, "https://x/a.jpg")
+
+    def test_single_quoted_attributes(self) -> None:
+        html = "<meta content='D-fragments' property='og:title'>"
+        title, _, _ = parse_bangumi_page(html, "273", BASE)
+        self.assertEqual(title, "D-fragments")
