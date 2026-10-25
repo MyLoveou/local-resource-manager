@@ -227,7 +227,10 @@ async def _collect_hits(
         if len(uniq) >= _OVERALL_CAP:
             break
     if not uniq and errors:
-        raise RuntimeError("；".join(errors))
+        hint = ""
+        if all(("ConnectError" in item or "Timeout" in item) for item in errors):
+            hint = "（网络不可达：请检查系统代理或节点）"
+        raise RuntimeError("；".join(errors) + hint)
     return uniq
 
 

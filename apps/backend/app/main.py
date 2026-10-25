@@ -37,6 +37,7 @@ from app.shared.utils.watch_manager import watch_manager
 from app.shared.utils.watch_bridge import watch_bridge
 from app.shared.middleware.auth import require_token
 from app.shared.middleware.logging import log_requests
+from app.shared.proxy import apply_system_proxy
 from app.settings.application.service import load_watch_dirs
 from app.settings.application.restore import apply_pending_restore
 from app.settings.domain.constants import KEY_SYSTEM
@@ -161,6 +162,7 @@ async def lifespan(_: FastAPI):
     """启动：已有库则连接；无库则创建。演示封面仅在需要时处理。"""
     db_path = settings.db_path.resolve()
     ollama_task: asyncio.Task[None] | None = None
+    apply_system_proxy()
     try:
         if apply_pending_restore(db_path):
             logger.info("已应用待恢复备份")
