@@ -189,9 +189,8 @@ async def _search_channels(resource: Resource, job_query: str | None) -> list[Se
     return await _collect_hits(providers, title_q, title_q)
 
 
-# 每个渠道单独配额：否则前一个渠道结果一多，后面的会被总上限直接挤掉
-_PER_PROVIDER_CAP = 10
-_OVERALL_CAP = 20
+# 每个渠道各自的上限；渠道之间互不挤占，也不做跨渠道去重
+_PER_PROVIDER_CAP = 15
 
 
 async def _collect_hits(
@@ -199,8 +198,8 @@ async def _collect_hits(
     title: str,
     bili_blob: str,
 ) -> list[SearchHit]:
-    uniq: list[SearchHit] = []
-    seen: set[str] = set()
+    """逐渠道收集；同一渠道内的重复才丢弃，渠道之间各自独立。"""
+    merged: list[SearchHit] = []
     errors: list[str] = []
     for provider in providers:
         query = bili_blob if isinstance(provider, BilibiliProvider) else title
@@ -215,23 +214,22 @@ async def _collect_hits(
             errors.append(f"{name}: {detail}")
             logger.warning("刮削渠道失败 %s: %s", name, detail)
             continue
-        added = 0
+        seen: set[str] = set()
+        kept = 0
         for hit in found:
             if hit.key in seen:
                 continue
             seen.add(hit.key)
-            uniq.append(hit)
-            added += 1
-            if added >= _PER_PROVIDER_CAP or len(uniq) >= _OVERALL_CAP:
+            merged.append(hit)
+            kept += 1
+            if kept >= _PER_PROVIDER_CAP:
                 break
-        if len(uniq) >= _OVERALL_CAP:
-            break
-    if not uniq and errors:
+    if not merged and errors:
         hint = ""
         if all(("ConnectError" in item or "Timeout" in item) for item in errors):
             hint = "（网络不可达：请检查系统代理或节点）"
         raise RuntimeError("；".join(errors) + hint)
-    return uniq
+    return merged
 
 
 async def preview_candidate(session: AsyncSession, job_id: int, candidate_id: int) -> ScrapePreview:
