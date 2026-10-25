@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -14,6 +16,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.shared.config import Settings, settings
 from app.shared.constants import is_auth_exempt
+from app.shared.db import db as db_module
+from app.shared.db.migrations import migrate
 from app.shared.media_auth import sign_media_path
 
 TOKEN = "s3cret-token"
@@ -24,11 +28,26 @@ OVER_LIMIT_IDS = list(range(1, 202))
 
 class AuthTests(unittest.TestCase):
     def setUp(self) -> None:
+        # 自带临时库：不依赖本机是否已有开发库（CI 上曾经因此报 no such table: files）
+        self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self._previous_db = settings.db_path
+        settings.db_path = Path(self._tmpdir.name) / "auth.db"
+        db_module._engine = None
+        db_module._async_session_factory = None
+        conn = db_module.connect(settings.db_path)
+        try:
+            migrate(conn)
+        finally:
+            conn.close()
         self._previous = settings.token
         settings.token = TOKEN
 
     def tearDown(self) -> None:
         settings.token = self._previous
+        settings.db_path = self._previous_db
+        db_module._engine = None
+        db_module._async_session_factory = None
+        self._tmpdir.cleanup()
 
     def _client(self) -> TestClient:
         return TestClient(app)

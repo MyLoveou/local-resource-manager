@@ -22,6 +22,13 @@ from app.shared.db.migrations import migrate
 
 class AISearchTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
+        # 这些用例用假向量验证检索逻辑，不该依赖本机是否装了 CLIP 模型。
+        # CI 没下模型时 is_installed() 为假，AIService 会直接抛「请先安装 AI 模型」。
+        self._model_patch = patch(
+            "app.ai.application.service.is_installed", return_value=True
+        )
+        self._model_patch.start()
+        self.addCleanup(self._model_patch.stop)
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         self.db_path = self.root / "t.db"
