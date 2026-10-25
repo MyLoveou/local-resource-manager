@@ -18,7 +18,10 @@
 |------|------|------|
 | 视频 GPS/地图 | 部分 | 解析 ffprobe `location` / QuickTime ISO6709；有 GPS 且加入地图的视频显示；无 GPS 不显示 |
 | 字幕管理 | 部分 | 支持添加外挂字幕；批量/自动匹配未确认 |
-| 播放进度记忆 | 未实现 | 当前不持久化播放位置 |
+| 播放进度记忆 | **已立项 S1** | 当前不持久化播放位置；见 [video-management](../features/video-management/需求.md) |
+| 播放器控件（倍速/快捷键/上下集） | **已立项 S2** | 当前只有 Esc 与全屏 |
+| 字幕自动匹配 | **已立项 S2** | 当前仅支持手动添加外挂字幕 |
+| 音轨元数据 | **已立项 S3** | `files` 表当前无音频编码/声道列 |
 | 视频刮削字段完整度 | 部分 | TMDB/B站字段按现有适配器；站点覆盖有限 |
 | 系列化视频 | OUT | 多集作品应使用 anime/av 的系列类型 |
 
@@ -40,3 +43,4 @@
 - `apps/backend/app/library/application/media_probe.py`
 - `apps/desktop/src/renderer/src/components/VideoPlayerOverlay`
 - `features/metadata-scrape/`、`features/library-covers-complete/`
+- 视频阶段需求：[features/video-management/需求.md](../features/video-management/需求.md)（S1 进度与续播 → S2 播放器与字幕 → S3 维度与刮削）
