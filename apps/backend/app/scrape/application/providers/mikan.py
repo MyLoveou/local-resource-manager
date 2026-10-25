@@ -11,6 +11,7 @@ import httpx
 from app.scrape.application.images import normalize_https, unique_https
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
 from app.settings.application.secrets import mikan_base_url
+from app.shared.log import logger
 
 _UA = {"User-Agent": "SourceManager/0.1 (local library; metadata scrape)"}
 _BANGUMI_HREF = re.compile(r'href=["\']/Home/Bangumi/(\d+)["\']', re.I)
@@ -60,8 +61,9 @@ def parse_bangumi_page(html: str, ident: str, base: str) -> tuple[str, str | Non
         h1 = _H1.search(html)
         if h1:
             title = unescape(h1.group(1)).strip()
+    # 解析不出来就留空：数字 id 不是标题，落库会把资源改名成 "273"
     if not title:
-        title = ident
+        logger.warning("蜜柑页面未解析出标题 id=%s", ident)
     poster = None
     og_i = _OG_IMAGE.search(html)
     if og_i:

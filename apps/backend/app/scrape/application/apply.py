@@ -72,7 +72,7 @@ async def apply_scrape_detail(
                 raise RuntimeError("封面不在候选中")
             if not (is_user_locked(resource) and not replace_user_cover):
                 payload = await fetch_poster_bytes(poster)
-    if apply_title:
+    if apply_title and detail.title.strip():
         resource.title = detail.title
     if apply_synopsis:
         resource.synopsis = detail.synopsis
