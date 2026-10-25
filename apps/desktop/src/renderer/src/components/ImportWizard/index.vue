@@ -102,15 +102,24 @@
       </ul>
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       <div class="actions">
+        <n-button
+          v-if="job?.status === 'done'"
+          :disabled="busy"
+          @click="reviewOpen = true"
+        >
+          查看建议
+        </n-button>
         <n-button :disabled="busy" @click="close">完成</n-button>
       </div>
     </div>
+    <SuggestionReview v-model:show="reviewOpen" :job-id="job?.jobId ?? null" />
   </n-modal>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSelect, NSpace, NProgress } from 'naive-ui'
+import SuggestionReview from '@/components/SuggestionReview/index.vue'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
 import { SourceKind } from '@/domain'
 
@@ -140,6 +149,7 @@ const {
 const isTimelineMedia = computed(
   () => resourceType.value === 'image' || resourceType.value === 'video'
 )
+const reviewOpen = ref(false)
 const isMapMedia = computed(
   () => resourceType.value === 'image' || resourceType.value === 'video'
 )

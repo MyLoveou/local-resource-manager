@@ -70,6 +70,19 @@ export {
   clearPlaybackProgress,
   getResumeList,
 } from './progress'
+export {
+  getSuggestionGroups,
+  getSuggestionSummary,
+  applySuggestions,
+  rejectSuggestions,
+} from './suggestions'
+export type {
+  SuggestionGroup,
+  SuggestionPage,
+  SuggestionSummary,
+  SuggestionApplyResult,
+  SuggestionRejectResult,
+} from '@/domain/smartImport'
 export type { PlaybackProgress, PlaybackProgressInput, ResumeItem, ResumePage } from '@/domain/progress'
 export { getPhotoTimeline, backfillPhotos, backfillThumbnails, rebuildThumbnail } from './photos'
 export { getTags, invalidateTags } from './vocab'

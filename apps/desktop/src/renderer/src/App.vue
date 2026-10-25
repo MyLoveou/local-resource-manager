@@ -10,6 +10,7 @@ import ImageViewerOverlay from '@/components/ImageViewerOverlay/index.vue'
 import VideoPlayerOverlay from '@/components/VideoPlayerOverlay/index.vue'
 import AudioPlayerOverlay from '@/components/AudioPlayerOverlay/index.vue'
 import ModelPreviewOverlay from '@/components/ModelPreviewOverlay/index.vue'
+import SuggestionBadge from '@/components/SuggestionBadge/index.vue'
 import { routes } from '@/router/route'
 import { menuFromRoutes } from '@/domain/menu'
 import { isSectionHidden } from '@/domain/visibility'
@@ -48,6 +49,7 @@ useWatchAutoRefresh()
         <VideoPlayerOverlay />
         <AudioPlayerOverlay />
         <ModelPreviewOverlay />
+        <SuggestionBadge />
         <template #inspector>
           <InfoPanel />
         </template>
