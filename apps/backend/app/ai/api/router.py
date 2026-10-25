@@ -27,7 +27,7 @@ from app.ai.application.schemas import (
     VLMSelectBinaryRequest,
     VLMSelectRequest,
 )
-from app.ai.application.category_hint import category_hints
+from app.ai.application.category_hint import suggest_categories
 from app.ai.application.service import AIService, AIServiceError
 from app.shared.db.db import get_session
 
@@ -155,7 +155,7 @@ async def suggestions(
 ) -> list[AISuggestionItem]:
     items = await _service(session).suggestions(limit, offset)
     # 分类建议在应用层补齐：service.py 已顶到文件规模基线，不往里加行
-    hints = await category_hints(session, [item.resource_id for item in items])
+    hints = await suggest_categories(session, [item.resource_id for item in items])
     for item in items:
         item.categories = [
             AIEntitySuggestion(id=hit["id"], name=hit["name"], confidence=hit["confidence"])

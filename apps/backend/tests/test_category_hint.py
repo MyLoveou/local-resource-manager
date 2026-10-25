@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.ai.application.category_hint import category_hints
+from app.ai.application.category_hint import category_hints, suggest_categories
 from app.shared.db.migrations import migrate
 
 
