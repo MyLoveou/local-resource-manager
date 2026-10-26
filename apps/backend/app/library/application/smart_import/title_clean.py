@@ -39,8 +39,22 @@ _NOISE_TOKENS = frozenset(
     }
 )
 
-# 中文噪音：字幕组 / 压制 / 搬运等
+# 中文噪音：字幕组 / 压制 / 搬运等（任何场景都剥）
 _NOISE_CJK = ("字幕组", "字幕", "压制", "搬运", "生肉", "熟肉", "汉化", "翻译")
+
+# 打包/特典/语言包装：只在**作品标题**里剥。
+# 单文件视频靠这些词区分集与特典，剥掉会撞名（`异世界舅舅 01` vs 特典第 01 集）。
+_PACK_CJK = (
+    "全集", "合集", "完结合集", "全话", "本篇",
+    "特典", "映像特典", "特典映像", "预告", "花絮", "菜单",
+    "双语", "外挂", "内封", "内嵌", "简繁", "简体", "繁体", "中日",
+)
+
+# 集数范围：`01-13`、`1~12`、`01-13TV`。整段视为打包说明，不是标题
+_EPISODE_RANGE = re.compile(r"\d{1,3}\s*[-~～–—]\s*\d{1,3}")
+
+# 话数说明：`全12话`、`12集`（中间夹数字，字符串匹配覆盖不到）
+_FULL_COUNT = re.compile(r"全\s*\d{1,4}\s*[话集部]|\d{1,4}\s*[话集]")
 
 # 尾部署编号：` - 01`、` 01`、`_01`、` 第01话`、` 第3集`
 _TRAILING_EP = re.compile(r"(?:[\s_\-–—]+|^)(?:第\s*)?(\d{1,4})(?:\s*[话集期])?\s*$")
@@ -69,8 +83,15 @@ def _tokens(segment: str) -> list[str]:
     return [t.lower() for t in _TOKEN_SPLIT.split(segment) if t]
 
 
-def _is_noise_tokens(segment: str) -> bool:
+def _is_noise_tokens(segment: str, *, work_title: bool = False) -> bool:
     if any(marker in segment for marker in _NOISE_CJK):
+        return True
+    if work_title and any(marker in segment for marker in _PACK_CJK):
+        return True
+    if work_title and _FULL_COUNT.search(segment):
+        return True
+    # `01-13TV全集` 这类打包段：集数范围本身就是噪音
+    if _EPISODE_RANGE.search(segment):
         return True
     tokens = _tokens(segment)
     if not tokens:
@@ -119,7 +140,9 @@ def clean_release_name(raw: str, *, keep_episode: bool = True) -> CleanResult:
             first_bracket = False
             continue
 
-        if _is_noise_tokens(inner) or (first_bracket and _looks_like_group(inner)):
+        if _is_noise_tokens(inner, work_title=not keep_episode) or (
+            first_bracket and _looks_like_group(inner)
+        ):
             removed.append(match.group(0))
         else:
             pieces.append(inner)
