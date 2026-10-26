@@ -1,5 +1,7 @@
 # 任务 · image-consume-perf
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 > 用户确认「可以按此实现」后再编码。
 
 - [ ] 1. 懒加载：卡片/面板图；content 仅查看器打开后；±1 预取 idle

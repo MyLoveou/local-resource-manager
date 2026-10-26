@@ -1,5 +1,7 @@
 # 任务 · image-consume
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 > 用户已确认可以按此实现。
 
 ## 1. 对齐

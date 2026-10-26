@@ -1,4 +1,6 @@
-﻿# 任务 · section-visibility
+# 任务 · section-visibility
+
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
 
 > 每项写明如何验证。官方 apply 靠 checkbox 追踪。
 
@@ -28,6 +30,6 @@
 
 ## 5. 验收
 
-- [ ] 5.1 `tests.md` 全部 PASS（贴命令与结果）
-- [ ] 5.2 `verification-gate` 输出可交付
+- [x] 5.1 `tests.md` 全部 PASS（贴命令与结果）
+- [x] 5.2 `verification-gate` 输出可交付
 - [x] 5.3 未改 backend；跑全量 pytest 回归防误伤

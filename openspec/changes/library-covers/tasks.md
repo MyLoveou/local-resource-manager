@@ -1,5 +1,7 @@
 # 任务 · library-covers
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 - [x] 1.1 TypeProfile `allows_user_cover` 前后端
 - [x] 1.2 `covers/`：origin 合并、user 锁定、attach_cover
 - [x] 1.3 replace_cover：图片 422；写 `coverOrigin=user`

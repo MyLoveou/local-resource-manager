@@ -1,8 +1,10 @@
 # Tasks
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 ## 1. 动工与迁移
 
-- [ ] 1.1 单独提交当前 R1/时间线改动，建 `feat/library-workspace`，备份 DB/release；验证：工作区无混入、备份可打开
+- [ ] 1.1 单独提交当前 R1/时间线改动，建 `feat/library-workspace`，备份 DB/release；验证：工作区无混入、备份可打开 ← 不再适用（分支已合并，见收尾清单）
 - [x] 1.2 写 `0018_category_tree.sql`：分类树字段、`resource_categories`、多类型复制、待整理分类、索引与外键检查；验证：临时库迁移通过
 - [x] 1.3 写 `0019_saved_views.sql`：保存视图表与唯一索引；验证：新库/旧库都能迁移
 - [x] 1.4 更新 ORM/domain（Category 树、Resource.categories、ResourceCategory、SavedView）；验证：导入无错、旧列标记 deprecated
@@ -33,7 +35,7 @@
 - [x] 4.2 扩展 browseQuery（categoryIds/view/savedViewId/reset）与 useResourcePage；验证：store 单测通过
 - [x] 4.3 实现 CategoryTreePanel/管理弹窗（默认展开第一层、待整理分类非空显示）；验证：树交互 CDP 通过
 - [x] 4.4 信息栏/编辑弹窗改多分类 chips + 树选择；验证：多分类保存/清空 CDP 通过
-- [ ] 4.5 分类树/赋值组件单测与 lint；验证：前端测试/typecheck/lint 通过
+- [x] 4.5 分类树/赋值组件单测与 lint；验证：前端测试/typecheck/lint 通过
 
 ## 5. 工作区 Shell 与路由
 
@@ -70,4 +72,4 @@
 - [ ] 8.4 迁移/性能抽查（大库分类计数、首页/合集 N+1）；验证：无回退
 - [x] 8.5 `pnpm release:win` 重打包并 verify；验证：安装包/健康检查/SHA 通过
 - [x] 8.6 更新 facts/decisions/handoff/todo；验证：文档同步
-- [ ] 8.7 `code-review-gate` → `verification-gate`（含 tests.md）；验证：门禁通过
+- [ ] 8.7 `code-review-gate` → `verification-gate`（含 tests.md）；验证：门禁通过 ← 随下次评审执行

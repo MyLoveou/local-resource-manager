@@ -1,5 +1,7 @@
 # 任务 · platform-debt
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 > 用户已授权 apply（2026-09-27，Q1–Q5 按建议通过）。**已全部完成**，余 Electron 手验。
 
 ## 1. D2 · token 校验
