@@ -116,6 +116,13 @@ token 为空
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [03-主进程传参additionalArguments](03-主进程传参additionalArguments.md)
 - [02-Electron后端子进程编排](02-Electron后端子进程编排.md)
 - [31-踩坑-桌面端拉起后端的进程环境](31-踩坑-桌面端拉起后端的进程环境.md)
+
+### 站外知识
+
+- [Electron · 上下文隔离](https://www.electronjs.org/docs/latest/tutorial/context-isolation)
+- [Electron · 进程模型](https://www.electronjs.org/docs/latest/tutorial/process-model)

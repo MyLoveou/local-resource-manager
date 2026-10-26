@@ -73,6 +73,15 @@ except Exception:
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [35-设计-AI建议为什么要做成闭集](35-设计-AI建议为什么要做成闭集.md)
 - [43-图解-AI检索与建议的算法](43-图解-AI检索与建议的算法.md)
 - [40-学习向-AI名词到底是什么意思](40-学习向-AI名词到底是什么意思.md)
+
+### 站外知识
+
+- [CLIP 论文 (Radford et al.)](https://arxiv.org/abs/2103.00020)
+- [Chinese-CLIP](https://github.com/OFA-Sys/Chinese-CLIP)
+- [余弦相似度（维基）](https://zh.wikipedia.org/wiki/%E4%BD%99%E5%BC%A6%E7%9B%B8%E4%BC%BC%E6%80%A7)
+- [ONNX Runtime 文档](https://onnxruntime.ai/docs/)

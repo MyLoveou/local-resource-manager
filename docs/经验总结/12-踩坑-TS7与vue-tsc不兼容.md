@@ -27,5 +27,12 @@ pnpm add -D typescript@^5.9   # 降到 5.x，vue-tsc 兼容
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [24-桌面端分层与模块封装](24-桌面端分层与模块封装.md)
 - [30-经验-文件规模门禁下的落点选择](30-经验-文件规模门禁下的落点选择.md)
+
+### 站外知识
+
+- [Vue 3 文档](https://cn.vuejs.org/guide/)
+- [electron-builder 配置](https://www.electron.build/configuration)

@@ -31,5 +31,11 @@ import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [24-桌面端分层与模块封装](24-桌面端分层与模块封装.md)
 - [21-虚拟滚动与分页](21-虚拟滚动与分页.md)
+
+### 站外知识
+
+- [Vue 3 文档](https://cn.vuejs.org/guide/)

@@ -475,6 +475,14 @@ local-resource-manager-0.1.2-win-x64-setup.exe.blockmap
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [26-发布构建与测试门禁](26-发布构建与测试门禁.md)
 - [48-图解-启动时序与发布流水线](48-图解-启动时序与发布流水线.md)
 - [19-命令速查](19-命令速查.md)
+
+### 站外知识
+
+- [electron-updater 自动更新](https://www.electron.build/auto-update)
+- [electron-builder 配置](https://www.electron.build/configuration)
+- [语义化版本](https://semver.org/lang/zh-CN/)

@@ -37,6 +37,13 @@ srv.close(() => resolve(port))   // ✅
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [02-Electron后端子进程编排](02-Electron后端子进程编排.md)
 - [09-踩坑-健康检查未就绪崩溃](09-踩坑-健康检查未就绪崩溃.md)
 - [48-图解-启动时序与发布流水线](48-图解-启动时序与发布流水线.md)
+
+### 站外知识
+
+- [Electron 文档](https://www.electronjs.org/zh/docs/latest/)
+- [Uvicorn](https://www.uvicorn.org/)

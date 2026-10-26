@@ -257,5 +257,14 @@ async with self.factory() as session:
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [49-图解-导出备份与恢复](49-图解-导出备份与恢复.md)
 - [46-图解-分层数据模型与状态机](46-图解-分层数据模型与状态机.md)
+
+### 站外知识
+
+- [SQLAlchemy 2.0 asyncio](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
+- [aiosqlite](https://aiosqlite.omnilib.dev/)
+- [SQLite · WAL 模式](https://www.sqlite.org/wal.html)
+- [SQLite · PRAGMA / checkpoint](https://www.sqlite.org/pragma.html)

@@ -59,6 +59,13 @@
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [03-主进程传参additionalArguments](03-主进程传参additionalArguments.md)
 - [05-CORS跨域配置](05-CORS跨域配置.md)
 - [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)
+
+### 站外知识
+
+- [MDN · CSP](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/CSP)
+- [MDN · HTTP 概述](https://developer.mozilla.org/zh-CN/docs/Web/HTTP)

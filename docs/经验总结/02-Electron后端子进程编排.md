@@ -266,7 +266,15 @@ backend.watchExit(() => {
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [03-主进程传参additionalArguments](03-主进程传参additionalArguments.md)
 - [17-踩坑-process.env跨进程](17-踩坑-process.env跨进程.md)
 - [31-踩坑-桌面端拉起后端的进程环境](31-踩坑-桌面端拉起后端的进程环境.md)
 - [48-图解-启动时序与发布流水线](48-图解-启动时序与发布流水线.md)
+
+### 站外知识
+
+- [Electron · 进程模型](https://www.electronjs.org/docs/latest/tutorial/process-model)
+- [Uvicorn](https://www.uvicorn.org/)
+- [PyInstaller](https://pyinstaller.org/en/stable/)

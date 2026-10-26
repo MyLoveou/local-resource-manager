@@ -101,5 +101,11 @@ CodeGraph 的 MCP 已注册进 `~/.codex/config.toml`（`codegraph serve --mcp`�
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [11-踩坑-pnpm11构建脚本拦截](11-踩坑-pnpm11构建脚本拦截.md)
 - [29-踩坑-测试依赖本机环境](29-踩坑-测试依赖本机环境.md)
+
+### 站外知识
+
+- [Windows · 访问控制列表](https://learn.microsoft.com/zh-cn/windows/win32/secauthz/access-control-lists)

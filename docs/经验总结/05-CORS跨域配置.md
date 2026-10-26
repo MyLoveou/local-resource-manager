@@ -100,5 +100,12 @@ app.add_middleware(CORSMiddleware, ...)   # ← 最后
 
 ## 扩展阅读
 
+### 站内（本仓）
+
 - [04-CSP拦截渲染进程请求](04-CSP拦截渲染进程请求.md)
 - [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)
+
+### 站外知识
+
+- [MDN · CORS](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/CORS)
+- [MDN · HTTP 概述](https://developer.mozilla.org/zh-CN/docs/Web/HTTP)
