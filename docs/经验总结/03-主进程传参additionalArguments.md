@@ -78,3 +78,11 @@ const client = axios.create({
 - [Electron · 上下文隔离](https://www.electronjs.org/docs/latest/tutorial/context-isolation)
 - [Electron · 进程模型](https://www.electronjs.org/docs/latest/tutorial/process-model)
 - [MDN · HTTP 概述](https://developer.mozilla.org/zh-CN/docs/Web/HTTP)
+
+
+
+# 问题备注
+
+在这一块，我一直在思考为什么明明没有在任何地方进行显式传递各种参数，比如backend-url这些，它们到底是如何传递的，
+
+我认为是框架在帮忙传递，但实际流程我还不知道

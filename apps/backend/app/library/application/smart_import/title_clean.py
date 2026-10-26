@@ -79,6 +79,11 @@ class CleanResult:
     confidence: float
 
 
+def split_segments(raw: str) -> list[str]:
+    """把发布名按括号拆成片段，供 AI 兜底挑选（不含括号本身）。"""
+    return [m.group(1).strip() for m in _BRACKET.finditer(raw or "") if m.group(1).strip()]
+
+
 def _tokens(segment: str) -> list[str]:
     return [t.lower() for t in _TOKEN_SPLIT.split(segment) if t]
 
