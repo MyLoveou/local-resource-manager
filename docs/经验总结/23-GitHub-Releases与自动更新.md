@@ -472,3 +472,9 @@ local-resource-manager-0.1.2-win-x64-setup.exe.blockmap
 - `apps/desktop/src/main/infrastructure/services/update.ts`
 - `.github/workflows/release-windows.yml`
 - `apps/desktop/electron-builder.yml`
+
+## 扩展阅读
+
+- [26-发布构建与测试门禁](26-发布构建与测试门禁.md)
+- [48-图解-启动时序与发布流水线](48-图解-启动时序与发布流水线.md)
+- [19-命令速查](19-命令速查.md)

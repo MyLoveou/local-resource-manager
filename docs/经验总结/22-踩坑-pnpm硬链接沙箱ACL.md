@@ -98,3 +98,8 @@ node apps/desktop/node_modules/electron/install.js
 | CodeGraph | 全局 npm（`@colbymchenry/codegraph`，另有 MCP 注册） | `codegraph index .` / `codegraph explore "<问题>"` / MCP `codegraph_explore` |
 
 CodeGraph 的 MCP 已注册进 `~/.codex/config.toml`（`codegraph serve --mcp`），**需重启会话**才会出现 `codegraph_*` 工具；未出现时用 shell 版 `codegraph explore` 等价替代。
+
+## 扩展阅读
+
+- [11-踩坑-pnpm11构建脚本拦截](11-踩坑-pnpm11构建脚本拦截.md)
+- [29-踩坑-测试依赖本机环境](29-踩坑-测试依赖本机环境.md)

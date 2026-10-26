@@ -97,3 +97,8 @@ app.add_middleware(CORSMiddleware, ...)   # ← 最后
 1. 任何「给所有请求加一道关卡」的中间件（鉴权、限流、审计），都要先问一句：**预检请求能不能过**。
 2. **CORS 必须是最外层**。放在里面的后果不只是预检失败，还有「错误响应没有 CORS 头 → 前端只看到 Network Error」，把真实原因藏起来。
 3. 顺序问题在 TestClient 上也复现（`TestClient.options(...)` 带 `Origin` + `Access-Control-Request-Headers` 即可），所以能写成单测，别只靠手点。
+
+## 扩展阅读
+
+- [04-CSP拦截渲染进程请求](04-CSP拦截渲染进程请求.md)
+- [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)

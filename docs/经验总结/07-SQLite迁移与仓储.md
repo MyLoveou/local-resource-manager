@@ -254,3 +254,8 @@ async with self.factory() as session:
 - [27-媒体库领域与时间线.md](27-媒体库领域与时间线.md)
 - `apps/backend/app/shared/db/db.py`
 - `apps/backend/app/shared/db/migrations.py`
+
+## 扩展阅读
+
+- [49-图解-导出备份与恢复](49-图解-导出备份与恢复.md)
+- [46-图解-分层数据模型与状态机](46-图解-分层数据模型与状态机.md)

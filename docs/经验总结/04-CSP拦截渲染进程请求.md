@@ -56,3 +56,9 @@
 - CSP 是浏览器安全机制，Electron 同样生效。
 - 修改 CSP 后需重启应用（meta 在 HTML 里，构建/热更不一定刷到）。
 - 排查工具：DevTools → Network 面板，被 CSP 拦截的请求会直接红字 "net::ERR_BLOCKED_BY_CSP"。
+
+## 扩展阅读
+
+- [03-主进程传参additionalArguments](03-主进程传参additionalArguments.md)
+- [05-CORS跨域配置](05-CORS跨域配置.md)
+- [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)

@@ -64,3 +64,9 @@ const client = axios.create({
 
 - **兜底值**必须在（`?? 默认`），否则单浏览器调试（无 preload）时 `window.electron` 为 undefined 会崩。
 - 若值很多，可改用 IPC：preload `ipcRenderer.invoke('get-backend')`，主进程 `ipcMain.handle` 返回——但多一次异步，本次用同步 additionalArguments 更简单。
+
+## 扩展阅读
+
+- [02-Electron后端子进程编排](02-Electron后端子进程编排.md)
+- [17-踩坑-process.env跨进程](17-踩坑-process.env跨进程.md)
+- [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)
