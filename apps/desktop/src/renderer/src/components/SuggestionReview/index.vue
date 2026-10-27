@@ -33,6 +33,7 @@
                 <n-tag size="tiny" :type="tagType(group.confidence)">
                   {{ Math.round(group.confidence * 100) }}%
                 </n-tag>
+                <n-tag v-if="group.source === 'ai'" size="tiny" type="info">AI</n-tag>
                 <span class="review__n">×{{ group.count }}</span>
               </div>
               <p v-if="group.reasons.length" class="review__reason">{{ group.reasons[0] }}</p>
