@@ -135,11 +135,12 @@ class RefineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out[0].source, "ai")
         self.assertGreater(out[0].confidence, 0.85)
 
-    async def test_clean_suggestion_is_untouched(self) -> None:
+    async def test_clean_suggestion_is_also_refined(self) -> None:
+        # AI 为主路径：规则判不出问题的标题同样交给模型复核
         fake = _FakeComplete('{"keep": [1]}')
         out = await refine_suggestions(self._ctx(), [self._rule("异世界舅舅")], complete=fake, enabled=True)
-        self.assertEqual(out[0].source, "rule")
-        self.assertEqual(fake.prompts, [])
+        self.assertEqual(out[0].source, "ai")
+        self.assertEqual(len(fake.prompts), 1)
 
     async def test_model_failure_keeps_rule_result(self) -> None:
         fake = _FakeComplete(None)

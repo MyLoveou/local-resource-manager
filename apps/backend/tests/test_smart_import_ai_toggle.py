@@ -64,10 +64,10 @@ class _DbCase(unittest.IsolatedAsyncioTestCase):
 
 
 class AiToggleTests(_DbCase):
-    async def test_default_is_disabled(self) -> None:
+    async def test_default_is_enabled(self) -> None:
         async with self.factory() as session:
-            self.assertFalse(DEFAULT_ENABLED)
-            self.assertFalse(await is_ai_enabled(session))
+            self.assertTrue(DEFAULT_ENABLED)
+            self.assertTrue(await is_ai_enabled(session))
 
     async def test_roundtrip(self) -> None:
         async with self.factory() as session:
@@ -90,6 +90,19 @@ class AiToggleTests(_DbCase):
         out = await refine_suggestions(ctx, [suggestion], complete=fake, enabled=False)
         self.assertEqual(out[0], suggestion)
         self.assertEqual(calls, [])
+
+    async def test_ai_only_when_rules_found_nothing(self) -> None:
+        from app.library.application.smart_import.title_ai import ai_only_suggestion
+
+        async def fake(prompt: str) -> str | None:
+            return '{"keep": [1]}'
+
+        ctx = ActionContext(resource_id=1, type=ResourceType.ANIME, file_stem="x", dir_name=PV)
+        suggestion = await ai_only_suggestion(ctx, complete=fake)
+        self.assertIsNotNone(suggestion)
+        assert suggestion is not None
+        self.assertEqual(suggestion.source, "ai")
+        self.assertEqual(suggestion.value, {"text": "Isekai Ojisan"})
 
     async def test_refine_runs_when_enabled(self) -> None:
         async def fake(prompt: str) -> str | None:

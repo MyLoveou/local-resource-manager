@@ -142,9 +142,8 @@ async def refine_suggestions(
         if suggestion.field != "title":
             out.append(suggestion)
             continue
-        text = str((suggestion.value or {}).get("text") or "")
         raw = ctx.dir_name or ctx.file_stem
-        if not text or not needs_review(raw, text):
+        if not raw:
             out.append(suggestion)
             continue
         result = await suggest_title(raw, complete=client, known_titles=known_titles)
@@ -162,3 +161,30 @@ async def refine_suggestions(
             )
         )
     return out
+
+
+async def ai_only_suggestion(
+    ctx: ActionContext,
+    *,
+    complete=None,
+    known_titles: tuple[str, ...] = (),
+) -> Suggestion | None:
+    """规则没产出标题建议时，直接让模型选出作品名。"""
+    from app.ai.infrastructure.text_completion import complete as default_complete
+
+    raw = ctx.dir_name or ctx.file_stem
+    if not raw:
+        return None
+    result = await suggest_title(
+        raw, complete=complete or default_complete, known_titles=known_titles
+    )
+    if result is None:
+        return None
+    title, _ = result
+    return Suggestion(
+        field="title",
+        value={"text": title},
+        confidence=0.9,
+        reason="AI 从发布名片段中选出作品名",
+        source="ai",
+    )

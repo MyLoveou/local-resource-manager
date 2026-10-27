@@ -9,7 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 KEY = "smart_import_ai"
-DEFAULT_ENABLED = False
+# 默认开启：规则只能覆盖已知模式，标题清洗以模型为主，模型不可用时自动降级
+DEFAULT_ENABLED = True
 
 
 async def is_ai_enabled(session: AsyncSession) -> bool:

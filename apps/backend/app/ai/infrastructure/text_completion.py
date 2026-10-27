@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import os
+
 import httpx
 
 from app.shared.config import settings
@@ -14,8 +16,15 @@ from app.shared.log import logger
 DEFAULT_TIMEOUT = 20.0
 
 
+def _testing() -> bool:
+    """pytest 下不连真实模型：测试不该依赖本机是否开着 Ollama（见经验 29）。"""
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
 async def complete(prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> str | None:
     """调用 Ollama /api/generate；不可用或异常返回 None。"""
+    if _testing():
+        return None
     base = (settings.vlm_url or "").rstrip("/")
     if not base:
         return None

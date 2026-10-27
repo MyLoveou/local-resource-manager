@@ -13,10 +13,14 @@ from app.library.application.smart_import.base import (
     actions_for,
 )
 from app.library.application.smart_import.preferences import is_ai_enabled
-from app.library.application.smart_import.title_ai import refine_suggestions
+from app.library.application.smart_import.title_ai import ai_only_suggestion, refine_suggestions
 from app.library.domain.models import ResourceType
 from app.library.infrastructure.repositories_suggestions import SuggestionRepository
 from app.shared.log import logger
+
+# 规则没产出也值得问模型的类型：番剧/AV/视频的发布名长尾最多；
+# 图片一次几百张，逐张调模型不划算，交给规则即可
+_AI_UNSEEDED_TYPES = frozenset({ResourceType.ANIME, ResourceType.AV, ResourceType.VIDEO})
 
 
 def evaluate(ctx: ActionContext) -> list[Suggestion]:
@@ -51,10 +55,15 @@ async def suggest_after_ingest(
             dir_name=dir_name,
         )
         suggestions = evaluate(ctx)
-        if suggestions:
-            suggestions = await refine_suggestions(
-                ctx, suggestions, enabled=await is_ai_enabled(resources.session)
-            )
+        if await is_ai_enabled(resources.session):
+            suggestions = await refine_suggestions(ctx, suggestions, enabled=True)
+            # 规则什么都没产出时，也要让模型给出标题；图片量太大，不在这里调模型
+            if ctx.type in _AI_UNSEEDED_TYPES and not any(
+                item.field == "title" for item in suggestions
+            ):
+                extra = await ai_only_suggestion(ctx)
+                if extra is not None:
+                    suggestions.append(extra)
         if not suggestions:
             return 0
         return await repo.insert_many(job_id, resource_id, suggestions)
