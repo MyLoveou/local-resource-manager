@@ -57,6 +57,11 @@
           加入地图（需要 GPS）
         </n-checkbox>
       </div>
+      <div class="timeline-toggle">
+        <n-checkbox :checked="aiTitle" :disabled="busy" @update:checked="onAiTitleChange">
+          用 AI 清洗标题（模型不可用时自动跳过）
+        </n-checkbox>
+      </div>
       <p class="hint">整理信息（可选，应用整批）</p>
       <n-select
         v-model:value="categoryIds"
@@ -117,9 +122,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { NModal, NButton, NCheckbox, NRadio, NRadioGroup, NSelect, NSpace, NProgress } from 'naive-ui'
+import { notify } from '@/application/notify'
 import SuggestionReview from '@/components/SuggestionReview/index.vue'
+import { getImportSettings, saveImportSettings } from '@/infrastructure/http/suggestions'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
 import { SourceKind } from '@/domain'
 
@@ -150,6 +157,25 @@ const isTimelineMedia = computed(
   () => resourceType.value === 'image' || resourceType.value === 'video'
 )
 const reviewOpen = ref(false)
+const aiTitle = ref(false)
+
+async function onAiTitleChange(checked: boolean): Promise<void> {
+  aiTitle.value = checked
+  try {
+    await saveImportSettings(checked)
+  } catch {
+    aiTitle.value = !checked
+    notify.toast.error('保存 AI 清洗开关失败')
+  }
+}
+
+onMounted(async () => {
+  try {
+    aiTitle.value = (await getImportSettings()).aiTitle
+  } catch {
+    aiTitle.value = false
+  }
+})
 const isMapMedia = computed(
   () => resourceType.value === 'image' || resourceType.value === 'video'
 )

@@ -65,7 +65,7 @@ class SingleFileTitleTests(unittest.TestCase):
         result = clean_release_name(
             "[DBD-Raws][异世界舅舅][Tokuten][02][1080P][BDRip][HEVC-10bit][FLAC][MKV]"
         )
-        self.assertIn("Tokuten", result.title)
+        self.assertIn("特典", result.title)
         self.assertIn("02", result.title)
 
     def test_pack_segment_still_dropped_for_single_file(self) -> None:

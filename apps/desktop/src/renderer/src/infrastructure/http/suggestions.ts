@@ -23,6 +23,22 @@ export async function getSuggestionSummary(): Promise<SuggestionSummary> {
   return data
 }
 
+export interface ImportAiSettings {
+  aiTitle: boolean
+}
+
+export async function getImportSettings(): Promise<ImportAiSettings> {
+  const { data } = await client.get<ImportAiSettings>('/library/import-suggestions/settings')
+  return data
+}
+
+export async function saveImportSettings(aiTitle: boolean): Promise<ImportAiSettings> {
+  const { data } = await client.put<ImportAiSettings>('/library/import-suggestions/settings', {
+    aiTitle,
+  })
+  return data
+}
+
 export async function applySuggestions(
   body: SuggestionApplyRequest,
 ): Promise<SuggestionApplyResult> {

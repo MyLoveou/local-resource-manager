@@ -129,9 +129,10 @@ async def refine_suggestions(
     *,
     complete=None,
     known_titles: tuple[str, ...] = (),
+    enabled: bool = False,
 ) -> list[Suggestion]:
-    """只对"规则拿不准"的标题建议做 AI 兜底，其余原样返回。"""
-    if not suggestions:
+    """只对"规则拿不准"的标题建议做 AI 兜底；未开启 AI 时原样返回。"""
+    if not suggestions or not enabled:
         return suggestions
     from app.ai.infrastructure.text_completion import complete as default_complete
 

@@ -12,6 +12,7 @@ from app.library.application.smart_import.base import (
     Suggestion,
     actions_for,
 )
+from app.library.application.smart_import.preferences import is_ai_enabled
 from app.library.application.smart_import.title_ai import refine_suggestions
 from app.library.domain.models import ResourceType
 from app.library.infrastructure.repositories_suggestions import SuggestionRepository
@@ -50,7 +51,10 @@ async def suggest_after_ingest(
             dir_name=dir_name,
         )
         suggestions = evaluate(ctx)
-        suggestions = await refine_suggestions(ctx, suggestions)
+        if suggestions:
+            suggestions = await refine_suggestions(
+                ctx, suggestions, enabled=await is_ai_enabled(resources.session)
+            )
         if not suggestions:
             return 0
         return await repo.insert_many(job_id, resource_id, suggestions)

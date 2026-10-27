@@ -130,19 +130,19 @@ class RefineTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_suspicious_suggestion_is_replaced(self) -> None:
         fake = _FakeComplete('{"keep": [1]}')
-        out = await refine_suggestions(self._ctx(), [self._rule("异世界舅舅1080P")], complete=fake)
+        out = await refine_suggestions(self._ctx(), [self._rule("异世界舅舅1080P")], complete=fake, enabled=True)
         self.assertEqual(out[0].value, {"text": "异世界舅舅"})
         self.assertEqual(out[0].source, "ai")
         self.assertGreater(out[0].confidence, 0.85)
 
     async def test_clean_suggestion_is_untouched(self) -> None:
         fake = _FakeComplete('{"keep": [1]}')
-        out = await refine_suggestions(self._ctx(), [self._rule("异世界舅舅")], complete=fake)
+        out = await refine_suggestions(self._ctx(), [self._rule("异世界舅舅")], complete=fake, enabled=True)
         self.assertEqual(out[0].source, "rule")
         self.assertEqual(fake.prompts, [])
 
     async def test_model_failure_keeps_rule_result(self) -> None:
         fake = _FakeComplete(None)
         original = self._rule("异世界舅舅1080P")
-        out = await refine_suggestions(self._ctx(), [original], complete=fake)
+        out = await refine_suggestions(self._ctx(), [original], complete=fake, enabled=True)
         self.assertEqual(out[0], original)

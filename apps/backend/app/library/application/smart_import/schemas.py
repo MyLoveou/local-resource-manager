@@ -7,6 +7,12 @@ from pydantic import Field
 from app.shared.models import ApiModel
 
 
+class ImportAiSettings(ApiModel):
+    """智能导入是否启用 AI 清洗标题。"""
+
+    ai_title: bool = False
+
+
 class SuggestionGroup(ApiModel):
     """一批同值建议。"""
 

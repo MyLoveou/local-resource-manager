@@ -16,6 +16,9 @@ _TOKEN_SPLIT = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
 _HAS_CJK = re.compile(r"[\u4e00-\u9fff]")
 _DIGITS_ONLY = re.compile(r"^\d{1,4}$")
 
+# 特典类标记的中文写法：单文件视频里 `Tokuten` 直接显示成「特典」
+_EXTRA_WORD_MAP = {"tokuten": "特典", "extra": "特典", "extras": "特典"}
+
 _NOISE_TOKENS = frozenset(
     {
         # 分辨率
@@ -52,6 +55,11 @@ _PACK_CJK = (
 
 # 集数范围：`01-13`、`1~12`、`01-13TV`。整段视为打包说明，不是标题
 _EPISODE_RANGE = re.compile(r"\d{1,3}\s*[-~～–—]\s*\d{1,3}")
+
+# 英文特典标记：只在作品标题里剥。单文件视频靠它们区分正片与特典
+_PACK_WORDS = frozenset(
+    {"pv", "tokuten", "extra", "extras", "special", "specials", "ncop", "nced", "ova", "oad", "menu", "cm"}
+)
 
 # 话数说明：`全12话`、`12集`（中间夹数字，字符串匹配覆盖不到）
 _FULL_COUNT = re.compile(r"全\s*\d{1,4}\s*[话集部]|\d{1,4}\s*[话集]")
@@ -95,6 +103,8 @@ def _is_noise_tokens(segment: str, *, work_title: bool = False) -> bool:
         return True
     if work_title and _FULL_COUNT.search(segment):
         return True
+    if work_title and any(token in _PACK_WORDS for token in _tokens(segment)):
+        return True
     # `01-13TV全集` 这类打包段：集数范围本身就是噪音
     if _EPISODE_RANGE.search(segment):
         return True
@@ -114,6 +124,32 @@ def _looks_like_group(segment: str) -> bool:
     if any(token in _NOISE_TOKENS for token in _tokens(text)):
         return False
     return True
+
+
+def _join_pieces(pieces: list[str]) -> str:
+    """拼接片段：中文相邻不加空格，其余加空格。
+
+    `[Isekai Ojisan][PV][08]` 以前拼成 `Isekai OjisanPV 08`，读不成词组。
+    """
+    out = ""
+    for piece in pieces:
+        text = piece.strip()
+        if not text:
+            continue
+        if not out:
+            out = text
+            continue
+        separator = "" if (_ends_cjk(out) and _starts_cjk(text)) else " "
+        out = f"{out}{separator}{text}"
+    return out
+
+
+def _ends_cjk(text: str) -> bool:
+    return bool(text) and "\u4e00" <= text[-1] <= "\u9fff"
+
+
+def _starts_cjk(text: str) -> bool:
+    return bool(text) and "\u4e00" <= text[0] <= "\u9fff"
 
 
 def clean_release_name(raw: str, *, keep_episode: bool = True) -> CleanResult:
@@ -150,11 +186,11 @@ def clean_release_name(raw: str, *, keep_episode: bool = True) -> CleanResult:
         ):
             removed.append(match.group(0))
         else:
-            pieces.append(inner)
+            pieces.append(_EXTRA_WORD_MAP.get(inner.lower(), inner))
         first_bracket = False
 
     pieces.append(source[cursor:])
-    title = "".join(pieces)
+    title = _join_pieces(pieces)
 
     # 季/集标记属于系列结构；单文件视频靠它区分集，必须保留
     if not keep_episode:

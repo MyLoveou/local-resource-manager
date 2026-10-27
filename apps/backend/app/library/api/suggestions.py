@@ -10,7 +10,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.smart_import.pipeline import suggestion_page
+from app.library.application.smart_import.preferences import is_ai_enabled, set_ai_enabled
 from app.library.application.smart_import.schemas import (
+    ImportAiSettings,
     SuggestionApplyRequest,
     SuggestionApplyResult,
     SuggestionPage,
@@ -42,6 +44,22 @@ async def suggestions_summary(
     session: AsyncSession = Depends(get_session),
 ) -> SuggestionSummary:
     return SuggestionSummary(**await SuggestionRepository(session).summary())
+
+
+@router.get("/settings", response_model=ImportAiSettings)
+async def get_import_settings(
+    session: AsyncSession = Depends(get_session),
+) -> ImportAiSettings:
+    return ImportAiSettings(ai_title=await is_ai_enabled(session))
+
+
+@router.put("/settings", response_model=ImportAiSettings)
+async def update_import_settings(
+    body: ImportAiSettings,
+    session: AsyncSession = Depends(get_session),
+) -> ImportAiSettings:
+    await set_ai_enabled(session, body.ai_title)
+    return ImportAiSettings(ai_title=body.ai_title)
 
 
 @router.post("/apply", response_model=SuggestionApplyResult)
