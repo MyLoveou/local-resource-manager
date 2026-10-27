@@ -285,8 +285,16 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         if name.lower() in used_names:
             name = f"{path.stem}_{index}{path.suffix.lower()}"
         used_names.add(name.lower())
-        items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", path.stem))
+        items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", _extra_title(path)))
     return _ok(items, auto_numbered)
+
+
+def _extra_title(path: Path) -> str:
+    """特典标题：剥掉发布组/分辨率/编码等，但保留 PV、特典标记与番号。"""
+    from app.library.application.smart_import.title_clean import clean_release_name
+
+    cleaned = clean_release_name(path.stem).title
+    return cleaned or path.stem
 
 
 def plan_series_videos(root: Path, videos: list[Path]) -> list[PlannedItem] | None:
@@ -301,7 +309,7 @@ def classify_single_video(root: Path, path: Path) -> tuple[str, int, int | None,
     抽不出集号的视频归特典（title=文件名），保证任何渠道的文件都能进库。
     """
     if _is_extra(root, path):
-        return ("extra", 0, None, path.stem)
+        return ("extra", 0, None, _extra_title(path))
     season = _season_in_path(root, path)
     if season is None:
         season = sxx_season_from_stem(path.stem)
