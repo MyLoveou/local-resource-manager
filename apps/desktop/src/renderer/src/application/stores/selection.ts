@@ -41,11 +41,18 @@ export const useSelectionStore = defineStore('selection', () => {
     activeId.value = toId
   }
 
+  function setSelection(ids: number[]): void {
+    const unique = [...new Set(ids)]
+    selectedIds.value = unique
+    anchorId.value = unique[0] ?? null
+    activeId.value = unique.at(-1) ?? null
+  }
+
   function clear(): void {
     selectedIds.value = []
     anchorId.value = null
     activeId.value = null
   }
 
-  return { selectedIds, selectedId, anchorId, select, toggle, selectRange, clear }
+  return { selectedIds, selectedId, anchorId, select, toggle, selectRange, setSelection, clear }
 })

@@ -69,3 +69,11 @@
 
 - [MDN · CSP](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/CSP)
 - [MDN · HTTP 概述](https://developer.mozilla.org/zh-CN/docs/Web/HTTP)
+
+
+
+# 什么是CSP
+
+内容安全策略，用于防范或降低特定类型安全威胁风险的特性。
+
+主要是用来控制文档是否允许加载某些资源，特别是JavaScript资源

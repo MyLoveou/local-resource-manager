@@ -7,6 +7,7 @@ export type ShellBatchContext = 'browse' | 'trash'
 
 type ShellBatchBindings = {
   emptyTrash: () => Promise<void>
+  selectAll: () => Promise<void>
   runBatch: (
     action: ResourceBatchAction,
     tagNames?: string[],
@@ -31,7 +32,11 @@ export const useShellBatchStore = defineStore('shellBatch', () => {
   const showCluster = computed(() => bound.value && (total.value > 0 || batchMode.value))
 
   function bind(next: { context: ShellBatchContext } & ShellBatchBindings): void {
-    bindings = { emptyTrash: next.emptyTrash, runBatch: next.runBatch }
+    bindings = {
+      emptyTrash: next.emptyTrash,
+      selectAll: next.selectAll,
+      runBatch: next.runBatch,
+    }
     bound.value = true
     context.value = next.context
   }
@@ -74,6 +79,10 @@ export const useShellBatchStore = defineStore('shellBatch', () => {
     await bindings?.emptyTrash()
   }
 
+  async function selectAll(): Promise<void> {
+    await bindings?.selectAll()
+  }
+
   async function runBatch(
     action: ResourceBatchAction,
     tagNames?: string[],
@@ -101,6 +110,7 @@ export const useShellBatchStore = defineStore('shellBatch', () => {
     enter,
     exit,
     emptyTrash,
+    selectAll,
     runBatch,
   }
 })

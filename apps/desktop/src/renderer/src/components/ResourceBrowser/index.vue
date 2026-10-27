@@ -324,6 +324,11 @@ async function collectTrashedIds(): Promise<number[]> {
   return ids
 }
 
+async function selectAllTrash(): Promise<void> {
+  const ids = await collectTrashedIds()
+  selection.setSelection(ids)
+}
+
 async function emptyTrash(): Promise<void> {
   const live = shellBatch.ticket()
   batchBusy.value = true
@@ -362,6 +367,7 @@ watch(
     shellBatch.bind({
       context: isTrash.value ? 'trash' : 'browse',
       emptyTrash,
+      selectAll: selectAllTrash,
       runBatch,
     })
     shellBatch.setTotal(total.value)

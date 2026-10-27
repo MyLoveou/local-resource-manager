@@ -25,7 +25,7 @@
       <n-button size="small">设置</n-button>
     </n-dropdown>
     <div class="tool-bar__spacer" />
-    <div v-if="showCluster && batchMode" class="tool-bar__batch">
+    <div v-if="showCluster" class="tool-bar__batch">
       <template v-if="!batchMode">
         <span v-if="isTrash">回收站 {{ total }} 项</span>
         <n-popconfirm v-if="isTrash" positive-text="清空" negative-text="取消" @positive-click="emptyTrash">
@@ -34,9 +34,7 @@
           </template>
           彻底删除回收站内全部条目，不可恢复。只删除库内副本，不删除你电脑上的原文件。
         </n-popconfirm>
-        <n-button v-if="isTrash" size="tiny" :disabled="busy" @click="enter">
-          批量选择
-        </n-button>
+        <n-button v-if="isTrash" size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
         <n-button v-else size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
         <n-button v-if="!isTrash" size="tiny" :disabled="busy" @click="enterScrape">获取元数据</n-button>
       </template>
@@ -44,6 +42,7 @@
         <span>已选 {{ selectedCount }}</span>
         <span class="tool-bar__batch-hint">Ctrl/Shift 多选 · Esc 退出</span>
         <template v-if="isTrash">
+          <n-button size="tiny" :disabled="busy || total === 0" @click="selectAll">全选 {{ total }} 项</n-button>
           <n-popconfirm positive-text="恢复" negative-text="取消" :disabled="selectedCount === 0"
             @positive-click="() => runBatch('restore')">
             <template #trigger>
@@ -306,7 +305,7 @@ const router = useRouter()
 const globalQ = ref(String(route.query.q ?? ''))
 let globalTimer: ReturnType<typeof setTimeout> | undefined
 const { showCluster, batchMode, total, busy, selectedCount, context } = storeToRefs(shellBatch)
-const { enter, exit, emptyTrash, runBatch } = shellBatch
+const { enter, exit, emptyTrash, selectAll, runBatch } = shellBatch
 
 const isTrash = computed(() => context.value === 'trash')
 const aiStatusLabel = computed(() => {
