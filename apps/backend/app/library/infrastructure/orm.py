@@ -179,6 +179,7 @@ class EpisodeRow(Base):
     title: Mapped[str | None] = mapped_column(String)
     sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String, nullable=False, default="active")
+    cover_file_id: Mapped[int | None] = mapped_column(ForeignKey("files.id"))
 
 
 class ExtraRow(Base):
@@ -301,9 +302,24 @@ class TimelineNoteRow(Base):
     updated_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
 
 
+class SubtitleTrackRow(Base):
+    """字幕轨：episode_id 为空表示资源级（单文件视频）。"""
+
+    __tablename__ = "subtitle_tracks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id", ondelete="CASCADE"))
+    file_id: Mapped[int] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"))
+    episode_id: Mapped[int | None] = mapped_column(ForeignKey("episodes.id", ondelete="CASCADE"))
+    language: Mapped[str | None] = mapped_column(String)
+    title: Mapped[str | None] = mapped_column(String)
+    is_default: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, server_default=_SQLITE_NOW)
+
+
 class SavedViewRow(Base):
     __tablename__ = "saved_views"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)

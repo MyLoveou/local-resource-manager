@@ -42,9 +42,11 @@ from app.library.domain.models import (
     WorkCatalog,
 )
 from app.library.infrastructure.media_paths import (
+    episode_cover_url,
     file_content_url as _file_content_url,
     media_path as _media_path,
 )
+from app.library.infrastructure.repositories_series import attach_series_tree
 from app.shared.media_auth import unsigned_media_path
 from app.library.infrastructure.orm import (
     CategoryRow,
@@ -65,6 +67,7 @@ from app.library.infrastructure.orm import (
     ResourceTodoRow,
     SavedViewRow,
     SeasonRow,
+    SubtitleTrackRow,
     TagRow,
     TimelineNoteRow,
     WorkRow,
@@ -302,65 +305,7 @@ class ResourceRepository:
         """详情才装季集；列表不走 hydrate。"""
         if resource.id is None or not is_series_type(resource.type):
             return
-        files_by_id = {f.id: f for f in resource.files if f.id is not None}
-        season_rows = (
-            await self._session.execute(
-                select(SeasonRow)
-                .where(SeasonRow.resource_id == resource.id)
-                .order_by(SeasonRow.sort_index, SeasonRow.season_number, SeasonRow.id)
-            )
-        ).scalars().all()
-        seasons: list[SeriesSeason] = []
-        for season in season_rows:
-            ep_rows = (
-                await self._session.execute(
-                    select(EpisodeRow)
-                    .where(EpisodeRow.season_id == season.id, EpisodeRow.status == "active")
-                    .order_by(EpisodeRow.sort_index, EpisodeRow.episode_number, EpisodeRow.id)
-                )
-            ).scalars().all()
-            episodes: list[SeriesEpisode] = []
-            for episode in ep_rows:
-                media = files_by_id.get(episode.file_id)
-                episodes.append(
-                    SeriesEpisode(
-                        id=episode.id,
-                        file_id=episode.file_id,
-                        episode_number=episode.episode_number,
-                        title=episode.title,
-                        duration=media.duration if media else None,
-                        width=media.width if media else None,
-                        height=media.height if media else None,
-                    )
-                )
-            seasons.append(
-                SeriesSeason(
-                    id=season.id,
-                    season_number=season.season_number,
-                    title=season.title,
-                    episodes=episodes,
-                )
-            )
-        extra_rows = (
-            await self._session.execute(
-                select(ExtraRow)
-                .where(ExtraRow.resource_id == resource.id, ExtraRow.status == "active")
-                .order_by(ExtraRow.sort_index, ExtraRow.id)
-            )
-        ).scalars().all()
-        extras: list[SeriesExtra] = []
-        for extra in extra_rows:
-            media = files_by_id.get(extra.file_id)
-            extras.append(
-                SeriesExtra(
-                    id=extra.id,
-                    file_id=extra.file_id,
-                    title=extra.title,
-                    duration=media.duration if media else None,
-                )
-            )
-        resource.seasons = seasons
-        resource.extras = extras
+        await attach_series_tree(self._session, resource)
 
     def _apply_thumbnail_path(self, resource: Resource) -> None:
         """从已加载 files 填 thumbnail_path，不改 cover_path。"""

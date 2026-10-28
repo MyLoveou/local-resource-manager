@@ -53,6 +53,11 @@ class SeriesEpisode(ApiModel):
     duration: float | None = None
     width: int | None = None
     height: int | None = None
+    # 每集封面：没有则前端回退作品封面
+    cover_url: str | None = None
+    has_cover: bool = False
+    # 是否有可播放的字幕轨
+    has_subtitles: bool = False
 
 
 class SeriesSeason(ApiModel):

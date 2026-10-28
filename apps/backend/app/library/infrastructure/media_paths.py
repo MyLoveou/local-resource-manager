@@ -23,3 +23,10 @@ def resource_thumb_url(resource_id: int, file_id: int | None) -> str:
         return file_content_url(resource_id, file_id)
     raw = f"/library/resources/{resource_id}/content"
     return sign_media_path(raw) or raw
+
+
+def episode_cover_url(resource_id: int, cover_file_id: int | None) -> str | None:
+    """每集封面 URL；没有独立封面时返回 None，让前端回退作品封面。"""
+    if cover_file_id is None:
+        return None
+    return file_content_url(resource_id, cover_file_id)

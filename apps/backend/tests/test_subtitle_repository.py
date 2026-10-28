@@ -31,23 +31,16 @@ class CoverTests(unittest.TestCase):
             self.assertFalse(extract_cover(self.video, self.output))
         self.assertFalse(self.output.exists())
 
-    def test_success_writes_file(self) -> None:
-        def fake_run(command, **_kwargs):
-            Path(command[-1]).write_bytes(b"jpg")
-            return type("R", (), {"returncode": 0})()
-
+    def test_delegates_to_frame_extractor(self) -> None:
         with patch("app.library.application.episode_covers.shutil.which", return_value="ffmpeg"), patch(
-            "app.library.application.episode_covers.subprocess.run", side_effect=fake_run
-        ):
-            self.assertTrue(extract_cover(self.video, self.output))
-        self.assertTrue(self.output.exists())
+            "app.library.application.episode_covers.extract_video_frame", return_value=True
+        ) as delegated:
+            self.assertTrue(extract_cover(self.video, self.output, duration=24.0))
+        delegated.assert_called_once()
 
-    def test_nonzero_exit_returns_false(self) -> None:
-        def fake_run(command, **_kwargs):
-            return type("R", (), {"returncode": 1})()
-
+    def test_propagates_failure(self) -> None:
         with patch("app.library.application.episode_covers.shutil.which", return_value="ffmpeg"), patch(
-            "app.library.application.episode_covers.subprocess.run", side_effect=fake_run
+            "app.library.application.episode_covers.extract_video_frame", return_value=False
         ):
             self.assertFalse(extract_cover(self.video, self.output))
 
