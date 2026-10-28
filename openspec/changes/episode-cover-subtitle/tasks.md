@@ -17,7 +17,7 @@
 
 - [x] 3.1 `application/episode_covers.py`：ffmpeg 抽帧（第 3 秒，320 宽），登记 `files(role='episode_cover')`
 - [x] 3.2 无 ffmpeg / 抽帧失败：返回 None，不抛错、不影响导入
-- [ ] 3.3 手动换封面接口（`PUT /library/episodes/{id}`）
+- [x] 3.3 手动换封面接口（`PUT /library/episodes/{id}`）
 - [x] 3.4 导入收尾异步生成，同一资源内串行、资源之间不阻塞
 
 ## 4 前端
@@ -27,7 +27,7 @@
 - [x] 4.3 `VideoPlayer` 字幕轨：拉取 tracks、`<track>`、srt→vtt 前端转换、关闭/切换
 - [x] 4.4 非 renderable（ass/ssa）字幕：禁用并说明「暂不支持渲染」
 - [x] 4.5 单文件视频复用同一套字幕入口
-- [ ] 4.6 手动「换封面 / 加字幕」入口（信息栏 + 播放器一致）
+- [x] 4.6 手动「换封面 / 加字幕」入口（信息栏 + 播放器一致）
 
 ## 5 验证
 

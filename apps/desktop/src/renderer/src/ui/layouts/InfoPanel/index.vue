@@ -32,6 +32,7 @@
               :seasons="resource.seasons ?? []"
               :extras="resource.extras ?? []"
               @play="playEpisode"
+              @refresh="reloadResource"
             />
           </template>
           <template v-else>
@@ -1105,12 +1106,11 @@ function playEpisode(fileId: number): void {
   void openResource(row, { playlist: [id], fileId })
 }
 
-function episodeButtonLabel(ep: SeriesEpisode): string {
-  const num = String(ep.episodeNumber).padStart(2, '0')
-  const dur = formatDuration(ep.duration)
-  const title = ep.title?.trim()
-  if (title) return `E${num} ${title} · ${dur}`
-  return `E${num} · ${dur}`
+async function reloadResource(): Promise<void> {
+  const id = selectedId.value
+  if (id == null) return
+  const row = await getResource(id)
+  if (selectedId.value === id) resource.value = row
 }
 
 async function runShell(

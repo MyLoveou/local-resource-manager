@@ -223,9 +223,10 @@ class CoverReplace(ApiModel):
 
 
 class SubtitleAdd(ApiModel):
-    """添加字幕：本机已存在的字幕路径。"""
+    """添加字幕：本机已存在的字幕路径；`episode_id` 为空表示资源级（视频）。"""
 
     path: str
+    episode_id: int | None = None
 
 
 class TodoCreate(ApiModel):

@@ -30,6 +30,38 @@ from app.library.infrastructure.repositories_subtitles import SubtitleRepository
 from app.shared.log import logger
 
 
+async def register_subtitle_file(
+    session: AsyncSession,
+    resources: Any,
+    resource: Any,
+    dest: Path,
+    *,
+    episode_id: int | None = None,
+) -> Any:
+    """把已复制进包内的字幕登记为文件行并建立关联，返回刷新后的资源。"""
+    file_row = await resources.add_file(
+        resource.id,
+        path=str(dest),
+        sha256=None,
+        size=dest.stat().st_size,
+        format_=dest.suffix.lower().lstrip("."),
+        role=FILE_ROLE_SUBTITLE,
+        commit=False,
+    )
+    await SubtitleRepository(session).attach(
+        resource.id,
+        file_row.id,
+        episode_id=episode_id,
+        language=infer_language(dest.name),
+        title=dest.name,
+        is_default=is_renderable(dest),
+    )
+    resource._touch()
+    await resources.update(resource.id, resource, commit=False)
+    await resources.commit()
+    return await resources.get(resource.id)
+
+
 async def _episode_rows(session: AsyncSession, resource_id: int) -> list[Any]:
     result = await session.execute(
         text(

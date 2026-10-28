@@ -366,7 +366,11 @@ class LibraryQueryService:
         existing = await self._resources.get(resource_id)
         if existing is None or existing.id is None:
             return None
-        if existing.type != ResourceType.VIDEO:
+        is_episode_subtitle = body.episode_id is not None
+        series_types = {ResourceType.ANIME, ResourceType.AV}
+        if existing.type != ResourceType.VIDEO and not (
+            is_episode_subtitle and existing.type in series_types
+        ):
             raise ValueError("subtitles only for video")
         dest_name = subtitle_dest_name(original_stem_from_extra(existing.extra, existing.title), src.name)
         layout = layout_for(existing.type)
@@ -384,16 +388,11 @@ class LibraryQueryService:
         old = await self._resources.get_file_by_path(existing.id, str(dest))
         if old is not None:
             await self._resources.delete_file_row(old.id, commit=False)
-        await self._resources.add_file(
-            existing.id,
-            path=str(dest),
-            sha256=None,
-            size=size,
-            format_=dest.suffix.lower().lstrip("."),
-            role="subtitle",
-            commit=False,
+        from app.library.application.series_assets import register_subtitle_file
+
+        return await register_subtitle_file(
+            self._resources._session, self._resources, existing, dest, episode_id=body.episode_id
         )
-        existing._touch()
         await self._resources.update(existing.id, existing, commit=False)
         await self._resources.commit()
         return await self._resources.get(existing.id)
