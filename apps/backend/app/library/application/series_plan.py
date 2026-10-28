@@ -240,6 +240,7 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
 
     items: list[PlannedItem] = []
     seen: dict[tuple[int, int], str] = {}
+    any_parsed = any(episode_number_from_stem(item.stem) is not None for item in episodes)
     auto_numbered = 0
     next_by_season: dict[int, int] = {}
     duplicates: list[str] = []
@@ -254,12 +255,21 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
             season = 1
             episode = None
         else:
-            season = sxx_season_from_stem(path.stem) or 1
+            season = (
+                sxx_season_from_stem(path.stem)
+                or season_from_stem_suffix(path.stem)
+                or 1
+            )
             episode = episode_number_from_stem(path.stem)
         if season is None:
             continue
         if episode is None:
-            # 抽不出集号的：在该季已识别最大集号之后按文件名顺序顺延编号
+            if any_parsed and mode == "flat":
+                # 平铺目录里其它文件能解析出集号 → 这条多半是特典/音乐，
+                # 自动编号会去撞真实集号（`4-nin to Idol` 曾撞成 E01）
+                extras.append(path)
+                continue
+            # 全都抽不出集号：在该季已识别最大集号之后按文件名顺序顺延编号
             start = next_by_season.get(season)
             if start is None:
                 recognized_max = max((ep for (s, ep) in seen if s == season), default=0)
@@ -287,6 +297,31 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         used_names.add(name.lower())
         items.append(PlannedItem(path, "extra", 0, None, f"extras/{name}", _extra_title(path)))
     return _ok(items, auto_numbered)
+
+
+_ROMAN_SEASONS = {"ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6}
+_ORDINAL_SEASON = re.compile(r"(\d{1,2})(?:st|nd|rd|th)\s+season", re.I)
+_NAMED_SEASON = re.compile(r"\bseason\s*(\d{1,2})\b", re.I)
+_BRACKETED_GROUP = re.compile(r"\[[^\]]*\]|\([^)]*\)|【[^】]*】")
+_ROMAN_TOKEN = re.compile(r"(?:^|[\s._\-])(ii|iii|iv|v|vi)(?=$|[\s._\-])", re.I)
+
+
+def season_from_stem_suffix(stem: str) -> int | None:
+    """从文件名推断季：`Sekai II`、`2nd Season`、`Season 2`。
+
+    先整体删掉方括号段——`[IV]` 是作品/特典名，不是第 4 季。
+    """
+    plain = _BRACKETED_GROUP.sub(" ", stem)
+    ordinal = _ORDINAL_SEASON.search(plain)
+    if ordinal:
+        return int(ordinal.group(1))
+    named = _NAMED_SEASON.search(plain)
+    if named:
+        return int(named.group(1))
+    roman = _ROMAN_TOKEN.search(plain)
+    if roman:
+        return _ROMAN_SEASONS.get(roman.group(1).lower())
+    return None
 
 
 def _extra_title(path: Path) -> str:

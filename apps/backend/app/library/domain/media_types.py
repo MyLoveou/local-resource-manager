@@ -58,6 +58,7 @@ SERIES_EXTRA_DIR_MARKERS: frozenset[str] = frozenset(
         "ncop",
         "nced",
         "tokuten",
+        "iv",
         "cm",
         "credit",
         "credits",
@@ -80,6 +81,7 @@ SERIES_EXTRA_TOKENS: frozenset[str] = frozenset(
     }
 )
 SERIES_EXTRA_TOKEN_PREFIXES: tuple[str, ...] = (
+    "music",
     "nced",
     "ncop",
     "menu",
