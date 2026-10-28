@@ -392,6 +392,21 @@ class ImportService:
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
 
+    async def _plan_series(self, root: Path, videos: list[Path]) -> ExplainedPlan:
+        """AI 开启时由模型主导季/集/特典拆分；不可用或结果不合法则退回规则。"""
+        from app.library.application.series_plan_ai import plan_with_ai
+        from app.library.application.smart_import.preferences import is_ai_enabled
+
+        try:
+            if await is_ai_enabled(self._resources._session):
+                ai_plan = await plan_with_ai(root, videos)
+                if ai_plan is not None:
+                    return ai_plan
+                logger.info("AI 结构不可用，退回规则拆分 root=%s", root.name)
+        except Exception as exc:  # noqa: BLE001 - 识别失败不得中断导入
+            logger.warning("AI 结构拆分异常，退回规则: %s", exc)
+        return explain_series_plan(root, videos)
+
     async def _ingest_series(
         self,
         resources: ResourceRepository,
@@ -404,7 +419,7 @@ class ImportService:
         auto_scrape: bool = True,
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
-        explained = explain_series_plan(root, videos)
+        explained = await self._plan_series(root, videos)
         job.message = explained.message
         job.code = explained.code
         job.details = list(explained.details)
