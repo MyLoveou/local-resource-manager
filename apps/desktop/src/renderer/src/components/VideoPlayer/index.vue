@@ -12,20 +12,42 @@
       @timeupdate="emitProgress(false)"
       @pause="emitProgress(false)"
       @ended="emitProgress(true)"
-    />
+    >
+      <track
+        v-if="activeVttUrl"
+        kind="subtitles"
+        :src="activeVttUrl"
+        srclang="zh"
+        label="字幕"
+        default
+      />
+    </video>
+    <div v-if="tracks.length" class="video-player-subs">
+      <select :value="activeId ?? ''" @change="onSelect">
+        <option value="">字幕：关闭</option>
+        <option v-for="track in tracks" :key="track.id" :value="track.id">
+          {{ subtitleLabel(track) }}{{ track.renderable ? '' : '（渲染中…）' }}
+        </option>
+      </select>
+      <span v-if="hint" class="video-player-subs__hint">{{ hint }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { destroyAssOverlay, mountAssOverlay } from '@/infrastructure/subtitles/assOverlay'
+import { srtToVtt, subtitleLabel, type SubtitleTrack } from '@/domain/subtitle'
 
 const props = withDefaults(
   defineProps<{
     src: string
     /** 续播起点（秒）。0 表示从头播放。 */
     startPosition?: number
+    /** 可用字幕轨；空数组时不显示字幕入口。 */
+    tracks?: SubtitleTrack[]
   }>(),
-  { startPosition: 0 },
+  { startPosition: 0, tracks: () => [] },
 )
 
 const emit = defineEmits<{
@@ -33,6 +55,11 @@ const emit = defineEmits<{
 }>()
 
 const el = ref<HTMLVideoElement | null>(null)
+const activeId = ref<number | null>(null)
+const activeVttUrl = ref<string | null>(null)
+const hint = ref('')
+
+let objectUrl: string | null = null
 
 /** 元数据就绪后再 seek，否则 currentTime 会被浏览器忽略。 */
 function seekToStart(): void {
@@ -55,6 +82,61 @@ function emitProgress(ended: boolean): void {
     ended,
   })
 }
+
+function clearVtt(): void {
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl)
+    objectUrl = null
+  }
+  activeVttUrl.value = null
+}
+
+async function onSelect(event: Event): Promise<void> {
+  const raw = (event.target as HTMLSelectElement).value
+  await activate(raw ? Number(raw) : null)
+}
+
+async function activate(id: number | null): Promise<void> {
+  clearVtt()
+  destroyAssOverlay()
+  hint.value = ''
+  activeId.value = id
+  if (id === null) return
+
+  const track = props.tracks.find((item) => item.id === id)
+  const video = el.value
+  if (!track || !video) return
+
+  if (!track.renderable) {
+    // ass/ssa：交给 libass-wasm 渲染，画在视频上方
+    mountAssOverlay(video, track.url)
+    hint.value = 'ass/ssa 由 libass 渲染，切换时可能短暂闪烁'
+    return
+  }
+
+  try {
+    const text = await fetch(track.url).then((res) => res.text())
+    const vtt = track.format === 'vtt' ? text : srtToVtt(text)
+    objectUrl = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }))
+    activeVttUrl.value = objectUrl
+  } catch {
+    hint.value = '字幕加载失败'
+    activeId.value = null
+  }
+}
+
+// 换片时回到「字幕关闭」，避免把上一条字幕带到新视频
+watch(
+  () => props.src,
+  () => {
+    void activate(null)
+  },
+)
+
+onBeforeUnmount(() => {
+  clearVtt()
+  destroyAssOverlay()
+})
 </script>
 
 <style scoped lang="less">
@@ -70,5 +152,23 @@ function emitProgress(ended: boolean): void {
   height: 100%;
   object-fit: contain;
   background: #111;
+}
+
+.video-player-subs {
+  position: absolute;
+  right: 12px;
+  bottom: 64px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-size: 12px;
+}
+
+.video-player-subs__hint {
+  opacity: 0.75;
 }
 </style>
