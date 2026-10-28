@@ -12,12 +12,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import SuggestionReview from '@/components/SuggestionReview/index.vue'
 import { getSuggestionSummary } from '@/infrastructure/http'
 import type { SuggestionSummary } from '@/domain/smartImport'
 
-const refreshIntervalMs = 60_000
+const refreshIntervalMs = 30_000
 
 const summary = ref<SuggestionSummary>({ pending: 0, highConfidence: 0, jobs: 0 })
 const open = ref(false)
@@ -31,13 +31,30 @@ async function refresh(): Promise<void> {
   }
 }
 
+function onFocus(): void {
+  void refresh()
+}
+
+function onVisibility(): void {
+  if (document.visibilityState === 'visible') void refresh()
+}
+
+// 关闭审阅面板后立刻对齐角标，不必等下一轮轮询
+watch(open, (value) => {
+  if (!value) void refresh()
+})
+
 onMounted(() => {
   void refresh()
   timer = setInterval(() => void refresh(), refreshIntervalMs)
+  window.addEventListener('focus', onFocus)
+  document.addEventListener('visibilitychange', onVisibility)
 })
 
 onUnmounted(() => {
   if (timer !== null) clearInterval(timer)
+  window.removeEventListener('focus', onFocus)
+  document.removeEventListener('visibilitychange', onVisibility)
 })
 </script>
 

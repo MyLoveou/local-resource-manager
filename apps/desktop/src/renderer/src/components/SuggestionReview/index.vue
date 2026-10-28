@@ -138,6 +138,8 @@ async function load(): Promise<void> {
     groups.value = page.groups
     total.value = page.total
     selectHighOnly()
+    // 列表为空时同步一次角标：避免「角标 1、列表空」这种不一致卡住
+    if (page.total === 0) emit('changed')
   } catch (err) {
     notify.fromError(err, { context: '读取导入建议失败' })
     groups.value = []
