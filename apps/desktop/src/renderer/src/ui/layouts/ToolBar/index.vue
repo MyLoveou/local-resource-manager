@@ -34,8 +34,7 @@
           </template>
           彻底删除回收站内全部条目，不可恢复。只删除库内副本，不删除你电脑上的原文件。
         </n-popconfirm>
-        <n-button v-if="isTrash" size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
-        <n-button v-else size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
+        <n-button size="tiny" :disabled="busy" @click="enter">批量选择</n-button>
         <n-button v-if="!isTrash" size="tiny" :disabled="busy" @click="enterScrape">获取元数据</n-button>
       </template>
       <template v-else>
@@ -353,7 +352,9 @@ function onAISelect(key: string): void {
 }
 
 function enterScrape(): void {
-  enter()
+  // 已有选中项就直接抓取；否则进入批量选择并说明下一步
+  if (selectedCount.value > 0) return void startScrape()
+  enter(); notify.toast.info('已进入批量选择：勾选视频或番剧后再点「获取元数据」')
 }
 
 const tagNames = ref<string[]>([])
