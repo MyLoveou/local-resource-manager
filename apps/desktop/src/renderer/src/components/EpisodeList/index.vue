@@ -12,7 +12,12 @@
       <div class="episode-list__grid">
         <div v-for="ep in season.episodes ?? []" :key="ep.fileId" class="episode-card-wrap">
           <button type="button" class="episode-card" @click="$emit('play', ep.fileId)">
-            <img v-if="ep.coverUrl" class="episode-card__cover" :src="ep.coverUrl" alt="" />
+            <img
+              v-if="ep.coverUrl"
+              class="episode-card__cover"
+              :src="resolveLibraryMediaUrl(ep.coverUrl)"
+              alt=""
+            />
             <div v-else class="episode-card__cover episode-card__cover--empty">EP</div>
             <div class="episode-card__meta">
               <span class="episode-card__no">{{ pad(ep.episodeNumber) }}</span>
@@ -57,6 +62,7 @@ import {
   backfillCovers,
   updateEpisodeCover,
 } from '@/infrastructure/http/seriesAssets'
+import { resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { notify } from '@/application/notify'
 import type { SeriesEpisode, SeriesExtra, SeriesSeason } from '@/domain'
 
