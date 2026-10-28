@@ -77,6 +77,11 @@ export interface SeriesEpisode {
   duration?: number | null
   width?: number | null
   height?: number | null
+  /** 每集封面（已签名）；空则回退作品封面 */
+  coverUrl?: string | null
+  hasCover?: boolean
+  /** 是否已挂字幕 */
+  hasSubtitles?: boolean
 }
 
 export interface SeriesSeason {

@@ -5,6 +5,7 @@
         v-if="player.visible && videoSrc && resumeReady"
         :src="videoSrc"
         :start-position="startPosition"
+        :tracks="tracks"
         @progress="onProgress"
       />
     </div>
@@ -26,6 +27,8 @@ import {
   resolveLibraryMediaUrl,
 } from '@/infrastructure/http'
 import { PROGRESS_REPORT_INTERVAL_SECONDS } from '@/domain/progress'
+import { getSubtitles } from '@/infrastructure/http/seriesAssets'
+import type { SubtitleTrack } from '@/domain/subtitle'
 import { FILE_ROLE, type Resource } from '@/domain'
 
 const player = useVideoPlayerStore()
@@ -66,6 +69,38 @@ const activeFile = computed(() => {
 })
 
 const videoSrc = computed(() => resolveLibraryMediaUrl(activeFile.value?.contentUrl ?? ''))
+
+/** 当前资源的字幕轨；按集过滤，资源级（episodeId 为空）始终可用 */
+const tracks = ref<SubtitleTrack[]>([])
+const subtitleEpisodeId = computed(() => {
+  const fileId = player.currentFileId ?? activeFile.value?.id
+  if (fileId == null) return null
+  for (const season of current.value?.seasons ?? []) {
+    for (const episode of season.episodes ?? []) {
+      if (episode.fileId === fileId) return episode.id ?? null
+    }
+  }
+  return null
+})
+
+watch(
+  () => [player.visible, player.currentId] as const,
+  async ([visible, id]) => {
+    tracks.value = []
+    if (!visible || id == null) return
+    try {
+      const all = await getSubtitles(id)
+      if (!player.visible || player.currentId !== id) return
+      const episodeId = subtitleEpisodeId.value
+      tracks.value = all.filter(
+        (track) => track.episodeId == null || episodeId == null || track.episodeId === episodeId,
+      )
+    } catch {
+      tracks.value = []
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => [player.visible, player.currentId, activeFile.value?.id] as const,

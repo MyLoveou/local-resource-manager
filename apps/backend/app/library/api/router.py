@@ -14,6 +14,7 @@ from app.library.api import (
     progress,
     resources,
     saved_views,
+    series_assets,
     suggestions,
     tags,
     timeline_notes,
@@ -43,3 +44,4 @@ router.include_router(tags.router)
 router.include_router(timeline_notes.router)
 router.include_router(characters.router)
 router.include_router(persons.router)
+router.include_router(series_assets.router)

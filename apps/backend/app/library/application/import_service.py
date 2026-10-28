@@ -525,6 +525,17 @@ class ImportService:
                 type_=type_, source_name=root.name, dir_name=root.name,
             )
             job.phase = "index"
+            try:
+                from app.library.application.series_assets import (
+                    generate_episode_covers,
+                    register_subtitles,
+                )
+
+                await register_subtitles(resources._session, resources, resource.id, root)
+                job.phase = "cover"
+                await generate_episode_covers(resources._session, resources, resource.id)
+            except Exception as exc:  # noqa: BLE001 - 封面/字幕失败不影响导入
+                logger.warning("系列封面/字幕生成失败 resource=%s: %s", resource.id, exc)
             if auto_scrape:
                 from app.scrape.application.enqueue import enqueue_search_after_import
 

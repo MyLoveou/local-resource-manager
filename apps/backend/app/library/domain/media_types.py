@@ -37,6 +37,7 @@ FILE_ROLE_SUBTITLE = "subtitle"
 FILE_ROLE_THUMBNAIL = "thumbnail"
 FILE_ROLE_PREVIEW = "preview"
 FILE_ROLE_EPISODE = "episode"
+FILE_ROLE_EPISODE_COVER = "episode_cover"
 FILE_ROLE_EXTRA = "extra"
 FILE_ROLE_LAUNCH = "launch"
 FILE_ROLE_PAGE = "page"
@@ -145,6 +146,7 @@ __all__ = [
     "FFPROBE_TIMEOUT_SEC",
     "FILE_ROLE_COVER",
     "FILE_ROLE_EPISODE",
+    "FILE_ROLE_EPISODE_COVER",
     "FILE_ROLE_EXTRA",
     "FILE_ROLE_LAUNCH",
     "FILE_ROLE_PAGE",

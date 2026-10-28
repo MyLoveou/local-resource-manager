@@ -27,32 +27,12 @@
         <section class="info-panel-section">
           <div class="info-panel-section-title">技术信息</div>
           <template v-if="isSeries">
-            <div
-              v-for="season in resource.seasons ?? []"
-              :key="season.id ?? season.seasonNumber"
-              class="info-panel-season"
-            >
-              <div class="info-panel-label">第 {{ season.seasonNumber }} 季</div>
-              <button
-                v-for="ep in season.episodes ?? []"
-                :key="ep.fileId"
-                type="button"
-                class="info-panel-episode"
-                @click="playEpisode(ep.fileId)"
-              >
-                {{ episodeButtonLabel(ep) }}
-              </button>
-            </div>
-            <div v-if="(resource.extras ?? []).length" class="info-panel-label">特典</div>
-            <button
-              v-for="extra in resource.extras ?? []"
-              :key="extra.fileId"
-              type="button"
-              class="info-panel-episode"
-              @click="playEpisode(extra.fileId)"
-            >
-              {{ extra.title || '特典' }}
-            </button>
+            <EpisodeList
+              :resource-id="resource.id"
+              :seasons="resource.seasons ?? []"
+              :extras="resource.extras ?? []"
+              @play="playEpisode"
+            />
           </template>
           <template v-else>
             <div v-if="shown(formatLabel)" class="info-panel-meta">格式 {{ formatLabel }}</div>
@@ -303,6 +283,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
+import EpisodeList from '@/components/EpisodeList/index.vue'
 import InfoPanelCollectionsModal from './InfoPanelCollectionsModal.vue'
 import InfoPanelAITab from './InfoPanelAITab.vue'
 import InfoPanelRelationTab from './InfoPanelRelationTab.vue'
