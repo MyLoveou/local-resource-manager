@@ -4,12 +4,12 @@
       v-if="src"
       ref="el"
       class="video-player-host"
-      :src="src"
+      :src="sourceUrl"
       controls
       autoplay
       playsinline
       @loadedmetadata="seekToStart"
-      @timeupdate="emitProgress(false)"
+      @timeupdate="onTimeUpdate"
       @pause="emitProgress(false)"
       @ended="emitProgress(true)"
     >
@@ -32,15 +32,26 @@
       <select :value="rate" title="播放速度" @change="onRateChange">
         <option v-for="value in RATES" :key="value" :value="value">{{ value }}×</option>
       </select>
+      <select
+        v-if="audioTracks.length > 1"
+        :value="activeAudio ?? 0"
+        title="音轨"
+        @change="onAudioChange"
+      >
+        <option v-for="track in audioTracks" :key="track.index" :value="track.index">
+          {{ track.label }}
+        </option>
+      </select>
       <span v-if="hint" class="video-player-subs__hint">{{ hint }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { destroyAssOverlay, mountAssOverlay } from '@/infrastructure/subtitles/assOverlay'
 import { srtToVtt, subtitleLabel, type SubtitleTrack } from '@/domain/subtitle'
+import type { AudioTrack } from '@/infrastructure/http/audio'
 
 const props = withDefaults(
   defineProps<{
@@ -49,8 +60,10 @@ const props = withDefaults(
     startPosition?: number
     /** 可用字幕轨；空数组时不显示字幕入口。 */
     tracks?: SubtitleTrack[]
+    /** 可用音轨；多于一条时显示切换。 */
+    audioTracks?: AudioTrack[]
   }>(),
-  { startPosition: 0, tracks: () => [] },
+  { startPosition: 0, tracks: () => [], audioTracks: () => [] },
 )
 
 const emit = defineEmits<{
@@ -87,12 +100,36 @@ function applyRate(): void {
 
 let objectUrl: string | null = null
 
+/** 当前音轨：空 = 原文件默认音轨；切换时换成后端 remux 出来的单轨文件 */
+const activeAudio = ref<number | null>(null)
+const sourceUrl = computed(() => {
+  const track = props.audioTracks.find((item) => item.index === activeAudio.value)
+  return track ? track.url : props.src
+})
+
+/** 切音轨会换源，需要记住位置并在元数据就绪后跳回 */
+let lastTime = 0
+let restoreTo: number | null = null
+
+function onTimeUpdate(): void {
+  const video = el.value
+  if (video) lastTime = video.currentTime
+  emitProgress(false)
+}
+
+function onAudioChange(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement).value)
+  restoreTo = lastTime
+  activeAudio.value = Number.isFinite(value) ? value : null
+}
+
 /** 元数据就绪后再 seek，否则 currentTime 会被浏览器忽略。 */
 function seekToStart(): void {
   const video = el.value
   if (!video) return
   applyRate()
-  const target = props.startPosition ?? 0
+  const target = restoreTo ?? props.startPosition ?? 0
+  restoreTo = null
   if (target <= 0) return
   const duration = video.duration
   if (!Number.isFinite(duration) || target >= duration - 2) return
@@ -152,10 +189,13 @@ async function activate(id: number | null): Promise<void> {
   }
 }
 
-// 换片时回到「字幕关闭」，避免把上一条字幕带到新视频
+// 换片时回到「字幕关闭」与默认音轨，避免把上一条字幕/音轨带到新视频
 watch(
   () => props.src,
   () => {
+    activeAudio.value = null
+    lastTime = 0
+    restoreTo = null
     void activate(null)
   },
 )

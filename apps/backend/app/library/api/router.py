@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from app.library.api import (
+    audio,
     categories,
     characters,
     collections,
@@ -45,3 +46,4 @@ router.include_router(timeline_notes.router)
 router.include_router(characters.router)
 router.include_router(persons.router)
 router.include_router(series_assets.router)
+router.include_router(audio.router)

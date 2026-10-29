@@ -6,6 +6,7 @@
         :src="videoSrc"
         :start-position="startPosition"
         :tracks="tracks"
+        :audio-tracks="audioTracks"
         @progress="onProgress"
       />
     </div>
@@ -28,6 +29,7 @@ import {
 } from '@/infrastructure/http'
 import { PROGRESS_REPORT_INTERVAL_SECONDS } from '@/domain/progress'
 import { getSubtitles } from '@/infrastructure/http/seriesAssets'
+import { getAudioTracks, type AudioTrack } from '@/infrastructure/http/audio'
 import type { SubtitleTrack } from '@/domain/subtitle'
 import { FILE_ROLE, type Resource } from '@/domain'
 
@@ -69,6 +71,26 @@ const activeFile = computed(() => {
 })
 
 const videoSrc = computed(() => resolveLibraryMediaUrl(activeFile.value?.contentUrl ?? ''))
+
+/** 当前文件的音轨；多于一条时播放器才显示切换入口 */
+const audioTracks = ref<AudioTrack[]>([])
+
+watch(
+  () => [player.visible, player.currentId, activeFile.value?.id] as const,
+  async ([visible, id, fileId]) => {
+    audioTracks.value = []
+    if (!visible || id == null || fileId == null) return
+    try {
+      const list = await getAudioTracks(id, fileId)
+      if (player.visible && player.currentId === id && activeFile.value?.id === fileId) {
+        audioTracks.value = list
+      }
+    } catch {
+      audioTracks.value = []
+    }
+  },
+  { immediate: true },
+)
 
 /** 当前资源的字幕轨；按集过滤，资源级（episodeId 为空）始终可用 */
 const tracks = ref<SubtitleTrack[]>([])
