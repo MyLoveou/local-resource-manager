@@ -22,12 +22,15 @@
         default
       />
     </video>
-    <div v-if="tracks.length" class="video-player-subs">
-      <select :value="activeId ?? ''" @change="onSelect">
+    <div class="video-player-subs">
+      <select v-if="tracks.length" :value="activeId ?? ''" @change="onSelect">
         <option value="">字幕：关闭</option>
         <option v-for="track in tracks" :key="track.id" :value="track.id">
           {{ subtitleLabel(track) }}{{ track.renderable ? '' : '（渲染中…）' }}
         </option>
+      </select>
+      <select :value="rate" title="播放速度" @change="onRateChange">
+        <option v-for="value in RATES" :key="value" :value="value">{{ value }}×</option>
       </select>
       <span v-if="hint" class="video-player-subs__hint">{{ hint }}</span>
     </div>
@@ -59,12 +62,36 @@ const activeId = ref<number | null>(null)
 const activeVttUrl = ref<string | null>(null)
 const hint = ref('')
 
+/** 播放速度：持久化，下一次播放沿用 */
+const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
+const RATE_KEY = 'sm.player.rate'
+const rate = ref<number>(loadRate())
+
+function loadRate(): number {
+  const raw = Number(localStorage.getItem(RATE_KEY))
+  return RATES.includes(raw as (typeof RATES)[number]) ? raw : 1
+}
+
+function onRateChange(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement).value)
+  const next = RATES.includes(value as (typeof RATES)[number]) ? value : 1
+  rate.value = next
+  localStorage.setItem(RATE_KEY, String(next))
+  applyRate()
+}
+
+function applyRate(): void {
+  const video = el.value
+  if (video) video.playbackRate = rate.value
+}
+
 let objectUrl: string | null = null
 
 /** 元数据就绪后再 seek，否则 currentTime 会被浏览器忽略。 */
 function seekToStart(): void {
   const video = el.value
   if (!video) return
+  applyRate()
   const target = props.startPosition ?? 0
   if (target <= 0) return
   const duration = video.duration
