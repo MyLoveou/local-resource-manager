@@ -56,6 +56,7 @@
       :selected-ids="gridSelectedIds"
       @near-end="loadMore"
       @card-click="handleCardClick"
+      @card-dbl-click="handleCardDblClick"
     >
       <template #footer>
         <span v-if="loadingMore">加载中…</span>
@@ -215,6 +216,16 @@ function handleCardClick(event: MouseEvent, itemId: number | undefined): void {
     return
   }
   selection.select(itemId)
+}
+
+function handleCardDblClick(_event: MouseEvent, itemId: number | undefined): void {
+  if (itemId === undefined) return
+  const item = items.value.find((row) => row.id === itemId)
+  if (!item || isCollectionCard(item)) return
+  // 系列作品双击进入独立详情页；其它类型保持原来的播放/查看行为
+  if (item.type === 'anime' || item.type === 'av') {
+    void router.push(`/series/${itemId}`)
+  }
 }
 
 watch(

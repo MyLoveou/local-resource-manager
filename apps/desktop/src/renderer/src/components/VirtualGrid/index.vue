@@ -10,6 +10,7 @@
           :badge="items[vItem.index].badge"
           :selected="items[vItem.index].selectable !== false && isSelected(items[vItem.index].id)"
           @click="handleCardClick($event, items[vItem.index].id)"
+          @dblclick="handleCardDblClick($event, items[vItem.index].id)"
         />
       </div>
     </div>
@@ -57,9 +58,14 @@ const props = withDefaults(
 const emit = defineEmits<{
   nearEnd: []
   cardClick: [MouseEvent, number]
+  cardDblClick: [MouseEvent, number]
 }>()
 function handleCardClick(event: MouseEvent, itemId: number): void {
   emit('cardClick', event, itemId)
+}
+
+function handleCardDblClick(event: MouseEvent, itemId: number): void {
+  emit('cardDblClick', event, itemId)
 }
 
 function isSelected(itemId: number): boolean {

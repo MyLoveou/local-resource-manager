@@ -37,6 +37,10 @@ export interface Resource {
   rating?: number | null
   /** 封面本地缓存路径 */
   coverPath?: string | null
+  /** 作品封面 URL（已签名）；详情页头部使用 */
+  coverUrl?: string | null
+  /** 导入时的原始文件名/目录名 */
+  sourceName?: string | null
   /** 网格/面板缩略图 URL；展示面禁止回退 coverPath */
   thumbnailPath?: string | null
   status: ResourceStatus
