@@ -78,9 +78,12 @@ function killProcess(child: ChildProcess): Promise<void> {
 }
 
 /** 启动后端：找空闲端口 → spawn（dev: uvicorn / frozen: 随包 exe）→ 健康检查 → 返回实例 */
-export async function startBackend(cfg: BackendConfig): Promise<BackendInstance> {
-  const port = await getFreePort()
-  const token = randomBytes(16).toString('hex')
+export async function startBackend(
+  cfg: BackendConfig,
+  reuse?: { port?: number; token?: string },
+): Promise<BackendInstance> {
+  const port = reuse?.port ?? (await getFreePort())
+  const token = reuse?.token ?? randomBytes(16).toString('hex')
   const baseEnv = {
     ...process.env,
     BACKEND_TOKEN: token,

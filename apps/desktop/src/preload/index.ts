@@ -66,6 +66,8 @@ const api = {
     ipcRenderer.invoke('dialog:selectImage'),
   selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory'),
   relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
+  restartBackend: (): Promise<{ url: string; token: string; changed: boolean }> =>
+    ipcRenderer.invoke('app:restart-backend'),
   showItemInFolder: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:showItemInFolder', { path }),
   openPath: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>

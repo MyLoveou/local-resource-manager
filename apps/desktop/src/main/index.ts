@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
 import { basename, join } from 'path'
 import { readFileSync } from 'fs'
-import { startServices, stopServices } from './infrastructure/services/index'
+import { restartServices, startServices, stopServices } from './infrastructure/services/index'
 import { registerShellOpenIpc } from './infrastructure/shellOpen'
 import { registerThemeCssIpc } from './infrastructure/themeCss'
 import { initUpdater, registerUpdateIpc } from './infrastructure/services/update'
@@ -93,6 +93,25 @@ function registerDialogIpc(): void {
     app.relaunch()
     app.exit(0)
   })
+  ipcMain.handle(
+    'app:restart-backend',
+    async (): Promise<{ url: string; token: string; changed: boolean }> => {
+      log.info('[main] restarting backend…')
+      const previousUrl = backendUrl
+      const previousToken = backendToken
+      const backend = await restartServices()
+      backendUrl = backend.baseURL
+      backendToken = backend.token
+      const changed = backendUrl !== previousUrl || backendToken !== previousToken
+      if (changed) {
+        // 端口或 token 变了，渲染进程手里的地址失效：重开窗口让它拿到新参数
+        for (const win of BrowserWindow.getAllWindows()) win.destroy()
+        createWindow()
+      }
+      log.info('[main] backend restarted', backendUrl, changed ? '(new address)' : '')
+      return { url: backendUrl, token: backendToken, changed }
+    },
+  )
 }
 
 /**
