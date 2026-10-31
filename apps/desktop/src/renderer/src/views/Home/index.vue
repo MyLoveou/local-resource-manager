@@ -1,5 +1,6 @@
 <template>
   <div class="home">
+    <HomeTasks />
     <div v-if="hasOverviewData">
       <section v-if="recent.length" class="home__section">
         <div class="home__section-head">

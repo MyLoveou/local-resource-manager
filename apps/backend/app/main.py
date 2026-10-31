@@ -269,6 +269,8 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
+from app.tasks_api.router import router as tasks_router
+app.include_router(tasks_router)
 app.include_router(ai_router, prefix="/ai")
 app.include_router(scrape_router, prefix="/scrape")
 app.include_router(settings_router, prefix="/settings")
