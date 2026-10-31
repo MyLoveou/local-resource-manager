@@ -8,6 +8,7 @@ from app.scrape.application.jobs import run_search
 from app.scrape.infrastructure.repo import ScrapeRepository
 from app.scrape.domain.models import ScrapeJobStatus
 from app.shared.db.db import get_session_factory
+from app.shared import tasks
 from app.shared.log import logger
 
 JOB_TIMEOUT_SEC = 90
@@ -44,18 +45,23 @@ async def _worker_loop() -> None:
         job_id = await queue.get()
         try:
             factory = get_session_factory()
+            task_id = await _open_task(job_id)
             async with factory() as session:
                 # 单任务超时：provider 卡住不能拖死整个队列
                 await asyncio.wait_for(run_search(session, job_id), timeout=JOB_TIMEOUT_SEC)
+                if task_id is not None:
+                    await tasks.finish(session, task_id)
                 await asyncio.sleep(0.25)
         except asyncio.TimeoutError:
             logger.warning("刮削任务超时，已标记失败 job=%s", job_id)
             await _mark_failed(job_id, "搜索超时")
+            await _close_task(job_id, "搜索超时")
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
             logger.exception("刮削任务失败 job=%s", job_id)
             await _mark_failed(job_id, str(exc)[:200])
+            await _close_task(job_id, str(exc)[:200])
         finally:
             queue.task_done()
 

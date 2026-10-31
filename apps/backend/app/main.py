@@ -200,6 +200,12 @@ async def lifespan(_: FastAPI):
                 logger.info("已将 %s 条远程演示封面改为本地图", rewritten)
         start_scrape_worker()
         await recover_unfinished()
+        # 上次进程留下的 running 一律标 interrupted（导入需用户点继续）
+        from app.shared import tasks as _tasks
+        from app.shared.db.db import get_session_factory as _session_factory
+
+        async with _session_factory()() as _session:
+            await _tasks.recover_on_startup(_session)
         auto_index_task = (
             asyncio.create_task(_auto_index_loop(factory))
             if settings.auto_index
