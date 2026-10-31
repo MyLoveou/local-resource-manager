@@ -58,55 +58,6 @@
       />
     </div>
 
-      <aside v-if="panelOpen" class="series-detail__panel">
-        <header class="series-detail__panel-head">
-          <strong>{{ panelSeasonLabel }}</strong>
-          <button type="button" class="series-detail__panel-close" @click="panelOpen = false">×</button>
-        </header>
-
-        <div class="series-detail__panel-tabs">
-          <button
-            v-for="item in resource?.seasons ?? []"
-            :key="item.seasonNumber"
-            type="button"
-            :class="['series-detail__panel-tab', { 'is-active': item.seasonNumber === panelSeason }]"
-            @click="panelSeason = item.seasonNumber"
-          >
-            第 {{ item.seasonNumber }} 季
-          </button>
-        </div>
-
-        <div v-if="panelSeasonData" class="series-detail__panel-body">
-          <img
-            v-if="panelSeasonData.coverUrl"
-            class="series-detail__panel-cover"
-            :src="resolveLibraryMediaUrl(panelSeasonData.coverUrl)"
-            alt=""
-          />
-          <dl class="series-detail__panel-meta">
-            <dt v-if="panelCatalog?.nameCn">中文名</dt>
-            <dd v-if="panelCatalog?.nameCn">{{ panelCatalog.nameCn }}</dd>
-            <dt v-if="panelCatalog?.originalTitle">原名</dt>
-            <dd v-if="panelCatalog?.originalTitle">{{ panelCatalog.originalTitle }}</dd>
-            <dt v-if="panelCatalog?.date">放送</dt>
-            <dd v-if="panelCatalog?.date">{{ panelCatalog.date }}</dd>
-            <dt>集数</dt>
-            <dd>
-              {{ panelCatalog?.eps ?? panelCatalog?.totalEpisodes ?? '—' }} / 本地
-              {{ panelSeasonData.episodes?.length ?? 0 }}
-            </dd>
-            <dt v-if="panelCatalog?.siteScore">评分</dt>
-            <dd v-if="panelCatalog?.siteScore">{{ panelCatalog.siteScore.toFixed(1) }}</dd>
-          </dl>
-          <p v-if="panelSeasonData.synopsis" class="series-detail__panel-synopsis">
-            {{ panelSeasonData.synopsis }}
-          </p>
-          <p v-else class="series-detail__hint">这一季还没有简介，可以点下面的按钮刮削。</p>
-          <button type="button" class="series-detail__panel-action" @click="openSeasonScrape(panelSeason)">
-            刮削本季
-          </button>
-        </div>
-      </aside>
   </div>
 </template>
 
@@ -117,10 +68,12 @@ import EpisodeList from '@/components/EpisodeList/index.vue'
 import SeasonScrape from '@/components/SeasonScrape/index.vue'
 import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
+import { useSelectionStore } from '@/application/stores/selection'
 import type { Resource } from '@/domain'
 
 const route = useRoute()
 const router = useRouter()
+const selection = useSelectionStore()
 
 const resource = ref<Resource | null>(null)
 const error = ref('')
@@ -131,31 +84,24 @@ const scrapeSeasonTitle = computed(() => {
   return season?.title ?? null
 })
 
-const panelOpen = ref(false)
-const panelSeason = ref(1)
 const selectedFileId = ref<number | null>(null)
 
-const panelSeasonData = computed(
-  () => (resource.value?.seasons ?? []).find((item) => item.seasonNumber === panelSeason.value) ?? null,
-)
-const panelCatalog = computed(() => panelSeasonData.value?.catalog ?? null)
-const panelSeasonLabel = computed(
-  () => panelSeasonData.value?.title || `第 ${panelSeason.value} 季`,
-)
 
-function openSeasonPanel(seasonNumber: number): void {
-  panelSeason.value = seasonNumber
-  panelOpen.value = true
-}
 
-/** 第一次点选中并开面板，再点同一集才播放 */
+/** 点集：选中该集并让信息栏显示对应季；再点同一集才播放 */
 function onSelectEpisode(seasonNumber: number, fileId: number): void {
   if (selectedFileId.value === fileId) {
     void playEpisode(fileId)
     return
   }
   selectedFileId.value = fileId
-  openSeasonPanel(seasonNumber)
+  if (resource.value?.id != null) selection.select(resource.value.id)
+  selection.selectSeason(seasonNumber)
+}
+
+function openSeasonPanel(seasonNumber: number): void {
+  if (resource.value?.id != null) selection.select(resource.value.id)
+  selection.selectSeason(seasonNumber)
 }
 
 function openSeasonScrape(seasonNumber: number): void {
@@ -222,106 +168,7 @@ onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 
-.series-detail__panel {
-  width: 300px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--sm-color-border);
-  border-radius: 8px;
-  max-height: 100%;
-  overflow: auto;
-}
-
-.series-detail__panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-}
-
-.series-detail__panel-close {
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  cursor: pointer;
-  color: inherit;
-}
-
-.series-detail__panel-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.series-detail__panel-tab {
-  border: 1px solid var(--sm-color-border);
-  background: transparent;
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
-  color: inherit;
-  cursor: pointer;
-}
-
-.series-detail__panel-tab.is-active {
-  border-color: var(--sm-color-primary, #2080f0);
-  color: var(--sm-color-primary, #2080f0);
-}
-
-.series-detail__panel-cover {
-  width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
-  border-radius: 6px;
-}
-
-.series-detail__panel-meta {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 2px 8px;
-  margin: 0;
-  font-size: 12px;
-}
-
-.series-detail__panel-meta dt {
-  color: var(--sm-color-text-muted, #6b7280);
-}
-
-.series-detail__panel-meta dd {
-  margin: 0;
-  word-break: break-all;
-}
-
-.series-detail__panel-synopsis {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--sm-color-text-muted, #6b7280);
-}
-
-.series-detail__panel-action {
-  border: 1px solid var(--sm-color-border);
-  background: transparent;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: inherit;
-  cursor: pointer;
-}
 <style scoped lang="less">
-.series-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-  padding: 16px;
-  overflow: auto;
-}
-
 .series-detail__head {
   display: flex;
   align-items: center;

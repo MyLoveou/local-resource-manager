@@ -27,11 +27,12 @@
         <section class="info-panel-section">
           <div class="info-panel-section-title">技术信息</div>
           <template v-if="isSeries">
-            <EpisodeList
+            <SeasonPanel
               :resource-id="resource.id"
               :seasons="resource.seasons ?? []"
-              :extras="resource.extras ?? []"
-              @play="playEpisode"
+              :season="selection.season ?? resource.seasons?.[0]?.seasonNumber ?? 1"
+              :fallback-title="resource.title"
+              @update:season="selection.selectSeason"
               @refresh="reloadResource"
             />
           </template>
@@ -285,7 +286,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NCheckbox, NDropdown, NInput, NModal, NPopconfirm, NRate, NSelect, NTag } from 'naive-ui'
 import type { DropdownOption } from 'naive-ui'
 import EditResourceModal from '@/components/EditResourceModal/index.vue'
-import EpisodeList from '@/components/EpisodeList/index.vue'
+import SeasonPanel from '@/components/SeasonPanel/index.vue'
 import InfoPanelCollectionsModal from './InfoPanelCollectionsModal.vue'
 import InfoPanelAITab from './InfoPanelAITab.vue'
 import InfoPanelRelationTab from './InfoPanelRelationTab.vue'
@@ -1118,12 +1119,6 @@ function openViewerFromCover(): void {
   void openResource(row, { playlist: ids })
 }
 
-function playEpisode(fileId: number): void {
-  const row = resource.value
-  const id = row?.id
-  if (id == null || !row) return
-  void openResource(row, { playlist: [id], fileId })
-}
 
 async function reloadResource(): Promise<void> {
   const id = selectedId.value
