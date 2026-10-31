@@ -57,6 +57,12 @@ class AISeriesItem:
     title: str | None = None
 
 
+def _norm(text: str) -> str:
+    """归一化文件名：去扩展名、去空白与符号、小写。"""
+    stem = Path(text).stem or text
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", stem.lower())
+
+
 def build_prompt(videos: list[Path]) -> str:
     names = "\n".join(f"{index + 1}. {video.stem}" for index, video in enumerate(videos))
     return _PROMPT.format(files=names)
@@ -78,6 +84,8 @@ def parse_reply(reply: str, videos: list[Path]) -> list[AISeriesItem] | None:
         return None
 
     by_stem = {video.stem: video for video in videos}
+    # 宽松匹配：模型偶尔会带上扩展名或改动空格/大小写，按归一化名兜一层
+    by_norm = {_norm(video.stem): video.stem for video in videos}
     seen: dict[str, AISeriesItem] = {}
     used: set[tuple[int, int]] = set()
     for row in rows:
@@ -85,6 +93,8 @@ def parse_reply(reply: str, videos: list[Path]) -> list[AISeriesItem] | None:
             return None
         name = str(row.get("name") or "").strip()
         stem = Path(name).stem or name
+        if stem not in by_stem:
+            stem = by_norm.get(_norm(stem), stem)
         if stem not in by_stem or stem in seen:
             return None
         kind = str(row.get("kind") or "").strip().lower()
@@ -111,6 +121,29 @@ def parse_reply(reply: str, videos: list[Path]) -> list[AISeriesItem] | None:
     if set(seen) != set(by_stem):
         return None
     return [seen[stem] for stem in by_stem]
+
+
+def validate_reply(
+    reply: str, videos: list[Path]
+) -> tuple[list[AISeriesItem] | None, str]:
+    """解析并给出失败原因，便于在日志里定位"模型到底错在哪"。"""
+    items = parse_reply(reply, videos)
+    if items is not None:
+        return items, ""
+    block = _JSON_BLOCK.search(reply or "")
+    if block is None:
+        return None, "回复里没有 JSON"
+    try:
+        data = json.loads(block.group(0))
+    except json.JSONDecodeError:
+        return None, "JSON 解析失败"
+    rows = data.get("files") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return None, "缺少 files 数组"
+    names = {
+        str(row.get("name") or "").strip() for row in rows if isinstance(row, dict)
+    }
+    return None, f"返回 {len(names)} 个不同文件，输入 {len(videos)} 个（可能被截断或改名）"
 
 
 def to_plan(root: Path, videos: list[Path], items: list[AISeriesItem]) -> ExplainedPlan:
@@ -151,8 +184,8 @@ async def plan_with_ai(
     except Exception as exc:  # noqa: BLE001 - 模型失败不该中断导入
         logger.info("AI 结构识别失败: %s", type(exc).__name__)
         return None
-    items = parse_reply(reply or "", videos)
+    items, reason = validate_reply(reply or "", videos)
     if items is None:
-        logger.info("AI 结构识别结果不合法，退回规则")
+        logger.info("AI 结构未通过校验：%s", reason)
         return None
     return to_plan(root, videos, items)

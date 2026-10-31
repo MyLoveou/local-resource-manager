@@ -205,6 +205,62 @@ def sxx_season_from_stem(stem: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+_NON_WORD = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
+_BRACKET_EP = re.compile(r"[\[\(（【]\s*\d{1,4}\s*[\]\)）】]")
+_TRAILING_EP_SPLIT = re.compile(
+    r"(?:^|[\s._\-\[(])(?:第\s*)?\d{1,4}(?:\s*[话集])?(?=$|[\s._\-\])])"
+)
+
+
+def _title_prefix(stem: str) -> str:
+    """集号之前的作品名部分，去掉季标记后用于比较。
+
+    集号通常在方括号里（`[01]`），所以先在**原始名**上切，再清理其余部分。
+    """
+    cut = _BRACKET_EP.search(stem)
+    prefix = stem[: cut.start()] if cut else stem
+    prefix = _TRAILING_EP_SPLIT.split(prefix)[0]
+    prefix = _BRACKETED_GROUP.sub(" ", prefix)
+    prefix = _ROMAN_TOKEN.sub(" ", prefix)
+    prefix = _ORDINAL_SEASON.sub(" ", prefix)
+    prefix = _NAMED_SEASON.sub(" ", prefix)
+    return _NON_WORD.sub("", prefix).lower()
+
+
+def _split_qualified_flat(videos: list[Path]) -> tuple[list[Path], list[Path]]:
+    """平铺目录里，名字前缀比主流多出词的文件归特典。
+
+    例：`... Sekai [01]`（主流）vs `... Sekai Megami Hen [01]`（OVA），
+    集号相同但前缀不同，应判为两部不同的片子。
+    """
+    prefixes = {path: _title_prefix(path.stem) for path in videos}
+    counts: dict[str, int] = {}
+    for prefix in prefixes.values():
+        if prefix:
+            counts[prefix] = counts.get(prefix, 0) + 1
+    if len(counts) < 2:
+        return videos, []
+    # 主流 = 出现 ≥2 次里**最短**的那个：`Sekai` 比 `Sekai Megami Hen` 更通用，
+    # 单按次数会被集数更多的 OVA 抢走主导权（Tenri Hen 14 集 > 正片 12 集）
+    candidates = [key for key, count in counts.items() if count >= 2] or list(counts)
+    dominant = min(candidates, key=lambda key: (len(key), -counts[key]))
+    kept: list[Path] = []
+    qualified: list[Path] = []
+    for path in videos:
+        prefix = prefixes[path]
+        if not prefix or prefix == dominant:
+            kept.append(path)
+        elif prefix.startswith(dominant) or dominant.startswith(prefix):
+            # 主流前缀的延伸（`... Megami Hen`）→ 特典；被主流包含的（短前缀）→ 正片
+            if prefix.startswith(dominant) and len(prefix) > len(dominant):
+                qualified.append(path)
+            else:
+                kept.append(path)
+        else:
+            kept.append(path)
+    return kept, qualified
+
+
 def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
     """识别成功或带原因失败。ingest 只走此入口。"""
     if not videos:
@@ -222,6 +278,11 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
             episodes.append(path)
     if not episodes and not extras:
         return _fail("no_videos", [path.name for path in videos])
+
+    # 平铺目录：前缀比主流多出词的（Megami Hen / Tenri Hen 这类 OVA）归特典
+    if episodes and not any(_season_in_path(root, path) is not None for path in episodes):
+        episodes, qualified = _split_qualified_flat(episodes)
+        extras.extend(qualified)
 
     in_season = [path for path in episodes if _season_in_path(root, path) is not None]
     out_season = [path for path in episodes if _season_in_path(root, path) is None]
