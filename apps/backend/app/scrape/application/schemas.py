@@ -3,16 +3,19 @@
 from pydantic import Field
 
 from app.scrape.domain.models import Candidate, ScrapeJob
-from app.shared.models import ApiModel, WorkCatalog
+from app.shared.models import ApiModel, StrictApiModel
+from app.library.domain.models import WorkCatalog
 
 
-class ScrapeJobCreate(ApiModel):
+class ScrapeJobCreate(StrictApiModel):
     resource_id: int
     query: str | None = None
 
 
-class ScrapeSelect(ApiModel):
+class ScrapeSelect(StrictApiModel):
     candidate_id: int
+    # 指定时只写这一季的元数据，不覆盖整个资源
+    season: int | None = None
     cover_url: str | None = None
     apply_title: bool = True
     apply_synopsis: bool = True

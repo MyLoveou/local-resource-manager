@@ -8,8 +8,9 @@
           :title="items[vItem.index].title"
           :cover-url="items[vItem.index].coverUrl"
           :badge="items[vItem.index].badge"
-          :selected="isSelected(items[vItem.index].id)"
+          :selected="items[vItem.index].selectable !== false && isSelected(items[vItem.index].id)"
           @click="handleCardClick($event, items[vItem.index].id)"
+          @dblclick="handleCardDblClick(items[vItem.index].id)"
         />
       </div>
     </div>
@@ -31,6 +32,8 @@ export interface VirtualGridItem {
   title: string
   coverUrl: string
   badge?: string
+  /** 合集卡等不可选中项传 false */
+  selectable?: boolean
 }
 
 const PADDING = 8
@@ -55,9 +58,14 @@ const props = withDefaults(
 const emit = defineEmits<{
   nearEnd: []
   cardClick: [MouseEvent, number]
+  cardDblClick: [number]
 }>()
 function handleCardClick(event: MouseEvent, itemId: number): void {
   emit('cardClick', event, itemId)
+}
+
+function handleCardDblClick(itemId: number): void {
+  emit('cardDblClick', itemId)
 }
 
 function isSelected(itemId: number): boolean {

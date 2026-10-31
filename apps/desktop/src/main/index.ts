@@ -1,9 +1,16 @@
 import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
-import { join } from 'path'
-import { startServices, stopServices } from './infrastructure/services/index'
+import { basename, join } from 'path'
+import { readFileSync } from 'fs'
+import { restartServices, startServices, stopServices } from './infrastructure/services/index'
 import { registerShellOpenIpc } from './infrastructure/shellOpen'
 import { registerThemeCssIpc } from './infrastructure/themeCss'
+import { initUpdater, registerUpdateIpc } from './infrastructure/services/update'
 import { initMainLog, log } from './log'
+
+/** 打包态固定 userData 为 ASCII 目录（不随中文 productName 漂移，便于备份与脚本） */
+if (app.isPackaged) {
+  app.setPath('userData', join(app.getPath('appData'), 'local-resource-manager'))
+}
 
 /** 尽早初始化，否则启动失败写不进日志，渲染进程也无法用 electron-log */
 initMainLog()
@@ -48,6 +55,31 @@ function registerDialogIpc(): void {
       return result.filePaths
     }
   )
+  ipcMain.handle(
+    'dialog:selectImage',
+    async (): Promise<{ name: string; dataBase64: string } | null> => {
+      const options: Electron.OpenDialogOptions = {
+        properties: ['openFile'],
+        filters: [
+          {
+            name: 'Images',
+            extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'],
+          },
+        ],
+      }
+      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const result = win
+        ? await dialog.showOpenDialog(win, options)
+        : await dialog.showOpenDialog(options)
+      if (result.canceled || result.filePaths.length === 0) return null
+      const path = result.filePaths[0]
+      const data = readFileSync(path)
+      if (data.length > 32 * 1024 * 1024) {
+        throw new Error('文件超过 32 MB，无法导入')
+      }
+      return { name: basename(path), dataBase64: data.toString('base64') }
+    }
+  )
   ipcMain.handle('dialog:selectDirectory', async (): Promise<string | null> => {
     const options: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -57,6 +89,29 @@ function registerDialogIpc(): void {
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })
+  ipcMain.handle('app:relaunch', (): void => {
+    app.relaunch()
+    app.exit(0)
+  })
+  ipcMain.handle(
+    'app:restart-backend',
+    async (): Promise<{ url: string; token: string; changed: boolean }> => {
+      log.info('[main] restarting backend…')
+      const previousUrl = backendUrl
+      const previousToken = backendToken
+      const backend = await restartServices()
+      backendUrl = backend.baseURL
+      backendToken = backend.token
+      const changed = backendUrl !== previousUrl || backendToken !== previousToken
+      if (changed) {
+        // 端口或 token 变了，渲染进程手里的地址失效：重开窗口让它拿到新参数
+        for (const win of BrowserWindow.getAllWindows()) win.destroy()
+        createWindow()
+      }
+      log.info('[main] backend restarted', backendUrl, changed ? '(new address)' : '')
+      return { url: backendUrl, token: backendToken, changed }
+    },
+  )
 }
 
 /**
@@ -101,6 +156,7 @@ app.whenReady().then(async () => {
   registerDialogIpc()
   registerShellOpenIpc()
   registerThemeCssIpc()
+  registerUpdateIpc()
   try {
     log.info('[main] starting backend…')
     const backend = await startServices()
@@ -112,9 +168,11 @@ app.whenReady().then(async () => {
       broadcastNotify(BACKEND_STOPPED)
     })
     createWindow()
+    initUpdater()
   } catch (err) {
     log.error('[main] failed to start', err)
     createWindow()
+    initUpdater()
     broadcastNotify(BACKEND_FAILED)
   }
 

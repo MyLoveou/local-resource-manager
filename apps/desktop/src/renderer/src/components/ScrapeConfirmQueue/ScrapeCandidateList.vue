@@ -1,35 +1,41 @@
 <template>
   <div class="scrape-cands" role="listbox">
-    <button
-      v-for="(item, index) in candidates"
-      :key="item.id ?? `${item.jobId}-${item.url}-${index}`"
-      type="button"
-      class="scrape-cands__item"
-      :class="{ 'scrape-cands__item--picked': pickedId === item.id }"
-      role="option"
-      :aria-selected="pickedId === item.id"
-      @click="$emit('pick', item.id ?? null)"
-    >
-      <img
-        v-if="thumbSrc(item.thumbnailUrl)"
-        class="scrape-cands__thumb"
-        :src="thumbSrc(item.thumbnailUrl)"
-        alt=""
-        referrerpolicy="no-referrer"
-      />
-      <div>
-        <div class="scrape-cands__title">{{ item.title }}</div>
-        <div class="scrape-cands__src">{{ item.source }}</div>
+    <template v-for="group in groups" :key="group.source">
+      <div class="scrape-cands__group">
+        {{ group.label }} · {{ group.items.length }}
       </div>
-    </button>
+      <button
+        v-for="(item, index) in group.items"
+        :key="item.id ?? `${item.jobId}-${item.url}-${index}`"
+        type="button"
+        class="scrape-cands__item"
+        :class="{ 'scrape-cands__item--picked': pickedId === item.id }"
+        role="option"
+        :aria-selected="pickedId === item.id"
+        @click="$emit('pick', item.id ?? null)"
+      >
+        <img
+          v-if="thumbSrc(item.thumbnailUrl)"
+          class="scrape-cands__thumb"
+          :src="thumbSrc(item.thumbnailUrl)"
+          alt=""
+          referrerpolicy="no-referrer"
+        />
+        <div>
+          <div class="scrape-cands__title">{{ item.title }}</div>
+          <div class="scrape-cands__src">{{ item.source }}</div>
+        </div>
+      </button>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { scrapeImageSrc } from '@/infrastructure/http/scrape'
 import type { Candidate } from '@/domain'
 
-defineProps<{
+const props = defineProps<{
   candidates: Candidate[]
   pickedId: number | null
 }>()
@@ -37,6 +43,33 @@ defineProps<{
 defineEmits<{
   pick: [number | null]
 }>()
+
+/** 渠道显示名；每渠道的结果单独成组，互不混合。 */
+const SOURCE_LABEL: Record<string, string> = {
+  bangumi: 'Bangumi',
+  mikan: '蜜柑',
+  bilibili: 'B 站',
+  tmdb: 'TMDB',
+  og: '网页',
+}
+
+const groups = computed(() => {
+  const order: string[] = []
+  const buckets = new Map<string, Candidate[]>()
+  for (const item of props.candidates) {
+    const source = item.source || 'other'
+    if (!buckets.has(source)) {
+      buckets.set(source, [])
+      order.push(source)
+    }
+    buckets.get(source)!.push(item)
+  }
+  return order.map((source) => ({
+    source,
+    label: SOURCE_LABEL[source] ?? source,
+    items: buckets.get(source)!,
+  }))
+})
 
 function thumbSrc(url: string | null | undefined): string | undefined {
   if (!url) return undefined
@@ -61,6 +94,13 @@ function thumbSrc(url: string | null | undefined): string | undefined {
   min-height: 0;
   overflow: auto;
   padding: 2px;
+}
+
+.scrape-cands__group {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sm-color-text-muted);
 }
 
 .scrape-cands__item {

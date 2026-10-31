@@ -11,6 +11,7 @@ import httpx
 from app.scrape.application.images import normalize_https, unique_https
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
 from app.settings.application.secrets import mikan_base_url
+from app.shared.log import logger
 
 _UA = {"User-Agent": "SourceManager/0.1 (local library; metadata scrape)"}
 _BANGUMI_HREF = re.compile(r'href=["\']/Home/Bangumi/(\d+)["\']', re.I)
@@ -18,8 +19,8 @@ _BANGUMI_NAMED = re.compile(
     r'href=["\']/Home/Bangumi/(\d+)["\'][^>]*>([^<]{1,200})',
     re.I,
 )
-_OG_TITLE = re.compile(r'<meta\s+property=["\']og:title["\']\s+content=["\']([^"\']+)["\']', re.I)
-_OG_IMAGE = re.compile(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)["\']', re.I)
+_META_TAG = re.compile(r"<meta\b[^>]*>", re.I)
+_META_ATTR = re.compile(r"([a-zA-Z:_-]+)\s*=\s*[\"']([^\"']*)[\"']")
 _BGM_SUBJECT = re.compile(r"(?:bgm|bangumi)\.tv/subject/(\d+)", re.I)
 _H1 = re.compile(r"<h1[^>]*>([^<]+)</h1>", re.I)
 
@@ -50,23 +51,39 @@ def parse_search_hits(html: str, query: str) -> list[SearchHit]:
     return hits
 
 
+def meta_content(html: str, prop: str) -> str | None:
+    """取 <meta> 的 content，**不依赖 property/content 的先后顺序**。
+
+    真实页面里 `content` 写在 `property` 前面很常见，按固定顺序匹配会整段漏掉。
+    """
+    target = prop.lower()
+    for tag in _META_TAG.findall(html):
+        attrs = {
+            key.lower(): unescape(value).strip()
+            for key, value in _META_ATTR.findall(tag)
+        }
+        name = (attrs.get("property") or attrs.get("name") or "").lower()
+        if name == target:
+            value = attrs.get("content")
+            if value:
+                return value
+    return None
+
+
 def parse_bangumi_page(html: str, ident: str, base: str) -> tuple[str, str | None, str | None]:
     """返回 title、poster_url、bangumi.tv subject id。"""
-    title = ""
-    og_t = _OG_TITLE.search(html)
-    if og_t:
-        title = unescape(og_t.group(1)).strip()
+    title = meta_content(html, "og:title") or ""
     if not title:
         h1 = _H1.search(html)
         if h1:
             title = unescape(h1.group(1)).strip()
+    # 解析不出来就留空：数字 id 不是标题，落库会把资源改名成 "273"
     if not title:
-        title = ident
+        logger.warning("蜜柑页面未解析出标题 id=%s", ident)
     poster = None
-    og_i = _OG_IMAGE.search(html)
-    if og_i:
-        poster = urljoin(base + "/", unescape(og_i.group(1)).strip())
-        poster = normalize_https(poster)
+    og_image = meta_content(html, "og:image")
+    if og_image:
+        poster = normalize_https(urljoin(base + "/", og_image))
     bgm = None
     found = _BGM_SUBJECT.search(html)
     if found:

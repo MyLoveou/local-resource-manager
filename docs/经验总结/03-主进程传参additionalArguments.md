@@ -64,3 +64,25 @@ const client = axios.create({
 
 - **兜底值**必须在（`?? 默认`），否则单浏览器调试（无 preload）时 `window.electron` 为 undefined 会崩。
 - 若值很多，可改用 IPC：preload `ipcRenderer.invoke('get-backend')`，主进程 `ipcMain.handle` 返回——但多一次异步，本次用同步 additionalArguments 更简单。
+
+## 扩展阅读
+
+### 站内（本仓）
+
+- [02-Electron后端子进程编排](02-Electron后端子进程编排.md)
+- [17-踩坑-process.env跨进程](17-踩坑-process.env跨进程.md)
+- [42-图解-一次请求的完整旅程](42-图解-一次请求的完整旅程.md)
+
+### 站外知识
+
+- [Electron · 上下文隔离](https://www.electronjs.org/docs/latest/tutorial/context-isolation)
+- [Electron · 进程模型](https://www.electronjs.org/docs/latest/tutorial/process-model)
+- [MDN · HTTP 概述](https://developer.mozilla.org/zh-CN/docs/Web/HTTP)
+
+
+
+# 问题备注
+
+在这一块，我一直在思考为什么明明没有在任何地方进行显式传递各种参数，比如backend-url这些，它们到底是如何传递的，
+
+我认为是框架在帮忙传递，但实际流程我还不知道

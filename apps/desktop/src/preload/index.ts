@@ -21,6 +21,26 @@ type AppNotifyPayload = {
   duration?: number
 }
 
+type UpdateStatus = {
+  phase:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'up-to-date'
+    | 'error'
+    | 'unsupported'
+  currentVersion: string
+  version?: string
+  releaseNotes?: string
+  percent?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
+  message?: string
+}
+
 let pendingNotify: AppNotifyPayload | null = null
 let handlerRef: ((payload: AppNotifyPayload) => void) | null = null
 
@@ -42,7 +62,12 @@ const api = {
   },
   selectFiles: (filters?: { name: string; extensions: string[] }[]): Promise<string[]> =>
     ipcRenderer.invoke('dialog:selectFiles', filters),
+  selectImageFile: (): Promise<{ name: string; dataBase64: string } | null> =>
+    ipcRenderer.invoke('dialog:selectImage'),
   selectDirectory: (): Promise<string | null> => ipcRenderer.invoke('dialog:selectDirectory'),
+  relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
+  restartBackend: (): Promise<{ url: string; token: string; changed: boolean }> =>
+    ipcRenderer.invoke('app:restart-backend'),
   showItemInFolder: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:showItemInFolder', { path }),
   openPath: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
@@ -51,6 +76,8 @@ const api = {
     ipcRenderer.invoke('shell:openWith', { path }),
   openAny: (path: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
     ipcRenderer.invoke('shell:openAny', { path }),
+  openExternal: (url: string): Promise<{ ok: true; canceled?: boolean } | { ok: false; message: string }> =>
+    ipcRenderer.invoke('shell:openExternal', { url }),
   runCommand: (payload: {
     template: string
     path: string
@@ -68,6 +95,19 @@ const api = {
   ): void => {
     handlerRef = handler
     if (pendingNotify) handler(pendingNotify)
+  },
+  update: {
+    getState: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:get-state'),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:check'),
+    download: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:download'),
+    install: (): void => {
+      void ipcRenderer.invoke('update:install')
+    },
+    onStatus: (handler: (status: UpdateStatus) => void): (() => void) => {
+      const listener = (_event: unknown, status: UpdateStatus): void => handler(status)
+      ipcRenderer.on('update:status', listener)
+      return () => ipcRenderer.removeListener('update:status', listener)
+    },
   },
 }
 

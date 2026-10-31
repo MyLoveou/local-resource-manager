@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -20,27 +21,37 @@ from app.library.application.ingest.placement import (
     normalize_path,
 )
 from app.library.domain.type_profile import ingest_kind, profile_for
-from app.library.application.thumbnails import source_for_grid_thumbnail
+from app.library.application.thumbnails import source_for_grid_thumbnail, try_register_thumbnail
 from app.library.application.packages import ResourcePackage, layout_for
 from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.import_preview import plan_for_import
+from app.library.application.import_progress import advance, copy_reporter, report_hash
+from app.library.application.series_title import ai_title_for, season_search_title, title_from_path
+from app.library.application.smart_import.pipeline import suggest_after_ingest
+from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
 from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
 from app.shared.log import logger
-from app.shared.media_types import (
+from app.library.domain.media_types import (
     FILE_ROLE_EPISODE,
     FILE_ROLE_EXTRA,
     FILE_ROLE_LAUNCH,
     FILE_ROLE_PAGE,
     FILE_ROLE_PRIMARY,
+    FILE_ROLE_PREVIEW,
     FILE_ROLE_THUMBNAIL,
 )
-from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
-
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    StorageKind,
+)
 
 def hash_file(path: Path) -> tuple[str, int]:
     """sha256 与字节大小。"""
@@ -55,12 +66,10 @@ def hash_file(path: Path) -> tuple[str, int]:
             size += len(chunk)
     return digest.hexdigest(), size
 
-
 def import_cpu_workers() -> int:
     """CPU 工人上限：min(4, CPU-1)，至少 1。"""
     n = os.cpu_count() or 2
     return max(1, min(4, n - 1))
-
 
 class ImportService:
     """列举 → 去重 → 建资源 → Layout 复制 → 写 files。"""
@@ -89,7 +98,16 @@ class ImportService:
         source_kind: str,
         paths: list[str],
         storage_kind: str | None = None,
+        *,
+        prehashed: dict[str, str] | None = None,
+        auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
+        """执行导入。prehashed: 路径→sha256（监视导入复用事件预计算值，避免二次全量哈希）；
+        auto_scrape=False 时导入后不入刮削队列（监视导入默认关）。"""
         importer = importer_for(type_)
         layout = layout_for(type_)
         profile = profile_for(type_)
@@ -111,12 +129,23 @@ class ImportService:
         job.total = len(candidates)
         job.phase = "hash"
         if self._session_factory is not None:
-            await self._run_pooled(job, type_, layout, candidates)
+            await self._run_pooled(
+                job, type_, layout, candidates, prehashed, auto_scrape, timeline_visible,
+                map_visible, category_ids, tag_names,
+            )
             return
         if self._resources is None:
             raise RuntimeError("ImportService needs resources or session_factory")
         for candidate in candidates:
-            await self._ingest_one(self._resources, job, type_, layout, candidate)
+            digest = prehashed.get(str(candidate)) if prehashed else None
+            await self._ingest_one(
+                self._resources, job, type_, layout, candidate,
+                digest=digest, auto_scrape=auto_scrape,
+                timeline_visible=timeline_visible,
+                map_visible=map_visible,
+                category_ids=category_ids,
+                tag_names=tag_names,
+            )
             job.done += 1
             await asyncio.sleep(0)
 
@@ -126,6 +155,12 @@ class ImportService:
         type_: ResourceType,
         layout: PackageLayout,
         candidates: list[Path],
+        prehashed: dict[str, str] | None = None,
+        auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
         factory = self._session_factory
         assert factory is not None
@@ -138,7 +173,15 @@ class ImportService:
                     try:
                         async with factory() as session:
                             repo = ResourceRepository(session)
-                            await self._ingest_one(repo, job, type_, layout, source)
+                            digest = prehashed.get(str(source)) if prehashed else None
+                            await self._ingest_one(
+                                repo, job, type_, layout, source,
+                                digest=digest, auto_scrape=auto_scrape,
+                                timeline_visible=timeline_visible,
+                                map_visible=map_visible,
+                                category_ids=category_ids,
+                                tag_names=tag_names,
+                            )
                         last_error = None
                         break
                     except OperationalError as exc:
@@ -188,39 +231,6 @@ class ImportService:
         await self._ingest_series(self._resources, job, type_, layout, root, videos)
         job.done = 1
 
-    async def _try_register_thumbnail(
-        self,
-        resources: ResourceRepository,
-        resource_id: int,
-        package: ResourcePackage,
-        type_: ResourceType,
-        role_paths: dict[str, Path],
-    ) -> None:
-        """缩略图失败只记日志，不回滚已复制的资源。"""
-        thumb_src = source_for_grid_thumbnail(type_, role_paths)
-        if thumb_src is None:
-            return
-        existing_thumb = await resources.get_file_by_role(resource_id, FILE_ROLE_THUMBNAIL)
-        if existing_thumb is not None:
-            return
-        try:
-            thumb_dest = await asyncio.to_thread(package.put_thumbnail, thumb_src)
-            if thumb_dest is None:
-                return
-            thumb_size = (await asyncio.to_thread(thumb_dest.stat)).st_size
-            await resources.add_file(
-                resource_id,
-                path=str(thumb_dest),
-                sha256=None,
-                size=thumb_size,
-                format_=thumb_dest.suffix.lower().lstrip("."),
-                role=FILE_ROLE_THUMBNAIL,
-                commit=True,
-            )
-        except Exception as exc:
-            logger.warning("缩略图登记失败 resource=%s: %s", resource_id, exc)
-            await resources.rollback()
-
     async def _ingest_one(
         self,
         resources: ResourceRepository,
@@ -228,9 +238,20 @@ class ImportService:
         type_: ResourceType,
         layout: PackageLayout,
         source: Path,
+        *,
+        digest: str | None = None,
+        auto_scrape: bool = True,
+        timeline_visible: bool | None = None,
+        map_visible: bool | None = None,
+        category_ids: list[int] | None = None,
+        tag_names: list[str] | None = None,
     ) -> None:
         try:
-            digest, size = await asyncio.to_thread(hash_file, source)
+            if digest is not None:
+                # 复用事件预计算的 sha256，只补一次 stat 拿大小（避免二次全量哈希）
+                size = await asyncio.to_thread(os.path.getsize, source)
+            else:
+                digest, size = await asyncio.to_thread(hash_file, source)
         except OSError as exc:
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
@@ -239,15 +260,40 @@ class ImportService:
             job.skipped_duplicate += 1
             return
         extra = {"importSourcePath": str(source)}
+        # 视频文件名元数据解析：bilidown 内置规则 + 用户自定义规则
+        parsed_name: ParsedVideoName | None = None
+        title = source.stem
+        author: str | None = None
+        if type_ == ResourceType.VIDEO:
+            parse_settings = await load_parse_settings(resources.session)
+            parsed_name = parse_video_name(source.stem, list(parse_settings.rules))
+            if parsed_name is not None:
+                title = parsed_name.title or source.stem
+                # EP 前缀轻增强（开关）：43. 标题
+                if parse_settings.title_with_ep and parsed_name.ep is not None:
+                    title = f"{parsed_name.ep:02d}. {title}"
+                author = parsed_name.author
+                if parsed_name.bv:
+                    bili: dict[str, object] = {"bv": parsed_name.bv}
+                    if parsed_name.ep is not None:
+                        bili["ep"] = parsed_name.ep
+                    extra["bilibili"] = bili
         package: ResourcePackage | None = None
         try:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=source.stem,
+                    title=title,
+                    author=author,
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra=extra,
+                    timeline_visible=(
+                        None if timeline_visible is None else bool(timeline_visible)
+                    ),
+                    map_visible=(
+                        None if map_visible is None else bool(map_visible)
+                    ),
                 ),
                 commit=False,
             )
@@ -261,7 +307,6 @@ class ImportService:
             )
             job.phase = "copy"
             role_paths = await asyncio.to_thread(layout.place_primary, package, source)
-            job.phase = "probe"
             video_duration: float | None = None
             for role, dest in role_paths.items():
                 probed = ProbeFields()
@@ -285,15 +330,26 @@ class ImportService:
                     fps=probed.fps,
                     bitrate=probed.bitrate,
                     exif_taken_at=probed.exif_taken_at,
+                    exif_lat=probed.exif_lat,
+                    exif_lng=probed.exif_lng,
+                    exif_camera=probed.exif_camera,
+                    exif_lens=probed.exif_lens,
+                    exif_iso=probed.exif_iso,
+                    exif_aperture=probed.exif_aperture,
+                    exif_shutter=probed.exif_shutter,
                     commit=False,
                 )
             cover = package.resolve_cover(role_paths)
             if type_ == ResourceType.IMAGE and cover is not None:
                 resource.cover_path = f"/library/resources/{resource.id}/content"
                 await resources.update(resource.id, resource, commit=False)
+            if category_ids:
+                await resources.set_categories(resource.id, category_ids, commit=False)
+            if tag_names:
+                await resources.add_tags_union(resource.id, tag_names, commit=False)
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             primary = role_paths.get(FILE_ROLE_PRIMARY)
             await apply_ingest_cover(
                 resources,
@@ -306,21 +362,67 @@ class ImportService:
                 video_duration=video_duration if type_ == ResourceType.VIDEO else None,
                 audio_path=primary if type_ == ResourceType.AUDIO else None,
             )
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
-            from app.scrape.application.enqueue import enqueue_search_after_import
+            job.phase = "thumb"
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await suggest_after_ingest(
+                resources, job_id=getattr(job, "id", None), resource_id=resource.id,
+                type_=type_, source_name=source.name, dir_name=source.parent.name,
+            )
+            job.phase = "index"
+            if parsed_name is not None and parsed_name.bv:
+                # 文件名带 BV：直接按 BV 获取元数据（监视与手动导入一致）
+                from app.scrape.application.enqueue import enqueue_search_after_import
 
-            await enqueue_search_after_import(resources._session, resource.id, type_)
+                await enqueue_search_after_import(
+                    resources.session, resource.id, type_, query=parsed_name.bv
+                )
+            elif auto_scrape:
+                from app.scrape.application.enqueue import enqueue_search_after_import
+
+                await enqueue_search_after_import(resources.session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
+
+    async def plan_series(
+        self,
+        resources: ResourceRepository,
+        root: Path,
+        videos: list[Path],
+    ) -> ExplainedPlan:
+        """AI 开启时由模型主导季/集/特典拆分；不可用或结果不合法则退回规则。
+
+        仓储必须用调用方传进来的这个：有的导入路径 `self._resources` 是 None。
+        """
+        from app.library.application.series_plan_ai import plan_with_ai
+        from app.library.application.smart_import.preferences import is_ai_enabled
+
+        note = ""
+        try:
+            if await is_ai_enabled(resources._session):
+                ai_plan = await plan_with_ai(root, videos)
+                if ai_plan is not None:
+                    return ai_plan
+                note = "AI 结构未生效：模型不可用或结果不合法"
+                logger.info("AI 结构不可用，退回规则拆分 root=%s", root.name)
+            else:
+                note = "AI 结构未启用（导入向导里未勾选）"
+        except Exception as exc:  # noqa: BLE001 - 识别失败不得中断导入
+            note = f"AI 结构未生效：{type(exc).__name__}"
+            logger.warning("AI 结构拆分异常，退回规则: %s", exc)
+        plan = explain_series_plan(root, videos)
+        if not note:
+            return plan
+        # 把「为什么不是 AI 给的」带进任务详情，避免又一次静默退回
+        return replace(plan, details=tuple(plan.details) + (note,))
 
     async def _ingest_series(
         self,
@@ -330,9 +432,11 @@ class ImportService:
         layout: PackageLayout,
         root: Path,
         videos: list[Path],
+        *,
+        auto_scrape: bool = True,
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
-        explained = explain_series_plan(root, videos)
+        explained = await plan_for_import(self, resources, root, videos)
         job.message = explained.message
         job.code = explained.code
         job.details = list(explained.details)
@@ -341,6 +445,8 @@ class ImportService:
             job.skipped_error += 1
             return
         plan = list(explained.items)
+        job.total = max(1, len(plan) * 3)
+        job.phase = "hash"
         hashes: list[tuple[PlannedItem, str, int]] = []
         for item in plan:
             try:
@@ -353,13 +459,15 @@ class ImportService:
                 job.skipped_duplicate += 1
                 return
             hashes.append((item, digest, size))
+            job.done += 1
+            report_hash(job, explained.message, len(hashes), len(plan))
 
         package: ResourcePackage | None = None
         try:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=await ai_title_for(root, resources),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra={"importSourcePath": str(root)},
@@ -378,8 +486,12 @@ class ImportService:
             season_ids: dict[int, int] = {}
             role_paths: dict[str, Path] = {}
             episode_files: list[tuple[int, int, Path, float | None]] = []
+            copied_bytes = 0
+            bytes_total = sum(size for _, _, size in hashes) or 1
             for index, (item, digest, size) in enumerate(hashes):
-                dest = await asyncio.to_thread(package.put_relative, item.src, item.dest_rel)
+                report = copy_reporter(job, explained.message, index, len(hashes), copied_bytes, bytes_total)
+                dest = await asyncio.to_thread(package.put_relative, item.src, item.dest_rel, report)
+                copied_bytes += size
                 job.phase = "probe"
                 probed = await asyncio.to_thread(self._probe, type_, dest)
                 if index == 0:
@@ -411,6 +523,7 @@ class ImportService:
                         season_row = await resources.add_season(
                             resource.id,
                             item.season,
+                            title=season_search_title(root, item.src),
                             sort_index=item.season,
                             commit=False,
                         )
@@ -420,6 +533,7 @@ class ImportService:
                         season_id,
                         file_row.id,
                         item.episode,
+                        title=item.title,
                         sort_index=item.episode,
                         commit=False,
                     )
@@ -434,7 +548,7 @@ class ImportService:
                     )
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             first_ep = min(episode_files, default=None)
             await apply_ingest_cover(
                 resources,
@@ -446,19 +560,40 @@ class ImportService:
                 episode_path=None if first_ep is None else first_ep[2],
                 episode_duration=None if first_ep is None else first_ep[3],
             )
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
-            from app.scrape.application.enqueue import enqueue_search_after_import
+            job.phase = "thumb"
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            await suggest_after_ingest(
+                resources, job_id=getattr(job, "id", None), resource_id=resource.id,
+                type_=type_, source_name=root.name, dir_name=root.name,
+            )
+            job.phase = "index"
+            try:
+                from app.library.application.series_assets import (
+                    generate_episode_covers,
+                    register_subtitles,
+                )
 
-            await enqueue_search_after_import(resources._session, resource.id, type_)
+                await register_subtitles(resources._session, resources, resource.id, root)
+                job.phase = "cover"
+                await generate_episode_covers(
+                    resources._session, resources, resource.id, on_step=lambda: advance(job)
+                )
+                job.percent = 100.0
+            except Exception as exc:  # noqa: BLE001 - 封面/字幕失败不影响导入
+                logger.warning("系列封面/字幕生成失败 resource=%s: %s", resource.id, exc)
+            if auto_scrape:
+                from app.scrape.application.enqueue import enqueue_search_after_import
+
+                await enqueue_search_after_import(resources._session, resource.id, type_)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("系列导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 
@@ -522,7 +657,7 @@ class ImportService:
         layout: PackageLayout,
         root: Path,
     ) -> None:
-        pages = comic_pages(root)
+        pages = await asyncio.to_thread(comic_pages, root)
         if not pages:
             job.skipped_error += 1
             return
@@ -540,7 +675,7 @@ class ImportService:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=title_from_path(root),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra={"importSourcePath": str(root)},
@@ -577,20 +712,21 @@ class ImportService:
                 )
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             await apply_ingest_cover(
                 resources, resource, package, type_, role_paths=role_paths, source_root=root
             )
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            job.phase = "thumb"
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("漫画导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 
@@ -603,7 +739,7 @@ class ImportService:
         root: Path,
         storage: StorageKind,
     ) -> None:
-        launch_src = find_launch(root)
+        launch_src = await asyncio.to_thread(find_launch, root)
         package: ResourcePackage | None = None
         try:
             digest: str | None = None
@@ -621,7 +757,7 @@ class ImportService:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=title_from_path(root),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=storage,
                     extra={"importSourcePath": str(root.resolve())},
@@ -663,7 +799,7 @@ class ImportService:
                 role_paths[FILE_ROLE_PRIMARY] = launch_store
             await resources.commit()
             job.imported += 1
-            job.phase = "thumb"
+            job.phase = "cover"
             await apply_ingest_cover(
                 resources,
                 resource,
@@ -673,18 +809,19 @@ class ImportService:
                 source_root=root,
                 launch_path=launch_store,
             )
-            await self._try_register_thumbnail(resources, resource.id, package, type_, role_paths)
+            job.phase = "thumb"
+            await try_register_thumbnail(resources, resource.id, package, type_, role_paths)
         except IntegrityError:
             await resources.rollback()
             if package is not None and storage == StorageKind.OWNED:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             elif package is not None and storage == StorageKind.INDEXED:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             job.skipped_duplicate += 1
         except OSError as exc:
             await resources.rollback()
             if package is not None:
-                self._ops.remove_tree(package.root)
+                await asyncio.to_thread(self._ops.remove_tree, package.root)
             logger.warning("游戏导入跳过 %s: %s", root, exc)
             job.skipped_error += 1
 

@@ -17,3 +17,9 @@ export interface SiteAdapter {
   enabled: boolean
   config: Record<string, unknown>
 }
+
+/** 监视目录设置：资源类型 → 目录列表；envLocked 时由环境变量锁定 */
+export interface WatchSettings {
+  dirs: Record<string, string[]>
+  envLocked: boolean
+}

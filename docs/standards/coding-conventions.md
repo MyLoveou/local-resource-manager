@@ -25,8 +25,22 @@
 - **导入来源**：`SourceKind.FILE` / `DIRECTORY`（`domain/constants.ts` 与 `shared/constants.py`）；隐藏项用 `HIDDEN_NAME_PREFIX` / `is_hidden_fs_name`，禁止比较 `"file"` / `"."` 字面量
 - **不变量集中**：字符串、扩展名、超时、阈值、角色名等到 `domain/constants.ts` / `domain/mediaTypes.ts` / `domain/mediaLabels.ts`（后端 `shared/constants.py` / `shared/media_types.py` / `shared/media_labels.py`），业务代码只引用，不散落字面量
 
+## 文件规模
+
+- 手写生产代码单文件目标 **≤500 行**；超过 500 行视为拆分信号。
+- 生产代码硬上限 **800 行**；新增文件超过 500 行直接失败。
+- 测试文件目标 **≤700 行**，硬上限 **1000 行**。
+- Vue 只统计 `<script>` + `<template>`，不把 `<style>` 计入。
+- 生成代码、migrations、lock 文件、静态数据、第三方代码不纳入检查。
+- 存量超标文件写入 `scripts/file-size-baseline.json` 作为基线；基线文件不得继续增长，大改时必须顺手拆分，新增文件不得加入基线。
+- 行数只是拆分信号，不替代职责单一、函数长度和依赖方向审查。
+
+检查命令：`pnpm check:file-size`；仅在明确拆分后更新基线时使用 `node scripts/check-file-size.mjs --update-baseline`。
+
 ## 后端
 
 - 新路由挂对应域 `APIRouter`，由 `main.py` `include_router`
 - 迁移：`apps/backend/app/shared/db/migrations/`
 - 不把 seed 做成公开 POST
+- **`async def` 里不得直接调用同步阻塞 IO**（`os.walk` / `iterdir` / `shutil.*` / `subprocess.run` / `PIL.Image.open` 等）；必须 `await asyncio.to_thread(...)`。单进程单事件循环，一处阻塞会拖住同一进程的 `/health` 与列表请求（D-20260927-06、`platform-performance`）
+- 鉴权豁免清单集中在 `shared/constants.py` 的 `AUTH_EXEMPT_*` + `is_auth_exempt()`；不得在路由里写路径条件

@@ -1,7 +1,11 @@
 """空库时写入演示资源，便于分页联调（扫描入库完成前）。"""
 from app.library.infrastructure.demo_covers import local_cover_uri
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 DEMO_IMAGE_COUNT = 200
 DEMO_VIDEO_COUNT = 80

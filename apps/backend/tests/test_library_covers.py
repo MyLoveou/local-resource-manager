@@ -25,7 +25,7 @@ from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 _PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -258,7 +258,7 @@ class LibraryCoversTests(unittest.IsolatedAsyncioTestCase):
         import subprocess
 
         from app.library.application.covers.frame import extract_video_frame
-        from app.shared.media_types import FFMPEG_BIN
+        from app.library.domain.media_types import FFMPEG_BIN
 
         binary = shutil.which(FFMPEG_BIN)
         if binary is None:
@@ -305,7 +305,7 @@ class LibraryCoversTests(unittest.IsolatedAsyncioTestCase):
         from PIL import Image
 
         from app.library.application.covers.embedded import extract_audio_cover
-        from app.shared.media_types import FFMPEG_BIN
+        from app.library.domain.media_types import FFMPEG_BIN
 
         binary = shutil.which(FFMPEG_BIN)
         if binary is None:

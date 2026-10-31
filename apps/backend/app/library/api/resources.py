@@ -21,7 +21,11 @@ from app.library.application.covers import CoverNotAllowedError
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.config import settings
 from app.shared.errors import InvalidStateError
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 router = APIRouter(prefix="/resources", tags=["library-resources"])
 
@@ -64,11 +68,23 @@ async def list_resources(
     after_key: str | None = Query(default=None, alias="afterKey"),
     q: str | None = Query(default=None, max_length=200),
     tag_ids: list[int] | None = Query(default=None, alias="tagIds"),
+    category_id: int | None = Query(default=None, alias="categoryId"),
+    category_ids: list[int] | None = Query(default=None, alias="categoryIds"),
+    uncategorized: bool = Query(default=False),
+    include_collected: bool = Query(default=False, alias="includeCollected"),
+    taken_date: str | None = Query(default=None, alias="takenDate"),
+    untimed: bool = Query(default=False),
+    timeline_visible: bool | None = Query(default=None, alias="timelineVisible"),
+    timeline_media: bool = Query(default=False, alias="timelineMedia"),
+    map_visible: bool | None = Query(default=None, alias="mapVisible"),
+    map_only: bool = Query(default=False, alias="mapOnly"),
+    character_ids: list[int] | None = Query(default=None, alias="characterIds"),
+    person_ids: list[int] | None = Query(default=None, alias="personIds"),
     sort: ResourceSortField = Query(default=ResourceSortField.CREATED_AT),
     order: Literal["asc", "desc"] = Query(default="desc"),
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourcePage:
-    """资源分页列表（可按类型/状态/关键词/标签过滤）。"""
+    """资源分页列表（可按类型/状态/关键词/标签/分类过滤；默认不含合集成员）。"""
     resources, tasks = repos
     return await LibraryQueryService(resources, tasks).list_page(
         type_, status, limit, offset, sort, order,
@@ -77,6 +93,18 @@ async def list_resources(
         after_key=after_key,
         q=q,
         tag_ids=tag_ids,
+        category_id=category_id,
+        category_ids=category_ids,
+        uncategorized=uncategorized,
+        include_collected=include_collected,
+        taken_date=taken_date,
+        untimed=untimed,
+        timeline_visible=timeline_visible,
+        timeline_media=timeline_media,
+        map_visible=map_visible,
+        map_only=map_only,
+        character_ids=character_ids,
+        person_ids=person_ids,
     )
 
 
@@ -85,9 +113,11 @@ async def batch_resources(
     body: ResourceBatchRequest,
     repos: tuple[ResourceRepository, TaskSummaryRepository] = Depends(get_repos),
 ) -> ResourceBatchResult:
-    """批量 trash / restore / purge；部分失败仍返回 200。"""
+    """批量 trash / restore / purge / add_tags；逐条处理，失败项返回明细。"""
     resources, tasks = repos
-    return await LibraryQueryService(resources, tasks).batch(body.action, body.ids)
+    return await LibraryQueryService(resources, tasks).batch(
+        body.action, body.ids, body.tag_names, body.category_ids, body.character_ids, body.person_ids
+    )
 
 
 @router.get("/{resource_id}/content")

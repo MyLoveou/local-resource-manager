@@ -18,8 +18,12 @@ from app.library.infrastructure.import_job_store import ImportJobState
 from app.library.infrastructure.repositories import ResourceRepository, TaskSummaryRepository
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.shared.media_types import FILE_ROLE_THUMBNAIL, THUMB_DIR, THUMB_GRID_NAME
-from app.shared.models import ResourceType
+from app.library.domain.media_types import (
+    FILE_ROLE_THUMBNAIL,
+    THUMB_DIR,
+    THUMB_GRID_NAME,
+)
+from app.library.domain.models import ResourceType
 
 
 class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
@@ -72,6 +76,19 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(dest.is_file())
             self.assertEqual(Path(thumbs[0].path).resolve(), dest.resolve())
             self.assertFalse((dest.parent.parent / "thumbnail.webp").exists())
+
+    async def test_import_rotated_jpeg_thumbnail_orientation(self) -> None:
+        from PIL import Image
+
+        src = self.root / "rotated.jpg"
+        image = Image.new("RGB", (8, 4), (12, 34, 56))
+        exif = image.getexif()
+        exif[274] = 6
+        image.save(src, format="JPEG", exif=exif)
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            with Image.open(self._thumb_path("image", rid)) as thumb:
+                self.assertEqual(thumb.size, (4, 8))
 
     async def test_video_without_cover_skips_thumb(self) -> None:
         video = self.root / "clip.mp4"
@@ -136,6 +153,85 @@ class GridThumbnailTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(dest.is_file())
             self.assertNotIn("thumbs/grid", after.cover_path or "")
             self.assertNotEqual(after.thumbnail_path, before_thumb)
+
+    async def test_backfill_recreates_missing_thumb(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+        from app.library.application.schemas import ThumbnailBackfillResult
+
+        src = self._png("old.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            dest = self._thumb_path("image", rid)
+            dest.unlink()
+            repo = ResourceRepository(session)
+            got = await repo.get(rid)
+            assert got is not None
+            thumb = next(f for f in got.files if f.role == FILE_ROLE_THUMBNAIL)
+            await repo.delete_file_row(thumb.id)
+            result = await PhotoTimelineService(repo, store_root=self.store, file_ops=self.ops).backfill_thumbnails()
+            self.assertIsInstance(result, ThumbnailBackfillResult)
+            self.assertEqual(result.repaired, 1)
+            self.assertTrue(dest.is_file())
+            after = await repo.get(rid)
+            assert after is not None
+            self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in after.files))
+
+    async def test_backfill_force_rebuilds_existing_thumb(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("force.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            result = await PhotoTimelineService(
+                repo, store_root=self.store, file_ops=self.ops
+            ).backfill_thumbnails(force=True)
+            self.assertGreaterEqual(result.repaired, 1)
+            got = await repo.get(rid)
+            assert got is not None
+            self.assertTrue(any(f.role == FILE_ROLE_THUMBNAIL for f in got.files))
+
+    async def test_rebuild_single_thumbnail(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("single.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            dest = self._thumb_path("image", rid)
+            dest.unlink()
+            thumb = next(
+                f for f in (await repo.get(rid)).files if f.role == FILE_ROLE_THUMBNAIL
+            )
+            await repo.delete_file_row(thumb.id)
+            result = await PhotoTimelineService(
+                repo, store_root=self.store, file_ops=self.ops
+            ).rebuild_thumbnail(rid)
+            self.assertEqual(result.repaired, 1)
+            self.assertTrue(dest.is_file())
+
+    async def test_backfill_skips_ok_and_does_not_purge_on_fail(self) -> None:
+        from app.library.application.photos import PhotoTimelineService
+
+        src = self._png("keep.png")
+        async with self.factory() as session:
+            rid = await self._import(session, ResourceType.IMAGE, src)
+            repo = ResourceRepository(session)
+            first = await PhotoTimelineService(repo, store_root=self.store, file_ops=self.ops).backfill_thumbnails()
+            self.assertEqual(first.repaired, 0)
+            self.assertGreaterEqual(first.skipped, 1)
+            with patch(
+                "app.library.application.packages.resource_package.ResourcePackage.put_thumbnail",
+                return_value=None,
+            ):
+                dest = self._thumb_path("image", rid)
+                dest.unlink()
+                result = await PhotoTimelineService(
+                    repo, store_root=self.store, file_ops=self.ops
+                ).backfill_thumbnails()
+            self.assertGreaterEqual(result.failed, 1)
+            still = await repo.get(rid)
+            self.assertIsNotNone(still)
 
 
 if __name__ == "__main__":

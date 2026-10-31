@@ -55,7 +55,8 @@ export function initMainLog(): void {
   log.transports.file.level = 'info'
   log.transports.console.level = isDev ? 'debug' : 'info'
   log.transports.file.maxSize = 10 * 1024 * 1024
-  log.transports.file.resolvePathFn = () => join(logDir, 'main.log')
+  log.transports.file.resolvePathFn = () =>
+    join(logDir, `main-${dayjs().format('YYYY-MM-DD')}.log`)
   log.transports.file.format = unifiedFormat
   log.transports.console.format = unifiedFormat
   log.errorHandler.startCatching()

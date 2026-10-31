@@ -1,0 +1,8 @@
+"""设置应用 · 领域常量（settings KV key）。"""
+KEY_TMDB = "scrape.tmdb"
+KEY_BANGUMI = "scrape.bangumi"
+KEY_MIKAN = "scrape.mikan"
+KEY_CONSUME = "consume.channels"
+KEY_SYSTEM = "system.settings"
+KEY_WATCH = "watch.dirs"
+KEY_PARSE = "parse.filenameRules"

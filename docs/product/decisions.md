@@ -7,6 +7,107 @@
 
 ## 有效决策
 
+### D-20261031-01 · 元数据挂到「季」，不拆资源
+
+- 日期：2026-10-31
+- 问题：一个文件夹里常有 S1、S2、多个 OVA，但站点上每季/每个 OVA 是独立条目；
+  元数据原先只挂在资源上，多季只能选一条，集数校验必然不符。
+- 结论：`seasons` 增加 `catalog_json` 与 `cover_file_id`，刮削可指定 `season`，
+  只写那一季；`resources.catalog` 保留为主作品（通常第 1 季）。
+- 取舍：不按作品拆资源——保留「一个文件夹一部作品」的浏览与导入模型，改动集中在刮削与展示。
+- 现状：后端与「按季刮削」入口已落地；季封面尚未接入（列已留）。
+
+### D-20261029-01 · 开启 AI 时由模型主导导入结构与标题
+
+- 日期：2026-10-29
+- 结论：`smart_import_ai` 开启时，**季/集/特典的拆分由模型决定**（`series_plan_ai`），
+  标题清洗同样由模型主导；规则层只做校验与落盘，模型不可用或结果不合法才退回规则。
+- 理由：规则无法穷举发布组命名（`Sekai II`、`Music01`、`GNCA-021002`），
+  结构判错会让整目录导入直接失败（`duplicate_episode`）。
+- 边界：模型只能给**已存在的文件**打标签，不能改名/增删；校验不通过整份丢弃。
+
+### D-20261025-02 · 智能导入是「建议层」，不是自动跑 AI
+
+- 日期：2026-10-25
+- 场景：用户提「导入时分析是否需要 AI 介入」，展开后真实诉求是改名清洗 + 分类建议 + 自己选择是否采纳
+- **决定**：智能导入 = 按类型注册的**导入动作** → 产出**带置信度与理由**的建议 → 落库 → 用户审阅采纳/忽略；`ai` 只是建议来源之一。**S1 不依赖任何模型**。源名称落 `resources.source_name`（迁移 `0032`）；规则优先、CLIP 兜底；目录名优先于文件名；分档 `≥0.85` 默认勾选、`0.5–0.85` 展示不勾、`<0.5` 折叠。审阅在向导内与「待审阅」面板**两处都可**，但导入任务不暂停
+- **为何**：用户要的是「可解释的候选」而不是黑箱自动执行；没有理由的建议不展示，清洗只改库内标题不动磁盘文件名
+- **不选**：导入时自动执行 VLM；建议放内存（关掉向导即丢）；塞 `resources.extra`
+- **落点**：`docs/requirements/features/smart-import/{需求,实现方案}.md`
+- 状态：有效（L1 定稿、S1 L3 已出，待实现）
+
+### D-20261025-01 · 图片库阶段手验通过；进入视频阶段并定切片
+
+- 日期：2026-10-25
+- 场景：`facts.md` 长期挂着 9 处「待手验」；用户已在真实 Electron 中完成全量手验；图片管理收口，下一步做视频
+- **决定**：图片库阶段**验收通过**（启动/导入/浏览/查看器/时间线/地图/合集/角色/回收站/设置/刮削/AI 检索，T10–T16 一并过）；视频阶段收用户确认的 5 块范围（播放进度与续播、播放器体验、字幕管理、视频专属筛选维度、刮削增强），但**拆成 S1→S2→S3 纵向切片**推进；播放进度落**新迁移 `0031`**，不用 `extra` 也不用前端本地存储
+- **为何**：手验已过就该从基线撤掉「待手验」，否则后续判断都建在过期前提上；5 块一次实现违反纵向切片，且 S1 单独就能喂饱「继续观看」
+- **不选**：把 5 块并成一次提交；进度存 `extra` 或 localStorage（换机即丢、后端统计拿不到）
+- **落点**：`docs/product/facts.md`、`docs/requirements/by-type/anime.md`、`docs/requirements/features/video-management/需求.md`
+- 状态：有效（文档已更新；S1 待 L3 方案）
+
+### D-20260927-06 · 平台债 D2/D4 口径：媒体豁免 + 空 token 放行
+
+- 日期：2026-09-27
+- 场景：批次 3 的 Q1–Q5 —— token 校验与导入事件循环的实现口径
+- **决定**：**Q1** token 为空 = 未启用鉴权（启动打 `WARN`；Electron 路径始终注入 token，故发布态始终校验）。**Q2** 媒体端点走**豁免**：`*/content` 与 `/scrape/proxy-image` 免请求头。**Q3** 既有 159 项测试不改造，另建 `test_auth.py`。**Q4** 只补齐 `to_thread` + 核对表，导入搬进程另立项。**Q5** 不写进 baseline 常规验收，改为「线程探针」确定性单测 + 手验顺带看。
+- **为何**：`img`/`video`/`model-viewer` 无法带请求头，豁免是唯一不改前端媒体主路径的方案；空 token 放行保住 `pnpm backend:start` 手测与既有测试；线程探针（断言调用线程 ≠ 事件循环线程）比计时更快更可证。
+- **不选**：fail-closed（裸跑后端与既有测试会全 401）；前端取 blob；签名 URL；本刀把导入搬进独立进程。
+- **落点**：`openspec/changes/platform-debt/`；`shared/middleware/auth.py`、`shared/constants.py`、`shared/config.py`；`tests/test_auth.py`、`tests/test_import_concurrency.py`
+- 状态：有效（D2/D4 已落地；文件流豁免与空 token 语义可随时单点改回 fail-closed）
+
+> 补充（同日）：CORS 预检 `OPTIONS` 必须放行，且 **CORS 中间件注册在最外层**，否则预检被 401、401 响应又缺 CORS 头，渲染进程只会看到 `Network Error`。踩坑记录见 `docs/经验总结/05-CORS跨域配置.md`。
+
+### D-20260927-05 · WCH 定稿：模型以 3D 为主
+
+- 日期：2026-09-27
+- 场景：`work-consumption-hub` 的 4 个开放问题阻碍定稿；其主体已编码待手验
+- **决定**：`model` 类型以 **3D（gltf/glb，已内嵌预览）** 为准；AI 权重（safetensors/ckpt）不并入，留给 P5「模型管理」。待办/备注**仅应用内**存储，不导出、不同步外部笔记。**不改仓库名**。M7/M8 顺序问题**失效**（已同批完成）。
+- **为何**：`facts.md` 已把模型 A-min 定义为内置 gltf 预览；权重涉及版本/来源/校验，属另一能力；导出属 P6。
+- **不选**：权重并入 `model`；待办备注同步 Obsidian/Notion；改产品名；为顺序问题返工。
+- **落点**：`work-consumption-hub.md` / `wch-modules.md` / `wch-ui.md`；`todo.md` P5
+- 状态：有效（需求已定稿；MS5/MS6 只剩手验）
+
+### D-20260927-04 · quality-and-deploy 拆分定稿：只留主题一条
+
+- 日期：2026-09-27
+- 场景：七条意图捆在一份草案里，多数缺可观察的失败与可测验收
+- **决定**：**S3 主题**单独立项 `theme-tokens`（补齐令牌覆盖）；**S4 Docker/远程后端冻结为不做**；**S1 设置页、S2 下载/刮削弹层退回观察**（真有问题时按 fix/style 单独立项）；**S5 实现、S6 架构、S7 算法保持 OUT**。
+- **为何**：无复现/无指标的「更好」不是验收标准；S4 与「只绑本机、媒体复制在库内、磁力依赖本机 aria2c」三条已拍板冲突，且依赖 token 校验先落地。
+- **不选**：七条捆成一次编码；未拍板就加 Dockerfile 或远程后端地址；为「更好」平行另起一套分层。
+- **落点**：`docs/requirements/features/quality-and-deploy/需求.md` §7；新需求 `docs/requirements/features/theme-tokens/`
+- 状态：有效
+
+### D-20260927-03 · 合集定稿：分组，不是作品
+
+- 日期：2026-09-27
+- 场景：`library-collections` 的设计与 4 个开放问题待确认
+- **决定**：按 L2 默认全部通过 —— 一条资源可进多个合集、**允许跨类型**、成员**手动 `position` 排序**、封面取第一张仍 active 成员的 `thumbnailPath`（**不落封面文件**）、**软删保留成员行**（恢复后回原位）、`/collections` 进侧栏而 `/collections/:id` 不进。新表 `collections` + `collection_items`，落在现有 `library`，不新建顶层包。
+- **为何**：标签不能表达顺序、也不能单独打开成一页；合集是"用户起的一组资源"，必须与系列的季/集结构严格分开。
+- **不选**：智能合集/规则引擎；合集嵌套；把合集做成 `ResourceType`；合集自己的刮削、下载、连播；单独上传合集封面。
+- **落点**：`docs/requirements/features/library-collections/`
+- 状态：有效（需求 + L2 设计已定稿，待 L3）
+
+### D-20260927-02 · 词表治理定稿：统计 + 删除
+
+- 日期：2026-09-27
+- 场景：`tag-category-hygiene` 轮次 1 的 6 个开放问题
+- **决定**：分类 = **独立受控词表**（Q1，已拍板）；删除仍被引用的词条 = **二次确认后级联摘标**并显示引用数；管理入口 = **设置弹窗新页签**；引用统计**只算 `active`**，删除时提示「回收站中另有 N 条」；提供**「一键清理 0 引用」**（二次确认 + 单事务）；**重命名/合并 OUT，另立项**。
+- **为何**：schema 已是 `ON DELETE CASCADE`，删词条天然摘标；0 引用清理是词表治理存在的理由；把回收站算进统计会给用户错误阻力；合并需定大小写/近义/冲突顺序，属另一量级。
+- **不选**：禁止删除有引用的词条；管理入口放左侧类型菜单（那是库类型语义）；回收站计入统计；本刀做重命名/合并。
+- **落点**：`docs/requirements/features/tag-category-hygiene.md`；路线图 MS4.1
+- 状态：有效（需求已定稿，待 L2/L3）
+
+### D-20260927-01 · 放开「常驻文件监视」禁令
+
+- 日期：2026-09-27
+- 场景：`apps/backend/app/shared/utils/fileWatcher.py` 草稿做源目录常驻监视，与基线禁止项冲突；用户明确要求保留该能力
+- **决定**：放开常驻文件监视禁令。允许对**用户显式添加**的源目录用 watchdog 常驻监视，事件驱动地发现新文件并按类型入库。
+- **边界（未放开）**：入库仍是**复制进 owned 包** + sha256 去重；**不把源目录登记为可反复全量重扫的库根**——本次只放开「监视」，没有放开「持久扫描根」。
+- **不选**：周期性全库重扫；把源目录当库根持久化；用监视取代导入向导。
+- **落点**：需求与 L2 待立项（`docs/requirements/features/<id>/`）；草稿 `shared/utils/fileWatcher.py` 尚未实现（`watchdog` 不在 `requirements.txt`）
+- 状态：有效（**方向已放开，实现未立项**）
+
 ### D-20260923-06 · 磁力走本机 aria2，HTTP 仍用 httpx
 
 - 日期：2026-09-23
@@ -407,7 +508,7 @@
 - **为何**：单机场景不需要多后端进程抢 SQLite；引擎子进程才是隔离边界。
 - **不选**：多用户、移动端、常驻文件监视、ED2K/WebDAV。
 - **落点**：`docs/requirements/features/local-resource-manager.md`、`facts.md` §二
-- 状态：有效
+- 状态：有效（其中「不做常驻文件监视」一条已被 D-20260927-01 取代）
 
 ### D-20260912-01 · 资源 HTTP 用复数路径 + PATCH + 软删
 
@@ -438,6 +539,320 @@
 - **不选**：嵌套 vue-router 命名视图（本轮）。
 - **落点**：`App.vue`、`stores/selection.ts`、`facts.md` 已知债（列表未刷新）
 - 状态：有效
+
+### D-20261007-01 · 下载不自建，委托第三方成熟下载器；产物经监视入库
+
+- 日期：2026-10-07
+- 场景：审查 todo.md，拍板下载方向
+- **决定**：移除所有自建下载功能（已编码的 HTTP 直链 httpx / 磁力 aria2c 第一刀废弃待清理）；后续下载统一委托第三方成熟下载器（qBittorrent / Motrix 等）；下载产物的目录结构与命名由下载器决定，本应用**不管理**；入库只通过把下载目录加入监视、增量导入（watch-source-dirs）
+- **为何**：下载渠道多样、目录命名/结构无法统一；自建下载器维护成本高，第三方下载器成熟稳定
+- **不选**：继续维护自建下载第一刀；对下载产物做结构/命名规范；内嵌 rqbit / yt-dlp
+- **落点**：`todo.md` P4 与「不做」、`docs/product/facts.md` §一/§二
+- 状态：有效
+
+---
+
+### D-20261007-02 · 漫展返图工作流：按 coser 建分类；补批量打标与合集导出
+
+- 日期：2026-10-07
+- 场景：漫展 coser 照片管理需求（`features/batch-tag-export/`）
+- **决定**：
+  1. 组织方式**按 coser 建分类**（每个 coser 一个分类），复用分类词表既有能力，零开发
+  2. 批量打标走既有批量端点扩展 `add_tags`：只加不删、幂等；空标签整批失败明细 `empty tags`
+  3. 合集导出按成员顺序复制**主文件**到用户所选目录，命名 `{序号3位}_{安全标题}{后缀}`（安全标题清理文件系统非法字符、80 字符截断、空标题兜底 untitled）；缺失文件跳过计数、目标目录不可写时先校验
+  4. 导出命名规则是纯函数算法切片（`export_naming.py`），不建 zip、不改库
+- **为何**：返图打包只需主文件与稳定顺序；批量打标消除逐张重复操作；纯函数切片可单测
+- **不选**：zip 打包；导出附属文件（封面/字幕）；批量删/替换标签；按拍摄日分组、双图对比、连拍堆叠（后置另立项）
+- **落点**：`facts.md` §一、`features/batch-tag-export/` 需求/设计/实现方案
+- 状态：有效
+
+---
+
+### D-20261007-03 · 分区可见性用代码配置，统一隐藏未完成分区入口
+
+- 日期：2026-10-07
+- 场景：部分分区未实现/未完整实现，菜单仍占位；需求 `section-visibility`
+- **决定**：
+  1. 单一 TS 常量 `HIDDEN_SECTIONS`（key = 路由 path）+ 纯谓词 `isSectionHidden`，重启生效
+  2. 全链路一致：菜单不渲染、直达 URL 重定向 `/`、导入向导不提供该类型、首页概览不出该卡
+  3. 默认隐藏 `/av` `/novel` `/comic` `/game` `/model`；直接隐藏不灰显；`/` 不可隐藏；未知 key 忽略
+  4. 搜索与合集混排 v1 不过滤；不改后端/DB/资源类型，清空配置即恢复
+- **为何**：代码配置零新增持久化与 API；同一判定四处复用避免入口不一致
+- **不选**：设置页开关/环境变量；后端过滤契约；通配符；单功能级开关
+- **落点**：`facts.md` §一、`docs/requirements/features/section-visibility/`、`openspec/changes/section-visibility/`
+- 状态：有效
+
+---
+
+### D-20261007-04 · Windows 生产包：NSIS + 绿色版 zip，PyInstaller 冻结后端，一键校验
+
+- 日期：2026-10-07
+- 场景：需要可在无 Python/Node 的 Windows 机器安装运行的生产包与打包/校验流水线
+- **决定**：
+  1. 产物 = NSIS 安装包（per-user、可选目录、开始菜单、卸载保留数据）+ 绿色版 zip；同一次构建
+  2. 后端 PyInstaller onedir 随包（`resources/backend`），migrations 随包；用户机器无需 Python
+  3. 生产态以 `app.isPackaged` 切换：DB/库包/日志落 `%APPDATA%/local-resource-manager`；开发态不变
+  4. 版本单一来源 `apps/desktop/package.json`（0.1.0），主进程注入 `BACKEND_VERSION`
+  5. `pnpm release:win`：门禁 → 构建 → 冻结 → electron-builder → verify（产物/版本/冻结后端 `/health`/SHA256），失败阻断；GitHub Actions 复用同一入口上传 artifact
+  6. 不签名、不自动更新、v1 默认图标；渲染层依赖归 devDependencies（Vite 已打包），asar 197.9MB → 9.8MB
+- **为何**：一条命令可重复；冒烟验证真正分发的后端；安装目录只读由 userData 解决
+- **不选**：内嵌 Python 源码、Nuitka、安装/卸载自动冒烟、签名/更新框架
+- **落点**：`facts.md` §一、`docs/requirements/features/production-packaging/`、`openspec/changes/production-packaging/`
+- 状态：有效
+
+---
+
+### D-20261007-05 · 安装包反馈三项收口：番剧默认隐藏、应用图标、安装目录用软件名
+
+- 日期：2026-10-07
+- 场景：安装包实测反馈（`section-visibility` / `production-packaging`）
+- **决定**：
+  1. `/anime` 加入默认隐藏清单（番剧第二刀未做）；菜单/路由/导入/首页四处一致
+  2. 设计应用图标（渐变圆角 + 媒体文件夹/播放符号），产物 `build/icon.ico`，生成脚本 `build/generate-icon.py`；安装器与 exe 使用同一图标
+  3. NSIS 安装目录默认用软件显示名「资源管理器」（`build/installer.nsh` 覆盖 `APP_FILENAME`）；可执行文件与产物名保持 ASCII
+  4. 修复菜单图标缺失：番剧 `television-classic`、合集 `folder-multiple`、AV `movie-open`（隐藏项仍修正）
+- **为何**：未完成能力不应占位；安装目录与开始菜单/卸载项命名一致；图标缺失会显得未完成
+- **不选**：把可执行文件改中文名（ASCII 更利于脚本/杀软/日志）
+- **落点**：`facts.md` §一、`section-visibility` 与 `production-packaging` 文档
+- 状态：有效
+
+---
+
+### D-20261018-01 · 合集=默认归集：主列表隐藏成员、可切换；加入合集需确认；合集内可筛选
+
+- 日期：2026-10-18
+- 场景：安装包反馈收口（ISSUE-20261007-01/02/03）
+- **决定**：
+  1. 资源加入合集后，主列表（类型页/全库混排/首页 by_type）默认不显示；类型页工具栏「显示合集内资源」可切换；搜索与回收站不受影响
+  2. 「加入合集」弹窗改为勾选暂存 + 取消/确定，确定后统一提交
+  3. 合集详情支持按分类/标签（AND）筛选成员，客户端过滤
+  4. 普通浏览也显示选中描边；合集卡不可选中（避免集合 id 与资源 id 撞车误高亮）
+- **为何**：合集承担归类语义，主库保持干净；可切换避免「资源消失」；确认按钮避免误操作
+- **不选**：完全隐藏不可切换；搜索也隐藏；服务端成员筛选（成员已全量加载，v1 客户端足够）
+- **落点**：`facts.md` §一、`docs/requirements/features/library-collections/设计.md`、`docs/requirements/issues/2026-10-07-安装包反馈.md`
+- 状态：有效
+
+---
+
+### D-20261018-02 · 安装器提供「创建桌面快捷方式」复选框
+
+- 日期：2026-10-18
+- 场景：安装包实测反馈
+- **决定**：NSIS 安装目录页之后增加「创建桌面快捷方式」复选框（默认勾选）；取消则安装完成后删除桌面快捷方式；静默安装不弹页，保持创建
+- **为何**：用户需要可控；默认行为不变，兼容既有安装/升级
+- **不选**：永远创建 / 永远不创建；独立的组件页
+- **落点**：`apps/desktop/build/installer.nsh`、`facts.md` §一、`production-packaging` 文档
+- 状态：有效
+
+---
+
+### D-20261018-03 · 照片时间线 v1：独立照片页 + 三态可见性 + 旧图回填（含 GPS）
+
+- 日期：2026-10-18
+- 场景：旅游/漫展照片需要按时间线组织；`photo-timeline-map`
+- **决定**：
+  1. v1 只做时间线；独立「照片」页（时间线/网格），与「图片」入口并存；地图下一刀（MapLibre+OSM）
+  2. 每图「计入时间线」三态：NULL=按 EXIF 自动、1=强制计入、0=强制排除；时间线提供「显示全部照片」
+  3. 无拍摄时间进「未知时间」组；时间线包含合集成员；支持年/月/分类/标签筛选
+  4. 旧图回填：重读 EXIF 写回拍摄时间与 GPS，不复制/不改原图、不清空已有值、不覆盖手动可见性
+  5. 导入时解析 GPS（WGS84）落库，为地图刀准备
+- **为何**：网图与自拍需可控区分；三态保留自动与手动；GPS 一次回填避免地图刀重扫
+- **不选**：来源枚举字段；只按 EXIF 不可覆盖；地图与时间线同刀
+- **落点**：`facts.md` §一、`docs/requirements/features/photo-timeline-map/`、`openspec/changes/photo-timeline-map/`
+- 状态：有效
+
+---
+
+### D-20261018-04 · 照片时间线改为 Justified 照片流
+
+- 日期：2026-10-18
+- 场景：时间线实测「按天小行列表」不够现代，照片不成主角
+- **决定**：
+  1. 视觉：粘性年/月 + 日段 + 逐行 Justified 照片流（Google Photos/Immich 式）；不做 Apple 年/月三层
+  2. 库：`justified-layout`（ISC）+ 现有 TanStack 虚拟化/选中；不引入 `@egjs/vue3-infinitegrid`
+  3. 数据：时间线接口直接返回每日照片瓦片（id/宽高/缩略图/拍摄时间）；v1 全量，>2000 再按月懒加载
+  4. 交互：单击选中、双击打开查看器，与网格一致；日标题保留「查看当天」
+- **为何**：现代照片流、滚动直达；纯布局库不接管滚动，改造成本最低
+- **不选**：Apple 三层大拼贴；EGJS 整套布局抽象；瀑布流（无 Justified/虚拟化）
+- **落点**：`docs/requirements/features/photo-timeline-map/界面方向.md`、`设计.md` §11
+- 状态：有效（v2 待实现）
+
+---
+
+### D-20261018-05 · 应用内更新：electron-updater + GitHub Releases
+
+- 日期：2026-10-18
+- 场景：每次改动都要手动重装安装包；更新功能未实现
+- **决定**：
+  1. Windows 安装版接入 `electron-updater`；GitHub Releases 为更新源（`latest.yml` + NSIS + blockmap）
+  2. 启动 8s 静默检查 + 设置页手动检查；发现新版本展示公告，用户确认后下载，完成后重启安装
+  3. 版本单一来源 `apps/desktop/package.json`；本次 **0.1.1** 为首个 updater 版本（0.1.0 无 updater，需手动装一次）；之后 tag `v*` 由 CI 发布 Release
+  4. 不做签名/公证、灰度、强制更新、差分、macOS/Linux；绿色 zip 不自动更新
+  5. 未签名：接受 SmartScreen；后续可补签名
+- **为何**：不再每次手动重装；公告与用户确认分离，可控；GitHub 仓库已有
+- **不选**：自建更新服务器；静默强制更新；Squirrel
+- **落点**：`facts.md` §一、`docs/requirements/features/app-update/`、`openspec/changes/app-update/`
+- 状态：有效（v0.1.2 已于 2026-10-19 发布；更新说明清洗、速度/剩余展示、手动下载已在工作区实现，待下个版本发布；仍未签名）
+
+---
+
+### D-20261018-06 · 时间线纳入本机拍摄视频；入口改名「时间线」；内嵌 ffprobe
+
+- 日期：2026-10-18
+- 场景：时间线只有照片；录制的视频也应进入同一条时间线
+- **决定**：
+  1. 时间线媒体类型 = `image + video`（排除 anime/av/audio）；入口由「照片」改名「时间线」
+  2. 视频拍摄时间取 ffprobe `format.tags.creation_time` 并转本地时间；无则未知时间/手动计入
+  3. **内嵌 ffprobe**（`@ffprobe-installer/win32-x64`，GPL-3.0，随包附 LICENSE）；主进程注入 `FFPROBE_BIN`
+  4. 视频瓦片显示时长，双击进播放器；日网格照片/视频混排（`timelineMedia` 过滤）
+  5. 回填扩到 image+video；视频只补时间，不解析 GPS
+- **为何**：旅游/漫展既有照片也有录像；内嵌 ffprobe 保证安装机可读 creation_time
+- **不选**：仅照片；依赖用户机器 ffprobe；解析视频 GPS/轨迹
+- **落点**：`facts.md` §一、`docs/requirements/features/photo-timeline-map/`、`openspec/changes/photo-timeline-map/`
+- 状态：有效（安装包体积增加约 77MB）
+
+---
+
+### D-20261018-07 · 图片列表 Justified、导入可见性、时间线刷新、合集删除与全局开关
+
+- 日期：2026-10-18
+- 场景：0.1.1 实测反馈（`docs/requirements/issues/2026-10-18-时间线反馈.md`）
+- **决定**：
+  1. 图片类型页/时间线网格改用 Justified 照片流（列表接口附带 primary 宽高），保留选中/批量/打开
+  2. 导入向导新增「计入时间线（默认按拍摄时间）」；取消则写 `timeline_visible=0`，勾选保持自动
+  3. 时间线监听 `library.resourceRevision`（2026-10-19 起为按 scope 失效总线），刷新前后保存/恢复滚动位置
+  4. 合集详情新增「删除合集」+ 确认；只删关系、资源保留
+  5. 「显示合集内资源」改为全局持久化开关（合集列表页头部 + 类型页工具栏）
+  6. 图片页增加底部「加载更多」兜底；列表 ID 签名变化时重置 nearEnd 去重，批量选择中/退出后均可继续加载
+- **为何**：图片页与时间线视觉一致；导入时可排除；删除/开关需可发现；批量选择后加载不能卡死
+- **不选**：图片页保持固定 3:4；导入后批量排除；在客户端内做模糊搜索；只靠滚动触发加载
+- **落点**：`facts.md` §一、issues 文档、UI/合集/时间线文档
+- 状态：有效（本地 0.1.1 包，待发版手验）
+
+### D-20261018-08 · 批量选中加入合集：单目标 + 批量端点
+
+- 日期：2026-10-18
+- 场景：R1 落地；批量选中后无法加入合集
+- **决定**：批量工具栏加「加入合集」；弹窗只选**一个**已有合集或新建一个；后端 `POST /collections/{id}/items/batch` 幂等追加，返回 `added/skipped/missing`；前端 >200 项分批；成功后退出批量并刷新
+- **为何**：复用合集成员关系，不移动资源；单目标交互最简；批量端点避免 N 次请求与部分失败失控
+- **不选**：一次加入多个合集；把“加入”做成移动/移出；前端循环单条接口
+- **落点**：`photo-management-next/需求.md` R1、`facts.md`、后端 collections API/repo、ToolBar
+- 状态：有效（待发版手验）
+
+### D-20261018-09 · 资源库工作区：资源底层、每类型分类树、时间线/地图为视图
+
+- 日期：2026-10-18
+- 场景：图片/合集/时间线/角色持续增加，菜单、工具栏、信息栏开始膨胀
+- **决定**：
+  1. Resource 为唯一内容实体；时间线/地图是视图，合集是手动关系；时间线保存筛选器，无成员表
+  2. 每个类型独立分类树，最多 4 层；资源可多分类；MVP 筛选单节点并包含后代
+  3. 导航采用「资源库 + 类型 tabs + 分类树 + 视图切换」；时间线/地图收进视图
+  4. 合集跨类型，详情按类型 tabs；老分类按使用类型迁移，未使用进图片树「待整理分类」
+  5. 合集卡 D（叠层封面 + hover/focus 展开）；首页改资源工作台；批量 Ctrl/Shift/Esc
+- **为何**：分类/合集/时间线/角色是不同轴，不能各自长成一套目录；资源只存一份
+- **不选**：物理目录镜像；全局分类树；多节点筛选；时间线成员表；Ctrl+A
+- **落点**：`docs/requirements/features/library-workspace/`、`facts.md`
+- 状态：有效（已落地，待发版手验）
+
+### D-20261018-10 · 资源库工作区 L2 细化：地图占位、时间线多分类、筛选重置
+
+- 日期：2026-10-18
+- 场景：L2 开放问题回收
+- **决定**：地图首版只做入口/空态；时间线保存筛选器支持**多分类并集**，分类删除后从筛选器清空该 ID；切换类型重置全部筛选（视图保留）；首页最近缩略图**只打开当前一张**，不建立播放序列；分类树可折叠、默认展开第一层；时间线默认不含未知时间；「待整理分类」非空才显示、不可删除、子节点可移出。
+- **为何**：避免地图拖住主路径；多分类时间线是用户真实场景；类型切换重置避免跨树 ID 失效；首页缩略图先看内容；待整理分类只收纳旧分类，不污染顶级树。
+- **不选**：MapLibre 首版；时间线成员表；类型切换保留旧筛选；首页点击缩略图先跳资源库或建立播放序列；默认展示未知时间。
+- **落点**：`library-workspace/需求.md`、`设计.md`、`handoff.md`
+- 状态：有效（已落地，待发版手验）
+
+### D-20261019-01 · library-workspace 迁移与旧列回滚
+
+- 日期：2026-10-19
+- 场景：分类树迁移涉及旧 `resources.category_id` 与多类型分类复制
+- **决定**：`0018_category_tree.sql` 重建分类表并复制多类型节点；`0019_saved_views.sql` 建保存视图；旧 `category_id` 本版停止读写但保留一版回滚，下一版删除；迁移在真实库副本对账通过；地图只做入口/空态。
+- **为何**：避免同版重建 resources 的高风险；旧列保留一版可在异常时回滚。
+- **不选**：迁移当版删除旧列；物理目录；时间线成员表。
+- **落点**：`apps/backend/app/shared/db/migrations/0018_*`、`0019_*`、`facts.md`
+- 状态：有效（198 tests；安装包已重出）
+
+### D-20261019-02 · 时间线中心：一等智能视图 + 分类型规则
+
+- 日期：2026-10-19
+- 场景：多时间线、图片+视频、分类筛选与排除在资源库视图里难以承载
+- **决定**：时间线升为一级入口；`SavedView.scope=image|video|media`；规则按类型存图片/视频 include/exclude；`/timelines/all` 内置全部媒体；详情竖向 Justified；编辑/删除规则；无成员表。
+- **为何**：时间线是事件/故事，不是临时筛选器；分类型规则避免合并两棵分类树。
+- **不选**：合并跨类型分类树；时间线成员表；把多时间线继续塞进资源库下拉。
+- **落点**：`saved_views` API/repo、`/library/photos/timeline`、`views/Timelines`、`views/TimelineDetail`、`TimelineEditorModal`
+- 状态：有效（198 tests；待发版手验）
+
+### D-20261019-03 · 数据变更统一按 scope 失效，不再手动刷新
+
+- 日期：2026-10-19
+- 场景：批量加分类后“未分类”列表与左侧计数不更新；各页面靠零散 `bump`/`load(..., true)` 刷新
+- **决定**：`library.invalidate` 按 `resources(type)/categories(type)/collections/savedViews/home/tags` 记录修订号；列表、分类树、首页、合集、时间线、标签筛选各自订阅；分类树 HTTP 层不再维护第二份缓存，缓存只归 Pinia store。
+- **为何**：写操作只声明“影响哪些查询”，避免遗漏与过度刷新；页面保持现有滚动/选择状态，不整页 reload。
+- **不选**：全局单一 revision（无法区分类型/页面）；每个 mutation 后页面手动刷新；引入完整查询库。
+- **落点**：`application/stores/library.ts`、`useResourcePage`、`LibraryWorkspace`、`InfoPanel`、`Home`、`CollectionDetail`、`Timelines`、`TimelineEditorModal`、`ResourceBrowser`
+- 状态：有效（2026-10-19；typecheck/build/lint 通过，批量分类回归测试通过）
+
+### D-20261020-01 · 时间线备注与 GPS 地图
+
+- 日期：2026-10-20
+- 场景：图片/视频时间线需要按天或按保存时间线记录备注、地点；已有 GPS 无法在地图消费
+- **决定**：新增 `timeline_notes`（日期备注全局一条、保存时间线备注一条，标题/正文/地点名）；`PhotoTile` 返回 GPS；时间线详情接入 MapLibre + OSM，GPS 聚类、点击打开资源
+- **为何**：备注让时间线有人类语义；地图直接消费已有 EXIF GPS，不另造位置数据
+- **不选**：反向地理编码、地点写回 EXIF、地图选点、日期多备注、时间线成员表
+- **落点**：`0020_timeline_notes.sql`、`/library/timeline-notes`、`PhotoTimeline`、`TimelineDetail`、`PhotoMap`、`TimelineNoteModal`
+- 状态：有效（2026-10-20；201 tests，typecheck/build 通过，Electron 手验待跑）
+
+### D-20261021-01 · 图片优先级调整与 EXIF 只读详情
+
+- 日期：2026-10-21
+- 场景：图片主路径已闭环；需要决定下一批图片能力
+- **决定**：图片站点刮削、旧库缩略图回填降为 P3；EXIF 只读详情升为 P1（相机/镜头/ISO/光圈/快门）；R3/R4、时间线网格、动图/HEIC/回收站验收为 P2
+- **为何**：EXIF 详情是低风险、直接提升图片库信息密度的能力；刮削依赖站点且不确定性高；旧缩略图先确认实际影响
+- **不选**：复制 digiKam 的 C++/Qt/Exiv2 实现；EXIF 写回文件；把 CLIP/OCR 等候选塞进本轮
+- **落点**：`0022_exif_camera.sql`、`media_probe.probe_image`、`InfoPanel`、`docs/requirements/by-type/image.md`
+- 状态：有效（2026-10-21 已落地 EXIF 只读详情；不写回文件）
+
+### D-20261021-02 · 地图引擎改为 Leaflet + MarkerCluster
+
+- 日期：2026-10-21
+- 场景：MapLibre 首版地图的聚合样式不理想；浅色/深色底图切换依赖自定义 raster 图层可见性，存在时序和交互问题
+- **决定**：地图改用 Leaflet + `leaflet.markercluster` + 内置 `L.control.layers`；底图使用 OSM/Esri 浅色/深色；聚合点用自定义 `iconCreateFunction`，点击聚合点保留缩略图面板，点击单点/缩略图走 `openResource`；右侧「城市 / 地点」面板用本地城市库做最近城市分组，不请求外部地理编码
+- **为何**：`L.control.layers` 是 Leaflet 内置底图控件，切换底图不重载地图/source，不会丢聚合点；MarkerCluster 的聚合、点击、边界缩放和动画成熟；当前仅数百个 GPS 点，Leaflet DOM 标记足够
+- **不选**：继续维护 MapLibre 自定义图层切换；Mapbox GL（token/许可）；OpenLayers（过重）；用第三方 MapLibre style-switcher fork（peer 版本旧、仍需自定义重挂 source）
+- **落点**：`apps/desktop/src/renderer/src/components/PhotoMap/index.vue`、`apps/desktop/package.json`、`apps/desktop/src/renderer/index.html`
+- 状态：有效（2026-10-21；typecheck/build/lint 通过，Electron 手验待跑）
+
+### D-20261021-03 · 资源库移除地图占位入口
+
+- 日期：2026-10-21
+- 场景：`/library/:type` 的「地图」只是首版占位空态；完整地图已在时间线详情，两个入口造成“资源库也有地图”的误解
+- **决定**：移除资源库的网格/地图切换、`?view=map` 查询和占位空态；资源库只保留网格；地图入口迁到独立顶级「地图」（见 D-20261021-04）
+- **为何**：地图不是资源类型或分类，不应在资源库再实现一套；避免占位入口与真实地图并存
+- **不选**：把地图做成资源库内独立视图；把地图当资源实体；保留空占位文案
+- **落点**：`apps/desktop/src/renderer/src/views/LibraryWorkspace/index.vue`、`components/LibraryWorkspace/ViewSwitch.vue`（已移除）
+- 状态：有效（2026-10-21；typecheck/build 通过）
+
+### D-20261021-04 · 地图独立入口、地图可见性与保存规则
+
+- 日期：2026-10-21
+- 场景：地图不应只是时间线详情的附属视图；导入时需要选择是否加入地图；地图规则需要和时间线一样可保存、编辑、删除
+- **决定**：新增顶级「地图」入口（`/maps`、`/maps/:id`）；地图规则使用 `saved_views.kind='map'`，编辑/删除规则与时间线一致；新增 `resources.map_visible`（NULL=有 GPS 自动纳入，1=强制加入，0=强制排除）；导入向导增加「加入地图」，信息栏增加「加入地图」；地图查询按 GPS + `map_visible` 过滤，不依赖 `timeline_visible`；时间线详情移除地图切换
+- **为何**：地图是独立的资源视图，不是时间线成员；地图可见性独立后，可以从时间线移除但仍保留地图，或反过来；保存地图规则复用现有 saved view 模型
+- **不选**：把地图做成时间线附属页；用 `timeline_visible` 复用地图开关；把地图当资源实体；地图删除资源
+- **落点**：`0021_map_visibility.sql`、`PhotoMap`、`Maps`、`MapDetail`、`ImportWizard`、`InfoPanel`、`saved_views`
+- 状态：有效（2026-10-21；204 tests，typecheck/build/lint 通过，Electron 手验待跑）
+
+### D-20261022-01 · 角色 + 作品维度第一刀
+
+- 日期：2026-10-22
+- 场景：cosplay/漫展照片需要按角色和作品组织；现有分类/标签无法提供角色聚合页和角色筛选
+- **决定**：先建立 `works`、`characters`、`character_aliases`、`resource_characters`；角色支持名称/别名/作品/简介/封面（默认取最近关联资源），资源多角色关联，支持批量设置、合并；角色页聚合图片/视频、时间线和所在合集；类型页/时间线/地图支持按角色筛选；扮演者暂用标签过渡，不建一等实体
+- **为何**：角色和作品是 cosplay 内容的核心维度；先把内容维度做通，再决定扮演者实体和人脸识别
+- **不选**：把 coser 塞进 characters；把角色当普通标签；本轮做人脸识别/自动人物聚类；把作品做成复杂系列模型
+- **落点**：`0023_character_dimension.sql`、`characters.py`、`CharacterEditorModal`、`Characters`、`CharacterDetail`、`InfoPanel`、`BrowseControls`、`PhotoTimeline`
+- 状态：有效（2026-10-22；后端 213 tests，前端 typecheck/build/lint 通过，UI 手验待跑）
 
 ---
 

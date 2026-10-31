@@ -8,7 +8,21 @@ from fastapi import APIRouter, HTTPException
 from app.library.application.importers import importer_for
 from app.library.application.import_service import ImportService
 from app.library.application.packages.layouts import layout_for
-from app.library.application.schemas import ImportCreate, ImportJob, ImportJobCreated, SourceKind
+from app.library.application.preview_schemas import (
+    ImportPreviewIn,
+    ImportPreviewOut,
+    PreviewEpisodeOut,
+    PreviewExtraOut,
+    PreviewSeasonOut,
+)
+from app.library.application.schemas import (
+    ImportCreate,
+    ImportJob,
+    ImportJobCreated,
+    SourceKind,
+)
+from app.library.application.import_preview import collect_videos, plan_cache, summarize
+from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.import_job_store import ImportJobState, job_store
 from app.shared.db.db import get_session_factory
 from app.library.domain.type_profile import COMIC_ARCHIVE_EXTENSIONS, profile_for
@@ -56,6 +70,9 @@ def _to_dto(job: ImportJobState) -> ImportJob:
         phase=job.phase,
         total=job.total,
         done=job.done,
+        percent=job.percent,
+        eta_seconds=job.eta_seconds,
+        speed_mbps=job.speed_mbps,
         imported=job.imported,
         skipped_duplicate=job.skipped_duplicate,
         skipped_error=job.skipped_error,
@@ -74,6 +91,10 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
         await service.run(
             job, body.type, body.source_kind.value, body.paths,
             storage_kind=body.storage_kind.value if body.storage_kind else None,
+            timeline_visible=body.timeline_visible,
+            map_visible=body.map_visible,
+            category_ids=body.category_ids,
+            tag_names=body.tag_names,
         )
         await job_store.finish(job)
     except asyncio.CancelledError:
@@ -82,6 +103,43 @@ async def _execute(job: ImportJobState, body: ImportCreate) -> None:
     except Exception as exc:  # noqa: BLE001 — 任务失败要落状态
         await job_store.finish(job, failed=str(exc))
 
+
+@router.post("/preview", response_model=ImportPreviewOut)
+async def preview_import(body: ImportPreviewIn) -> ImportPreviewOut:
+    """预览：算出会建出哪些季/集/特典，不写盘。"""
+    root = Path(body.path)
+    if not root.is_dir():
+        raise HTTPException(status_code=400, detail="path is not a directory")
+    videos = collect_videos(root)
+    if not videos:
+        return ImportPreviewOut(ok=False, code="no_videos", message="目录里没有视频文件")
+    factory = get_session_factory()
+    async with factory() as session:
+        resources = ResourceRepository(session)
+        service = ImportService(session_factory=factory)
+        explained = await service.plan_series(resources, root, videos)
+    summary = summarize(list(explained.items))
+    plan_cache.put(root, explained, explained.items)
+    return ImportPreviewOut(
+        ok=explained.ok,
+        code=explained.code,
+        message=explained.message,
+        details=list(explained.details),
+        total_files=summary.total_files,
+        seasons=[
+            PreviewSeasonOut(
+                season=season,
+                episodes=[
+                    PreviewEpisodeOut(
+                        season=item.season, episode=item.episode, title=item.title, file=item.file
+                    )
+                    for item in episodes
+                ],
+            )
+            for season, episodes in summary.seasons.items()
+        ],
+        extras=[PreviewExtraOut(title=item.title, file=item.file) for item in summary.extras],
+    )
 
 @router.post("", response_model=ImportJobCreated, status_code=202)
 async def create_import(body: ImportCreate) -> ImportJobCreated:

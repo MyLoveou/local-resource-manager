@@ -56,6 +56,8 @@ export interface ScrapePreview {
 
 export interface ScrapeSelect {
   candidateId: number
+  /** 指定时只写这一季的元数据 */
+  season?: number | null
   coverUrl?: string | null
   applyTitle?: boolean
   applySynopsis?: boolean

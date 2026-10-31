@@ -9,11 +9,17 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.pytest_cache/
 
 # Electron
 dist/
 dist-electron/
 out/
+
+# Packaging output
+release/
+apps/backend/build/
+apps/desktop/build/ffprobe/*.exe
 
 # Editor / OS
 .vscode/*

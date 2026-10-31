@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.scrape.application.providers.base import SearchHit
 from app.scrape.domain.models import Candidate, ScrapeJob, ScrapeJobStatus
-from app.shared.db.orm import CandidateRow, ScrapeJobRow
-
-
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+from app.scrape.infrastructure.orm import CandidateRow, ScrapeJobRow
+from app.shared.utils.time import db_now, db_ts
 
 
 def _job(row: ScrapeJobRow) -> ScrapeJob:
@@ -113,8 +108,8 @@ class ScrapeRepository:
         if row is None:
             return
         row.status = job.status.value
-        row.started_at = _ts(job.started_at)
-        row.finished_at = _ts(job.finished_at)
+        row.started_at = db_ts(job.started_at)
+        row.finished_at = db_ts(job.finished_at)
         row.error = job.error
         row.match_count = job.match_count
         row.query = job.query
@@ -132,7 +127,7 @@ class ScrapeRepository:
                     source=hit.source,
                     relevance=hit.relevance,
                     selected=0,
-                    created_at=_now(),
+                    created_at=db_now(),
                 )
             )
         await self._session.commit()
@@ -152,11 +147,3 @@ class ScrapeRepository:
             return
         row.selected = 1
         await self._session.commit()
-
-
-def _ts(value: datetime | str | None) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        return value
-    return value.strftime("%Y-%m-%d %H:%M:%S")

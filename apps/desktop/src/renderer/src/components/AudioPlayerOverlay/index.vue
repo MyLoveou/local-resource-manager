@@ -1,43 +1,87 @@
 <template>
   <div v-show="player.visible" class="audio-player-overlay" role="dialog" aria-modal="true">
     <div class="audio-player-overlay__panel">
-      <p class="audio-player-overlay__title">音频</p>
-      <input
-        class="audio-player-overlay__progress"
-        type="range"
-        min="0"
-        max="1000"
-        :value="progress"
-        @input="onSeek"
-      />
+      <input class="audio-player-overlay__progress" type="range" min="0" max="1000" :value="progress" @input="onSeek" />
       <div class="audio-player-overlay__row">
-        <n-button size="small" @click="togglePlay">{{ playing ? '暂停' : '播放' }}</n-button>
-        <input type="range" min="0" max="100" :value="volume" @input="onVolume" />
+        <n-button size="small" circle quaternary :disabled="!player.hasPrev" aria-label="上一首" @click="player.prev">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon icon="mdi:skip-previous" />
+            </n-icon>
+          </template>
+        </n-button>
+        <n-button size="small" circle quaternary :aria-label="playing ? '暂停' : '播放'" @click="togglePlay">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon :icon="playing ? 'mdi:pause' : 'mdi:play'" />
+            </n-icon>
+          </template>
+        </n-button>
+        <n-button size="small" circle quaternary :disabled="!player.hasNext" aria-label="下一首" @click="player.next">
+          <template #icon>
+            <n-icon :size="20">
+              <Icon icon="mdi:skip-next" />
+            </n-icon>
+          </template>
+        </n-button>
+        <div class="audio-player-overlay__row-volume">
+          <n-icon :size="18">
+            <Icon icon="mdi:volume-high" />
+          </n-icon>
+          <input type="range" min="0" max="100" :value="volume" @input="onVolume" />
+        </div>
       </div>
     </div>
     <n-button class="audio-player-overlay__close" size="small" circle aria-label="关闭" @click="close">
-      ×
+      <template #icon>
+        <n-icon :size="16">
+          <Icon icon="mdi:close" />
+        </n-icon>
+      </template>
     </n-button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NButton } from 'naive-ui'
+import { NButton, NIcon } from 'naive-ui'
+import { Icon } from '@iconify/vue'
 import { Howl } from 'howler'
 import { useAudioPlayerStore } from '@/application/stores/audioPlayer'
-import { resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
+import { FILE_ROLE, type Resource } from '@/domain'
 
 const player = useAudioPlayerStore()
+const current = ref<Resource | null>(null)
 const playing = ref(false)
 const progress = ref(0)
 const volume = ref(80)
 let howl: Howl | null = null
 let timer: number | null = null
 
+watch(
+  () => [player.visible, player.currentId] as const,
+  async ([visible, id]) => {
+    if (!visible || id == null) {
+      current.value = null
+      return
+    }
+    if (current.value?.id !== id) current.value = null
+    try {
+      const row = await getResource(id)
+      if (player.visible && player.currentId === id) current.value = row
+    } catch {
+      if (player.currentId === id) current.value = null
+    }
+  },
+  { immediate: true },
+)
+
 const src = computed(() => {
   if (player.currentId == null || !player.visible) return ''
-  return resolveLibraryMediaUrl(`/library/resources/${player.currentId}/content`)
+  const files = current.value?.files ?? []
+  const primary = files.find((file) => file.role === FILE_ROLE.PRIMARY) ?? files[0]
+  return resolveLibraryMediaUrl(primary?.contentUrl ?? '')
 })
 
 function stopTimer(): void {
@@ -110,13 +154,10 @@ function onKey(event: KeyboardEvent): void {
   close()
 }
 
-watch(
-  () => [player.visible, player.currentId] as const,
-  ([visible]) => {
-    if (visible) load()
-    else unload()
-  }
-)
+watch(src, (value) => {
+  if (value) load()
+  else unload()
+})
 
 onMounted(() => window.addEventListener('keydown', onKey))
 onUnmounted(() => {
@@ -158,6 +199,18 @@ onUnmounted(() => {
   gap: 12px;
   align-items: center;
   margin-top: 12px;
+}
+
+.audio-player-overlay__row-volume {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.audio-player-overlay__row :deep(.n-button) {
+  color: #f9fafb;
 }
 
 .audio-player-overlay__close {

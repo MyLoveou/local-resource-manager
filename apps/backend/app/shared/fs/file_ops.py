@@ -13,6 +13,24 @@ class FileOps:
         shutil.copy2(src, dest)
         return dest
 
+    def copy_with_progress(self, src: Path, dest: Path, on_chunk=None, chunk: int = 8 << 20) -> Path:
+        """分块复制并回报已写字节；用于大文件进度条。
+
+        比 `shutil.copy2` 少了元数据复制（mtime 等），入库场景不需要。
+        """
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        written = 0
+        with src.open("rb") as source, dest.open("wb") as target:
+            while True:
+                block = source.read(chunk)
+                if not block:
+                    break
+                target.write(block)
+                written += len(block)
+                if on_chunk is not None:
+                    on_chunk(written)
+        return dest
+
     def move(self, src: Path, dest: Path) -> Path:
         """移动文件到目标（自动建父目录）。"""
         dest.parent.mkdir(parents=True, exist_ok=True)

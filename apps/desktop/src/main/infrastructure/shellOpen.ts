@@ -76,7 +76,7 @@ async function openWithOther(filePath: string): Promise<ShellOpenResult> {
 export function registerShellOpenIpc(): void {
   ipcMain.handle('shell:showItemInFolder', async (_event, payload: unknown): Promise<ShellOpenResult> => {
     try {
-      shell.showItemInFolder(parsePath(payload))
+      shell.showItemInFolder(resolveExistingTarget(payload))
       return ok()
     } catch (err) {
       return fail(err instanceof Error ? err.message : 'showItemInFolder failed')
@@ -107,6 +107,21 @@ export function registerShellOpenIpc(): void {
       return error ? fail(error) : ok()
     } catch (err) {
       return fail(err instanceof Error ? err.message : 'openAny failed')
+    }
+  })
+
+  ipcMain.handle('shell:openExternal', async (_event, payload: unknown): Promise<ShellOpenResult> => {
+    try {
+      const raw = payload !== null && typeof payload === 'object' && 'url' in payload
+        ? (payload as { url: unknown }).url
+        : payload
+      if (typeof raw !== 'string' || !/^https:\/\//i.test(raw)) {
+        return fail('仅支持 HTTPS 链接')
+      }
+      await shell.openExternal(raw)
+      return ok()
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : 'openExternal failed')
     }
   })
 
