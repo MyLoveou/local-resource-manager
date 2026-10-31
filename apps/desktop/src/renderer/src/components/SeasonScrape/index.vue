@@ -91,12 +91,12 @@ async function run(): Promise<void> {
     }
     jobId.value = job.id
     let current = job
-    for (let attempt = 0; attempt < 60 && current.status !== 'done' && current.status !== 'failed'; attempt++) {
+    for (let attempt = 0; attempt < 150 && current.status !== 'done' && current.status !== 'failed'; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 1000))
       current = await getScrapeJob(job.id)
     }
     if (current.status !== 'done') {
-      error.value = current.error || '刮削没有完成'
+      error.value = current.error ? '刮削失败：' + current.error : '刮削没有完成'
       return
     }
     candidates.value = await listScrapeCandidates(job.id)
