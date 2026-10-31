@@ -19,6 +19,7 @@
       </n-radio-group>
       <div v-if="preview" class="wizard-preview">
         <p class="hint">{{ preview.message }}</p>
+        <p class="muted">点「选择并导入」并选同一个目录，将直接沿用这份结构，不会重新识别。</p>
         <div v-if="preview.seasons.length" class="wizard-preview__body">
           <div v-for="season in preview.seasons" :key="season.season" class="wizard-preview__season">
             <strong>第 {{ season.season }} 季 · {{ season.episodes.length }} 集</strong>

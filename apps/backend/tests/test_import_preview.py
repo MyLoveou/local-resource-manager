@@ -58,3 +58,57 @@ class SummarizeTests(unittest.TestCase):
         self.assertEqual(summary.seasons, {})
         self.assertEqual(summary.extras, [])
         self.assertEqual(summary.total_files, 0)
+
+
+class PlanCacheTests(unittest.IsolatedAsyncioTestCase):
+    """预览过的计划，导入时必须直接复用，不再重新规划。"""
+
+    def _explained(self, ok: bool = True):
+        from app.library.application.series_plan import ExplainedPlan
+
+        item = PlannedItem(Path("a.mkv"), "episode", 1, 1, "seasons/01/S01E01.mkv", None)
+        return ExplainedPlan(ok=ok, items=(item,), code=None, message="已识别 1 季 · 1 集")
+
+    async def test_cached_plan_is_reused(self) -> None:
+        from app.library.application.import_preview import plan_cache, plan_for_import
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+
+        plan_cache.put(root, self._explained(), self._explained().items)
+
+        class Boom:
+            async def plan_series(self, *_args, **_kwargs):
+                raise AssertionError("不应该再调用规划")
+
+        plan = await plan_for_import(Boom(), None, root, [root / "a.mkv"])
+        self.assertTrue(plan.ok)
+        self.assertIn("沿用预览", plan.message)
+        self.assertEqual(len(plan.items), 1)
+
+    async def test_cache_is_single_use(self) -> None:
+        from app.library.application.import_preview import plan_cache
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        plan_cache.put(root, self._explained(), self._explained().items)
+        self.assertIsNotNone(plan_cache.take(root))
+        self.assertIsNone(plan_cache.take(root))
+
+    async def test_missing_cache_falls_back_to_planner(self) -> None:
+        from app.library.application.import_preview import plan_for_import
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+
+        class Service:
+            async def plan_series(self, *_args, **_kwargs):
+                from app.library.application.series_plan import ExplainedPlan
+
+                return ExplainedPlan(ok=True, message="现场规划")
+
+        plan = await plan_for_import(Service(), None, root, [])
+        self.assertEqual(plan.message, "现场规划")

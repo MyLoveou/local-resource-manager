@@ -21,7 +21,7 @@ from app.library.application.schemas import (
     ImportJobCreated,
     SourceKind,
 )
-from app.library.application.import_preview import collect_videos, summarize
+from app.library.application.import_preview import collect_videos, plan_cache, summarize
 from app.library.infrastructure.repositories import ResourceRepository
 from app.library.infrastructure.import_job_store import ImportJobState, job_store
 from app.shared.db.db import get_session_factory
@@ -119,6 +119,7 @@ async def preview_import(body: ImportPreviewIn) -> ImportPreviewOut:
         service = ImportService(session_factory=factory)
         explained = await service.plan_series(resources, root, videos)
     summary = summarize(list(explained.items))
+    plan_cache.put(root, explained, explained.items)
     return ImportPreviewOut(
         ok=explained.ok,
         code=explained.code,

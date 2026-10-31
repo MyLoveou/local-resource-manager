@@ -27,6 +27,7 @@ from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.import_preview import plan_for_import
 from app.library.application.import_progress import advance, copy_reporter, report_hash
 from app.library.application.series_title import ai_title_for, title_from_path
 from app.library.application.smart_import.pipeline import suggest_after_ingest
@@ -64,7 +65,6 @@ def hash_file(path: Path) -> tuple[str, int]:
             digest.update(chunk)
             size += len(chunk)
     return digest.hexdigest(), size
-
 
 def import_cpu_workers() -> int:
     """CPU 工人上限：min(4, CPU-1)，至少 1。"""
@@ -437,7 +437,7 @@ class ImportService:
         auto_scrape: bool = True,
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
-        explained = await self.plan_series(resources, root, videos)
+        explained = await plan_for_import(self, resources, root, videos)
         job.message = explained.message
         job.code = explained.code
         job.details = list(explained.details)
