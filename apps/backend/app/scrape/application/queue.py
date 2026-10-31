@@ -39,6 +39,44 @@ async def _mark_failed(job_id: int, reason: str) -> None:
                 await repo.save_job(job)
     except Exception:  # noqa: BLE001 - 兜底失败不应该再抛
         logger.exception("标记刮削失败时出错 job=%s", job_id)
+async def _open_task(job_id: int) -> str | None:
+    """为刮削任务建一行 tasks，标题取查询词。"""
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            repo = ScrapeRepository(session)
+            job = await repo.get_job(job_id)
+            title = f"刮削 · {job.query}" if job and job.query else "刮削"
+            task_id = await tasks.create(
+                session,
+                kind=tasks.KIND_SCRAPE,
+                title=title,
+                resource_id=job.resource_id if job else None,
+                dedupe_key=f"scrape:{job.resource_id}:{job.query}" if job else None,
+            )
+            if task_id is not None:
+                await tasks.start(session, task_id)
+            return task_id
+    except Exception:  # noqa: BLE001 - 记账失败不该影响刮削
+        logger.exception("创建刮削任务记录失败 job=%s", job_id)
+        return None
+
+
+async def _close_task(job_id: int, reason: str) -> None:
+    """失败时把对应的 tasks 行标失败。"""
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            repo = ScrapeRepository(session)
+            job = await repo.get_job(job_id)
+            if job is None:
+                return
+            rows = await tasks.list_tasks(session, states=(tasks.RUNNING,))
+            for row in rows:
+                if row["kind"] == tasks.KIND_SCRAPE and row["resource_id"] == job.resource_id:
+                    await tasks.fail(session, row["id"], reason)
+    except Exception:  # noqa: BLE001
+        logger.exception("关闭刮削任务记录失败 job=%s", job_id)
 async def _worker_loop() -> None:
     queue = scrape_queue()
     while True:
