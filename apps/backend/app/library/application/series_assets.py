@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import asyncio
 import shutil
 from pathlib import Path
@@ -60,6 +62,11 @@ async def register_subtitle_file(
     await resources.update(resource.id, resource, commit=False)
     await resources.commit()
     return await resources.get(resource.id)
+
+
+def _tick(on_step: Callable[[], None] | None) -> None:
+    if on_step is not None:
+        on_step()
 
 
 _COVER_CONCURRENCY = 4
@@ -124,6 +131,7 @@ async def generate_episode_covers(
     resource_id: int,
     *,
     force: bool = False,
+    on_step: Callable[[], None] | None = None,
 ) -> dict[str, int]:
     """为每集抽帧封面。已有封面时跳过，除非 force。
 
@@ -157,6 +165,7 @@ async def generate_episode_covers(
             {"fid": file_row.id, "eid": row["episode_id"]},
         )
         generated += 1
+        _tick(on_step)
 
     extra_rows = list(await _extra_rows(session, resource_id))
     extra_pending = [
@@ -183,6 +192,7 @@ async def generate_episode_covers(
             {"fid": file_row.id, "xid": row["extra_id"]},
         )
         generated += 1
+        _tick(on_step)
 
     await session.commit()
     return {"generated": generated, "skipped": skipped, "failed": failed}

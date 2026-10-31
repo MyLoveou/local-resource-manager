@@ -27,6 +27,7 @@ from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.import_progress import advance, advance_copy, hash_message
 from app.library.application.series_title import ai_title_for, title_from_path
 from app.library.application.smart_import.pipeline import suggest_after_ingest
 from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
@@ -308,7 +309,6 @@ class ImportService:
             )
             job.phase = "copy"
             role_paths = await asyncio.to_thread(layout.place_primary, package, source)
-            job.phase = "probe"
             video_duration: float | None = None
             for role, dest in role_paths.items():
                 probed = ProbeFields()
@@ -447,6 +447,8 @@ class ImportService:
             job.skipped_error += 1
             return
         plan = list(explained.items)
+        job.total = max(1, len(plan) * 3)
+        job.phase = "hash"
         hashes: list[tuple[PlannedItem, str, int]] = []
         for item in plan:
             try:
@@ -459,14 +461,15 @@ class ImportService:
                 job.skipped_duplicate += 1
                 return
             hashes.append((item, digest, size))
+            job.done += 1
+            job.message = hash_message(explained.message, len(hashes), len(plan))
 
         package: ResourcePackage | None = None
         try:
-            series_title_text = await ai_title_for(root, resources)
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=series_title_text,
+                    title=await ai_title_for(root, resources),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra={"importSourcePath": str(root)},
@@ -485,8 +488,11 @@ class ImportService:
             season_ids: dict[int, int] = {}
             role_paths: dict[str, Path] = {}
             episode_files: list[tuple[int, int, Path, float | None]] = []
+            copied_bytes = 0
             for index, (item, digest, size) in enumerate(hashes):
                 dest = await asyncio.to_thread(package.put_relative, item.src, item.dest_rel)
+                copied_bytes += size
+                advance_copy(job, explained.message, index + 1, len(hashes), copied_bytes / 2**30)
                 job.phase = "probe"
                 probed = await asyncio.to_thread(self._probe, type_, dest)
                 if index == 0:
@@ -568,7 +574,10 @@ class ImportService:
 
                 await register_subtitles(resources._session, resources, resource.id, root)
                 job.phase = "cover"
-                await generate_episode_covers(resources._session, resources, resource.id)
+                await generate_episode_covers(
+                    resources._session, resources, resource.id, on_step=lambda: advance(job)
+                )
+                job.done = job.total
             except Exception as exc:  # noqa: BLE001 - 封面/字幕失败不影响导入
                 logger.warning("系列封面/字幕生成失败 resource=%s: %s", resource.id, exc)
             if auto_scrape:
