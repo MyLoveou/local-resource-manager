@@ -1,6 +1,7 @@
 <template>
   <div class="season-panel">
-    <div v-if="seasons.length > 1" class="season-panel__tabs">
+    <p class="season-panel__summary">{{ summary }}</p>
+    <div v-if="seasons.length > 1 || extrasCount" class="season-panel__tabs">
       <button
         v-for="item in seasons"
         :key="item.seasonNumber"
@@ -10,16 +11,29 @@
       >
         第 {{ item.seasonNumber }} 季
       </button>
+      <button
+        v-if="extrasCount"
+        type="button"
+        class="season-panel__tab"
+        :class="{ 'is-active': extraTabActive }"
+        @click="extraTabActive = !extraTabActive"
+      >
+        特典 {{ extrasCount }}
+      </button>
     </div>
+
+    <p v-if="extraTabActive" class="season-panel__hint">
+      特典不单独刮削；在系列详情页可以逐条查看与播放。
+    </p>
 
     <template v-if="current">
       <img
-        v-if="current.coverUrl"
+        v-if="coverSrc"
         class="season-panel__cover"
-        :src="resolveLibraryMediaUrl(current.coverUrl)"
+        :src="resolveLibraryMediaUrl(coverSrc)"
         alt=""
       />
-      <div v-else class="season-panel__cover season-panel__cover--empty">无季封面</div>
+      <div v-else class="season-panel__cover season-panel__cover--empty">无封面</div>
 
       <dl class="season-panel__meta">
         <dt v-if="current.title">季</dt>
@@ -69,6 +83,10 @@ const props = defineProps<{
   /** 外部（详情页选中某一集）指定的季 */
   season: number
   fallbackTitle?: string | null
+  /** 作品封面：季封面缺失时回退 */
+  resourceCover?: string | null
+  /** 特典作为最后一个标签 */
+  extras?: { title?: string | null; fileId: number }[]
 }>()
 
 const emit = defineEmits<{ refresh: []; 'update:season': [number] }>()
@@ -92,6 +110,28 @@ watch(
   },
 )
 
+const extraTabActive = ref(false)
+
+const extrasCount = computed(() => props.extras?.length ?? 0)
+
+const totalEpisodes = computed(() =>
+  props.seasons.reduce((sum, item) => sum + (item.episodes?.length ?? 0), 0),
+)
+
+const scrapedSeasons = computed(
+  () => props.seasons.filter((item) => item.catalog || item.coverUrl).length,
+)
+
+const summary = computed(
+  () =>
+    `${props.seasons.length} 季 · ${totalEpisodes.value} 集` +
+    (scrapedSeasons.value ? ` · 已刮 ${scrapedSeasons.value} 季` : ''),
+)
+
+const coverSrc = computed(
+  () => current.value?.coverUrl || props.resourceCover || null,
+)
+
 const current = computed(
   () => props.seasons.find((item) => item.seasonNumber === seasonNumber.value) ?? null,
 )
@@ -99,6 +139,12 @@ const catalog = computed(() => current.value?.catalog ?? null)
 const nameCn = computed(() => catalog.value?.nameCn ?? null)
 const siteEps = computed(() => catalog.value?.eps ?? catalog.value?.totalEpisodes ?? '—')
 </script>
+
+.season-panel__summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
+}
 
 <style scoped lang="less">
 .season-panel {

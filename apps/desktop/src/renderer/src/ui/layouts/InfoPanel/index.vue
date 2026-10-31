@@ -25,13 +25,15 @@
           </div>
         </section>
         <section class="info-panel-section">
-          <div class="info-panel-section-title">技术信息</div>
+          <div class="info-panel-section-title">{{ isSeries ? '季资料' : '技术信息' }}</div>
           <template v-if="isSeries">
             <SeasonPanel
               :resource-id="resource.id"
               :seasons="resource.seasons ?? []"
               :season="selection.season ?? resource.seasons?.[0]?.seasonNumber ?? 1"
               :fallback-title="resource.title"
+              :resource-cover="resource.thumbnailPath ?? resource.coverUrl ?? null"
+              :extras="resource.extras ?? []"
               @update:season="selection.selectSeason"
               @refresh="reloadResource"
             />
