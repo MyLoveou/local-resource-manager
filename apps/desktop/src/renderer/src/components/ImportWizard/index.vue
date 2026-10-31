@@ -90,6 +90,7 @@
     <div v-else class="wizard-step">
       <p class="hint">{{ phaseLabel }}</p>
       <n-progress type="line" :percentage="percent" :processing="busy" />
+      <p v-if="speedLabel" class="muted">{{ speedLabel }}</p>
       <p v-if="job" class="muted">
         新增 {{ job.imported }} · 跳过重复 {{ job.skippedDuplicate }} · 错误 {{ job.skippedError }}
       </p>
@@ -181,9 +182,36 @@ const isMapMedia = computed(
 )
 
 const percent = computed(() => {
-  if (!job.value || job.value.total <= 0) return busy.value ? 10 : 0
+  if (!job.value) return busy.value ? 10 : 0
+  // 后端按阶段折算（校验 30% / 复制 60% / 封面 10%），复制阶段按字节推进
+  if (typeof job.value.percent === 'number' && job.value.percent > 0) {
+    return Math.min(100, Math.round(job.value.percent))
+  }
+  if (job.value.total <= 0) return busy.value ? 10 : 0
   return Math.min(100, Math.round((job.value.done / job.value.total) * 100))
 })
+
+/** 复制阶段的速率与剩余时间；没有就返回空串 */
+const speedLabel = computed(() => {
+  const current = job.value
+  if (!current || current.phase !== 'copy') return ''
+  const parts: string[] = []
+  if (current.speedMbps && current.speedMbps > 0) {
+    parts.push(`${current.speedMbps.toFixed(0)} MB/s`)
+  }
+  if (current.etaSeconds && current.etaSeconds > 0) {
+    parts.push(`剩余约 ${formatEta(current.etaSeconds)}`)
+  }
+  return parts.join(' · ')
+})
+
+function formatEta(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  if (minutes <= 0) return `${rest} 秒`
+  if (minutes < 60) return `${minutes} 分 ${rest} 秒`
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`
+}
 
 const phaseLabel = computed(() => {
   if (errorMessage.value) return '导入结束'

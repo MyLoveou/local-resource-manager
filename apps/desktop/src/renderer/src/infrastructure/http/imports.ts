@@ -28,6 +28,9 @@ export interface ImportJob {
   phase: string
   total: number
   done: number
+  percent?: number
+  etaSeconds?: number | null
+  speedMbps?: number | null
   imported: number
   skippedDuplicate: number
   skippedError: number

@@ -432,6 +432,9 @@ class ImportJob(ApiModel):
     phase: str
     total: int
     done: int
+    percent: float = 0.0
+    eta_seconds: int | None = None
+    speed_mbps: float | None = None
     imported: int
     skipped_duplicate: int
     skipped_error: int

@@ -63,8 +63,8 @@ class ResourcePackage:
         """复制字幕并使用给定文件名。"""
         return self.put_role("subtitle", src, dest_name)
 
-    def put_relative(self, src: Path, relative: str) -> Path:
-        """复制到包内相对路径（季集目录）。"""
+    def put_relative(self, src: Path, relative: str, on_chunk=None) -> Path:
+        """复制到包内相对路径（季集目录）；on_chunk 用于回报已写字节。"""
         self.ensure_dir()
         dest = (self.root / relative).resolve()
         try:
@@ -72,7 +72,9 @@ class ResourcePackage:
         except ValueError as exc:
             raise ValueError("destination outside package") from exc
         dest.parent.mkdir(parents=True, exist_ok=True)
-        return self._ops.copy(src, dest)
+        if on_chunk is None:
+            return self._ops.copy(src, dest)
+        return self._ops.copy_with_progress(src, dest, on_chunk)
 
     def put_primary(self, src: Path) -> Path:
         return self.put_role("primary", src)
