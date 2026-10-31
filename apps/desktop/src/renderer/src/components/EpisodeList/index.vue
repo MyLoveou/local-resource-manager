@@ -9,6 +9,13 @@
 
     <section v-for="season in seasons" :key="season.id ?? season.seasonNumber">
       <div class="episode-list__label">
+        <img
+          v-if="season.coverUrl"
+          class="episode-list__season-cover"
+          :src="resolveLibraryMediaUrl(season.coverUrl)"
+          alt=""
+          @click="$emit('seasonOpen', season.seasonNumber)"
+        />
         第 {{ season.seasonNumber }} 季
         <span v-if="season.title" class="episode-list__season-title">{{ season.title }}</span>
         <span v-if="seasonMeta(season)" class="episode-list__season-meta">
@@ -26,7 +33,12 @@
       </div>
       <div class="episode-list__grid">
         <div v-for="ep in season.episodes ?? []" :key="ep.fileId" class="episode-card-wrap">
-          <button type="button" class="episode-card" @click="$emit('play', ep.fileId)">
+          <button
+            type="button"
+            class="episode-card"
+            :class="{ 'episode-card--selected': selectedFileId === ep.fileId }"
+            @click="selectable ? $emit('select', season.seasonNumber, ep.fileId) : $emit('play', ep.fileId)"
+          >
             <img
               v-if="ep.coverUrl"
               class="episode-card__cover"
@@ -101,10 +113,15 @@ const props = defineProps<{
   allowScrape?: boolean
   /** 详情页才展示季的站点档案 */
   showSeasonMeta?: boolean
+  /** 选中模式：点集先选中（详情页），而不是直接播放 */
+  selectable?: boolean
+  selectedFileId?: number | null
 }>()
 
 const emit = defineEmits<{
   scrape: [seasonNumber: number]
+  select: [seasonNumber: number, fileId: number]
+  seasonOpen: [seasonNumber: number]
   play: [fileId: number]
   refresh: []
 }>()
@@ -225,6 +242,21 @@ async function backfill(): Promise<void> {
   -webkit-line-clamp: 2;
   font-size: 12px;
   color: var(--sm-color-text-muted, #6b7280);
+}
+
+.episode-list__season-cover {
+  width: 28px;
+  height: 40px;
+  margin-right: 8px;
+  border-radius: 3px;
+  object-fit: cover;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.episode-card--selected {
+  outline: 2px solid var(--sm-color-primary, #2080f0);
+  outline-offset: 1px;
 }
 
 <style scoped lang="less">

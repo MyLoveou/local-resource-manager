@@ -94,6 +94,8 @@ export interface SeriesSeason {
   title?: string | null
   /** 季自己的站点档案（多季作品每季是独立条目） */
   catalog?: WorkCatalog | null
+  /** 季简介（刮削写入） */
+  synopsis?: string | null
   /** 季封面（已签名）；空则回退作品封面 */
   coverUrl?: string | null
   hasCover?: boolean

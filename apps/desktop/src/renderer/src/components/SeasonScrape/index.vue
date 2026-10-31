@@ -117,10 +117,11 @@ async function applyCandidate(item: Candidate): Promise<void> {
       season: props.season,
       applyTitle: true,
       applyCatalog: true,
-      applySynopsis: false,
+      applySynopsis: true,
       applyAuthor: false,
       applyTags: false,
-      applyCover: false,
+      applyCover: true,
+      coverUrl: item.thumbnailUrl ?? null,
     })
     emit('applied')
     onShow(false)

@@ -166,6 +166,7 @@ class SeasonRow(Base):
     title: Mapped[str | None] = mapped_column(String)
     sort_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     catalog_json: Mapped[str | None] = mapped_column(Text)
+    synopsis: Mapped[str | None] = mapped_column(Text)
     cover_file_id: Mapped[int | None] = mapped_column(ForeignKey("files.id"))
 
 

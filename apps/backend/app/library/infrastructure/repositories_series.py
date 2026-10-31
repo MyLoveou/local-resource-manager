@@ -93,6 +93,7 @@ async def attach_series_tree(session: AsyncSession, resource: Resource) -> None:
                 season_number=season.season_number,
                 title=season.title,
                 catalog=_season_catalog(season.catalog_json),
+                synopsis=season.synopsis,
                 cover_url=episode_cover_url(resource.id, season.cover_file_id),
                 has_cover=season.cover_file_id is not None,
                 episodes=episodes,
