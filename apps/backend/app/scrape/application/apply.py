@@ -57,8 +57,12 @@ async def apply_scrape_detail(
     apply_catalog: bool = True,
     apply_cover: bool = True,
     replace_user_cover: bool = False,
+    season: int | None = None,
 ) -> None:
     if resource.id is None:
+        return
+    if season is not None:
+        await _apply_to_season(resources, resource.id, season, detail, apply_title, apply_catalog)
         return
     if not any((apply_title, apply_synopsis, apply_author, apply_tags, apply_catalog, apply_cover)):
         raise RuntimeError("至少选择一项写入")
@@ -125,3 +129,29 @@ async def apply_scrape_detail(
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
+
+
+async def _apply_to_season(
+    resources: ResourceRepository,
+    resource_id: int,
+    season: int,
+    detail: ScrapeDetail,
+    apply_title: bool,
+    apply_catalog: bool,
+) -> None:
+    """把元数据写到某一季，而不是整个资源。"""
+    session = resources._session
+    from sqlalchemy import text as sql_text
+
+    catalog = detail.catalog
+    payload = catalog.model_dump_json() if (apply_catalog and catalog is not None) else None
+    title = detail.title if apply_title else None
+    await session.execute(
+        sql_text(
+            "UPDATE seasons SET catalog_json = COALESCE(:catalog, catalog_json), "
+            "title = COALESCE(:title, title) "
+            "WHERE resource_id = :rid AND season_number = :season"
+        ),
+        {"catalog": payload, "title": title, "rid": resource_id, "season": season},
+    )
+    await session.commit()

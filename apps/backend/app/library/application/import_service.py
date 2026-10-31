@@ -29,7 +29,7 @@ from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
 from app.library.application.import_preview import plan_for_import
 from app.library.application.import_progress import advance, copy_reporter, report_hash
-from app.library.application.series_title import ai_title_for, title_from_path
+from app.library.application.series_title import ai_title_for, season_search_title, title_from_path
 from app.library.application.smart_import.pipeline import suggest_after_ingest
 from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
 from app.library.infrastructure.import_job_store import ImportJobState
@@ -70,7 +70,6 @@ def import_cpu_workers() -> int:
     """CPU 工人上限：min(4, CPU-1)，至少 1。"""
     n = os.cpu_count() or 2
     return max(1, min(4, n - 1))
-
 
 class ImportService:
     """列举 → 去重 → 建资源 → Layout 复制 → 写 files。"""
@@ -524,6 +523,7 @@ class ImportService:
                         season_row = await resources.add_season(
                             resource.id,
                             item.season,
+                            title=season_search_title(root, item.src),
                             sort_index=item.season,
                             commit=False,
                         )

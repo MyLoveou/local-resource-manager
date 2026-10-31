@@ -34,13 +34,22 @@
           :resource-id="resource.id"
           :seasons="resource.seasons ?? []"
           :extras="resource.extras ?? []"
+          allow-scrape
           @play="playEpisode"
+          @scrape="openSeasonScrape"
           @refresh="load"
         />
         <p v-if="!hasEpisodes" class="series-detail__hint">
           该作品还没有集数据。可以回到库中重新导入，或先用「补封面」生成封面。
         </p>
       </main>
+      <SeasonScrape
+        v-model:show="scrapeOpen"
+        :resource-id="resource.id ?? 0"
+        :season="scrapeSeason"
+        :season-title="scrapeSeasonTitle"
+        @applied="load"
+      />
     </div>
   </div>
 </template>
@@ -49,6 +58,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import EpisodeList from '@/components/EpisodeList/index.vue'
+import SeasonScrape from '@/components/SeasonScrape/index.vue'
 import { getResource, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
 import type { Resource } from '@/domain'
@@ -58,6 +68,17 @@ const router = useRouter()
 
 const resource = ref<Resource | null>(null)
 const error = ref('')
+const scrapeOpen = ref(false)
+const scrapeSeason = ref(1)
+const scrapeSeasonTitle = computed(() => {
+  const season = (resource.value?.seasons ?? []).find((item) => item.seasonNumber === scrapeSeason.value)
+  return season?.title ?? null
+})
+
+function openSeasonScrape(seasonNumber: number): void {
+  scrapeSeason.value = seasonNumber
+  scrapeOpen.value = true
+}
 
 const coverSrc = computed(() => {
   const row = resource.value

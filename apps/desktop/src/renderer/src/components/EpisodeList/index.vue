@@ -8,7 +8,19 @@
     </div>
 
     <section v-for="season in seasons" :key="season.id ?? season.seasonNumber">
-      <div class="episode-list__label">第 {{ season.seasonNumber }} 季</div>
+      <div class="episode-list__label">
+        第 {{ season.seasonNumber }} 季
+        <span v-if="season.title" class="episode-list__season-title">{{ season.title }}</span>
+        <button
+          v-if="allowScrape"
+          type="button"
+          class="episode-list__action"
+          :disabled="busy"
+          @click="$emit('scrape', season.seasonNumber)"
+        >
+          刮削本季
+        </button>
+      </div>
       <div class="episode-list__grid">
         <div v-for="ep in season.episodes ?? []" :key="ep.fileId" class="episode-card-wrap">
           <button type="button" class="episode-card" @click="$emit('play', ep.fileId)">
@@ -82,9 +94,12 @@ const props = defineProps<{
   resourceId?: number
   seasons: SeriesSeason[]
   extras: SeriesExtra[]
+  /** 允许按季刮削（详情页才有） */
+  allowScrape?: boolean
 }>()
 
 const emit = defineEmits<{
+  scrape: [seasonNumber: number]
   play: [fileId: number]
   refresh: []
 }>()
@@ -169,6 +184,12 @@ async function backfill(): Promise<void> {
   }
 }
 </script>
+
+.episode-list__season-title {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
+}
 
 <style scoped lang="less">
 .episode-list__bar {

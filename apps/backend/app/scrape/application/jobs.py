@@ -117,6 +117,7 @@ async def select_candidate(
     job_id: int,
     candidate_id: int,
     *,
+    season: int | None = None,
     cover_url: str | None = None,
     apply_title: bool = True,
     apply_synopsis: bool = True,
@@ -154,6 +155,7 @@ async def select_candidate(
             apply_catalog=apply_catalog,
             apply_cover=apply_cover,
             replace_user_cover=replace_user_cover,
+            season=season,
         )
         await repo.mark_selected(candidate_id)
     except ScrapeError:

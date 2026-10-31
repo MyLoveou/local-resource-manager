@@ -15,6 +15,7 @@ from app.library.domain.models import (
     SeriesEpisode,
     SeriesExtra,
     SeriesSeason,
+    WorkCatalog,
 )
 from app.library.infrastructure.media_paths import episode_cover_url
 from app.library.infrastructure.orm import (
@@ -23,6 +24,16 @@ from app.library.infrastructure.orm import (
     SeasonRow,
     SubtitleTrackRow,
 )
+
+
+def _season_catalog(raw: str | None) -> WorkCatalog | None:
+    """季的站点档案存在一个 JSON 列里；坏数据当作没有。"""
+    if not raw:
+        return None
+    try:
+        return WorkCatalog.model_validate_json(raw)
+    except Exception:  # noqa: BLE001 - 归档数据坏了不该让详情页 500
+        return None
 
 
 async def attach_series_tree(session: AsyncSession, resource: Resource) -> None:
@@ -81,6 +92,9 @@ async def attach_series_tree(session: AsyncSession, resource: Resource) -> None:
                 id=season.id,
                 season_number=season.season_number,
                 title=season.title,
+                catalog=_season_catalog(season.catalog_json),
+                cover_url=episode_cover_url(resource.id, season.cover_file_id),
+                has_cover=season.cover_file_id is not None,
                 episodes=episodes,
             )
         )

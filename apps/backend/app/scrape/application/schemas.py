@@ -14,6 +14,8 @@ class ScrapeJobCreate(ApiModel):
 
 class ScrapeSelect(ApiModel):
     candidate_id: int
+    # 指定时只写这一季的元数据，不覆盖整个资源
+    season: int | None = None
     cover_url: str | None = None
     apply_title: bool = True
     apply_synopsis: bool = True

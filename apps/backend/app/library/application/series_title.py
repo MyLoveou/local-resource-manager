@@ -104,3 +104,18 @@ async def ai_title_for(root: Path, resources) -> str:
     except Exception as exc:  # noqa: BLE001 - 标题失败不该中断导入
         logger.info("标题清洗退回规则: %s", type(exc).__name__)
         return fallback
+
+def season_search_title(root: Path, sample: Path) -> str | None:
+    """季的搜索名：取该季文件所在目录名（根目录下的正片则没有）。
+
+    多季作品的第二季常放在 `... Sekai II [Ma10p_1080p]` 这样的目录里，
+    目录名清洗后就是站点上的搜索词。
+    """
+    try:
+        parent = sample.parent.resolve()
+    except OSError:
+        return None
+    if parent == root.resolve():
+        return None
+    cleaned = rule_title(parent.name)
+    return cleaned or None
