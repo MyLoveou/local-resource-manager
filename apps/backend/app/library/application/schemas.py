@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import Field
 
 from app.library.domain.models import SourceKind
-from app.shared.models import ApiModel
+from app.shared.models import ApiModel, StrictApiModel
 from app.library.domain.models import (
     Category,
     Character,
@@ -114,12 +114,12 @@ class HomeSummary(Overview):
     saved_timelines: list[SavedView] = Field(default_factory=list)
 
 
-class CollectionCreate(ApiModel):
+class CollectionCreate(StrictApiModel):
     title: str
     description: str | None = None
 
 
-class CollectionPatch(ApiModel):
+class CollectionPatch(StrictApiModel):
     title: str | None = None
     description: str | None = None
 
@@ -138,11 +138,11 @@ class CollectionList(ApiModel):
     items: list[CollectionOut]
 
 
-class CollectionAddItem(ApiModel):
+class CollectionAddItem(StrictApiModel):
     resource_id: int
 
 
-class CollectionAddItems(ApiModel):
+class CollectionAddItems(StrictApiModel):
     """批量加入合集；忽略重复成员。"""
 
     resource_ids: list[int] = Field(min_length=1, max_length=200)
@@ -154,11 +154,11 @@ class CollectionAddItemsResult(ApiModel):
     missing: int
 
 
-class CollectionMove(ApiModel):
+class CollectionMove(StrictApiModel):
     direction: Literal["up", "down"]
 
 
-class ResourcePatch(ApiModel):
+class ResourcePatch(StrictApiModel):
     """资源部分更新。tag_names 若出现则替换标签；category_ids 为空数组时清空分类。"""
 
     title: str | None = None
@@ -216,26 +216,26 @@ class ThumbnailBackfillResult(ApiModel):
     failed: int = 0
 
 
-class CoverReplace(ApiModel):
+class CoverReplace(StrictApiModel):
     """更换封面：本机已存在的图片路径。"""
 
     path: str
 
 
-class SubtitleAdd(ApiModel):
+class SubtitleAdd(StrictApiModel):
     """添加字幕：本机已存在的字幕路径；`episode_id` 为空表示资源级（视频）。"""
 
     path: str
     episode_id: int | None = None
 
 
-class TodoCreate(ApiModel):
+class TodoCreate(StrictApiModel):
     """新增待办。"""
 
     content: str
 
 
-class TodoPatch(ApiModel):
+class TodoPatch(StrictApiModel):
     """待办部分更新。"""
 
     content: str | None = None
@@ -259,20 +259,20 @@ class CategoryList(ApiModel):
     items: list[CategoryNode]
 
 
-class CategoryCreate(ApiModel):
+class CategoryCreate(StrictApiModel):
     type: ResourceType
     parent_id: int | None = None
     name: str
     sort: int = 0
 
 
-class CategoryPatch(ApiModel):
+class CategoryPatch(StrictApiModel):
     name: str | None = None
     parent_id: int | None = None
     sort: int | None = None
 
 
-class TimelineNoteUpsert(ApiModel):
+class TimelineNoteUpsert(StrictApiModel):
     title: str = Field(default="", max_length=200)
     body: str | None = Field(default=None, max_length=5000)
     location_name: str | None = Field(default=None, max_length=200)
@@ -282,7 +282,7 @@ class TimelineNoteList(ApiModel):
     items: list[TimelineNote] = Field(default_factory=list)
 
 
-class SavedViewCreate(ApiModel):
+class SavedViewCreate(StrictApiModel):
     kind: Literal["timeline", "map"] = "timeline"
     scope: Literal["image", "video", "media"] = "image"
     # 兼容旧客户端；新客户端只发 scope
@@ -292,7 +292,7 @@ class SavedViewCreate(ApiModel):
     sort: str = "takenAt"
 
 
-class SavedViewPatch(ApiModel):
+class SavedViewPatch(StrictApiModel):
     scope: Literal["image", "video", "media"] | None = None
     name: str | None = None
     filters: SavedViewFilters | None = None
@@ -303,7 +303,7 @@ class SavedViewList(ApiModel):
     items: list[SavedView]
 
 
-class CharacterCreate(ApiModel):
+class CharacterCreate(StrictApiModel):
     name: str = Field(min_length=1, max_length=200)
     work_name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
@@ -311,7 +311,7 @@ class CharacterCreate(ApiModel):
     aliases: list[str] = Field(default_factory=list)
 
 
-class CharacterPatch(ApiModel):
+class CharacterPatch(StrictApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     work_name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
@@ -319,7 +319,7 @@ class CharacterPatch(ApiModel):
     aliases: list[str] | None = None
 
 
-class CharacterMergeRequest(ApiModel):
+class CharacterMergeRequest(StrictApiModel):
     source_id: int
 
 
@@ -327,21 +327,21 @@ class CharacterList(ApiModel):
     items: list[Character] = Field(default_factory=list)
 
 
-class PersonCreate(ApiModel):
+class PersonCreate(StrictApiModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     cover_resource_id: int | None = None
     aliases: list[str] = Field(default_factory=list)
 
 
-class PersonPatch(ApiModel):
+class PersonPatch(StrictApiModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     cover_resource_id: int | None = None
     aliases: list[str] | None = None
 
 
-class PersonMergeRequest(ApiModel):
+class PersonMergeRequest(StrictApiModel):
     source_id: int
 
 
@@ -359,7 +359,7 @@ class TagList(ApiModel):
     items: list[Tag]
 
 
-class ImportCreate(ApiModel):
+class ImportCreate(StrictApiModel):
     """创建导入任务。"""
 
     type: ResourceType
@@ -378,7 +378,7 @@ class ImportJobCreated(ApiModel):
     job_id: str
 
 
-class ResourceBatchRequest(ApiModel):
+class ResourceBatchRequest(StrictApiModel):
     """批量操作（移回收站/恢复/彻底删除/批量打标）；ids 去重后逐条处理，200 返回每项结果。"""
 
     action: Literal[
@@ -400,7 +400,7 @@ class ResourceBatchRequest(ApiModel):
     person_ids: list[int] | None = None
 
 
-class CollectionExportRequest(ApiModel):
+class CollectionExportRequest(StrictApiModel):
     target_dir: str
 
 
@@ -444,7 +444,7 @@ class ImportJob(ApiModel):
     details: list[str] = Field(default_factory=list)
 
 
-class PlaybackProgressIn(ApiModel):
+class PlaybackProgressIn(StrictApiModel):
     """上报播放进度。"""
 
     file_id: int

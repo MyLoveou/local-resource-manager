@@ -140,6 +140,21 @@ async def select_candidate(
     resource = await resources.get(job.resource_id)
     if resource is None:
         raise ScrapeError("资源不存在", 404)
+    if season is not None:
+        from sqlalchemy import select as _select
+
+        from app.library.infrastructure.orm import SeasonRow as _SeasonRow
+
+        found = (
+            await session.execute(
+                _select(_SeasonRow.id).where(
+                    _SeasonRow.resource_id == resource.id,
+                    _SeasonRow.season_number == season,
+                )
+            )
+        ).first()
+        if found is None:
+            raise ScrapeError(f"该作品没有第 {season} 季", 422)
     try:
         provider = provider_for_key(candidate.url)
         detail = await provider.detail(candidate.url)

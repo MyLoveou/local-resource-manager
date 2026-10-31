@@ -1,6 +1,6 @@
 """设置 API DTO。"""
 
-from app.shared.models import ApiModel
+from app.shared.models import ApiModel, StrictApiModel
 
 
 class SecretState(ApiModel):
@@ -61,21 +61,21 @@ class SettingsView(ApiModel):
     parse: ParseRulesOut
 
 
-class WatchSettingsPatch(ApiModel):
+class WatchSettingsPatch(StrictApiModel):
     dirs: dict[str, list[str]]
 
 
-class ParseRulesPatch(ApiModel):
+class ParseRulesPatch(StrictApiModel):
     rules: list[str] | None = None
     title_with_ep: bool | None = None
     auto_collection: bool | None = None
 
 
-class ConsumeSettingsPatch(ApiModel):
+class ConsumeSettingsPatch(StrictApiModel):
     channels: dict[str, ChannelSetting]
 
 
-class ScrapeSettingsPatch(ApiModel):
+class ScrapeSettingsPatch(StrictApiModel):
     tmdb_api_key: str | None = None
     bangumi_access_token: str | None = None
     mikan_base_url: str | None = None
@@ -85,7 +85,7 @@ class BackupResult(ApiModel):
     path: str
 
 
-class RestorePrepareRequest(ApiModel):
+class RestorePrepareRequest(StrictApiModel):
     path: str
 
 
@@ -94,7 +94,7 @@ class RestorePrepareResult(ApiModel):
     restart_required: bool = True
 
 
-class SystemSettingPatch(ApiModel):
+class SystemSettingPatch(StrictApiModel):
     db_path: str | None = None
     library_path: str | None = None
     log_dir: str | None = None

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from app.shared.models import ApiModel
+from app.shared.models import ApiModel, StrictApiModel
 
 
-class ImportAiSettings(ApiModel):
+class ImportAiSettings(StrictApiModel):
     """智能导入是否启用 AI 清洗标题。"""
 
     ai_title: bool = False
@@ -36,13 +36,13 @@ class SuggestionGroupKey(ApiModel):
     value: dict | None = None
 
 
-class SuggestionApplyRequest(ApiModel):
+class SuggestionApplyRequest(StrictApiModel):
     ids: list[int] | None = None
     groups: list[SuggestionGroupKey] | None = None
     min_confidence: float | None = None
 
 
-class SuggestionRejectRequest(ApiModel):
+class SuggestionRejectRequest(StrictApiModel):
     ids: list[int] | None = None
     groups: list[SuggestionGroupKey] | None = None
     all: bool | None = None

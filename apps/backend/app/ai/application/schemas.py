@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.library.domain.models import Resource
-from app.shared.models import ApiModel
+from app.shared.models import ApiModel, StrictApiModel
 
 
 class AIModelInfo(ApiModel):
@@ -69,7 +69,7 @@ class AIPerformance(ApiModel):
     max: int = 1
 
 
-class AIPerformancePatch(ApiModel):
+class AIPerformancePatch(StrictApiModel):
     mode: str | None = None
     manual: int | None = None
 
@@ -172,7 +172,7 @@ class AISuggestionItem(ApiModel):
     collections: list[AIEntitySuggestion] = []
 
 
-class AIFusionRequest(ApiModel):
+class AIFusionRequest(StrictApiModel):
     resource_id: int
     query: str
     limit: int = 30
@@ -191,23 +191,23 @@ class AIFusionResponse(ApiModel):
     filters: list[str] = []
 
 
-class AISimilarFileRequest(ApiModel):
+class AISimilarFileRequest(StrictApiModel):
     filename: str = ""
     data_base64: str
     mode: str = "auto"
     limit: int = 30
 
 
-class AIAnalyzeRequest(ApiModel):
+class AIAnalyzeRequest(StrictApiModel):
     resource_ids: list[int] | None = None
     only_pending: bool = True
 
 
-class AIIndexRequest(ApiModel):
+class AIIndexRequest(StrictApiModel):
     full: bool = False
 
 
-class AIFeedbackRequest(ApiModel):
+class AIFeedbackRequest(StrictApiModel):
     query: str
     resource_id: int
     action: str
@@ -217,13 +217,13 @@ class AIFeedbackRequest(ApiModel):
     features: dict | None = None
 
 
-class VLMPullRequest(ApiModel):
+class VLMPullRequest(StrictApiModel):
     model: str
 
 
-class VLMSelectRequest(ApiModel):
+class VLMSelectRequest(StrictApiModel):
     model: str
 
 
-class VLMSelectBinaryRequest(ApiModel):
+class VLMSelectBinaryRequest(StrictApiModel):
     path: str

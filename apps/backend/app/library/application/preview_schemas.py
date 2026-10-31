@@ -9,10 +9,10 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.library.domain.models import ResourceType
-from app.shared.models import ApiModel
+from app.shared.models import ApiModel, StrictApiModel
 
 
-class ImportPreviewIn(ApiModel):
+class ImportPreviewIn(StrictApiModel):
     """预览请求：只支持整目录。"""
 
     type: ResourceType
