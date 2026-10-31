@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -28,6 +29,7 @@ from app.shared.log import logger
 
 PROMPT_VERSION = "series-plan-v3"
 CHUNK_SIZE = 25
+AI_CONCURRENCY = 3
 MAX_TITLE = 120
 
 _NUMBERS = re.compile(r"\d{1,4}")
@@ -137,18 +139,11 @@ async def plan_with_ai(
     ordered = sorted(videos, key=lambda item: item.as_posix().lower())
     extra_paths: set[str] = set()
 
-    for start in range(0, len(ordered), CHUNK_SIZE):
-        chunk = ordered[start : start + CHUNK_SIZE]
-        try:
-            reply = await client(build_prompt(chunk))
-        except Exception as exc:  # noqa: BLE001 - 模型失败不该中断导入
-            logger.info("AI 结构识别失败: %s", type(exc).__name__)
-            return None
-        indices = parse_indices(reply or "", len(chunk))
+    chunks = [ordered[start : start + CHUNK_SIZE] for start in range(0, len(ordered), CHUNK_SIZE)]
+    results = await _gather_chunks(client, chunks, build_prompt, parse_indices, "结构识别")
+    for chunk, indices in zip(chunks, results, strict=True):
         if indices is None:
-            logger.info(
-                "AI 结构未通过校验：批次 %s..%s 的回复无法解析", start + 1, start + len(chunk)
-            )
+            logger.info("AI 结构未通过校验，退回规则")
             return None
         for index in indices:
             extra_paths.add(chunk[index - 1].as_posix())
@@ -199,6 +194,22 @@ def parse_titles(reply: str, expected: int) -> dict[int, str] | None:
     return found
 
 
+async def _gather_chunks(client, chunks: list[list[Path]], prompt, parse, label: str):
+    """并发跑批次，结果按原顺序返回；任一批失败返回 None。"""
+    gate = asyncio.Semaphore(AI_CONCURRENCY)
+
+    async def one(chunk: list[Path]):
+        async with gate:
+            try:
+                reply = await client(prompt(chunk))
+            except Exception as exc:  # noqa: BLE001
+                logger.info("AI %s失败: %s", label, type(exc).__name__)
+                return None
+            return parse(reply or "", len(chunk))
+
+    return await asyncio.gather(*(one(chunk) for chunk in chunks))
+
+
 async def clean_titles(
     client,
     paths: list[Path],
@@ -206,17 +217,14 @@ async def clean_titles(
     chunk_size: int = 10,
 ) -> dict[str, str]:
     """让模型清洗特典名；任何一批失败就整体放弃（调用方用规则名兜底）。"""
+    chunks = [paths[start : start + chunk_size] for start in range(0, len(paths), chunk_size)]
+    if not chunks:
+        return {}
+    results = await _gather_chunks(client, chunks, build_title_prompt, parse_titles, "标题清洗")
     result: dict[str, str] = {}
-    for start in range(0, len(paths), chunk_size):
-        chunk = paths[start : start + chunk_size]
-        try:
-            reply = await client(build_title_prompt(chunk))
-        except Exception as exc:  # noqa: BLE001
-            logger.info("AI 标题清洗失败: %s", type(exc).__name__)
-            return {}
-        titles = parse_titles(reply or "", len(chunk))
+    for chunk, titles in zip(chunks, results, strict=True):
         if titles is None:
-            logger.info("AI 标题清洗未通过校验：批次 %s..%s", start + 1, start + len(chunk))
+            logger.info("AI 标题清洗未通过校验，改用规则名")
             return {}
         for position, path in enumerate(chunk, start=1):
             result[path.as_posix()] = titles[position]

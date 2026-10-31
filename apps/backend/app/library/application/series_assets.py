@@ -62,6 +62,32 @@ async def register_subtitle_file(
     return await resources.get(resource.id)
 
 
+_COVER_CONCURRENCY = 4
+
+
+async def _extract_many(
+    pending: list[tuple[Any, Path, str]],
+) -> list[tuple[Any, Path, bool]]:
+    """并发抽帧，返回 (row, dest, ok)；不碰数据库会话。"""
+    if not pending:
+        return []
+    gate = asyncio.Semaphore(_COVER_CONCURRENCY)
+
+    async def one(row: Any, video: Path, name: str) -> tuple[Any, Path, bool]:
+        dest = video.parent / name
+        if not video.is_file():
+            return row, dest, False
+        async with gate:
+            ok = await asyncio.to_thread(
+                extract_cover, video, dest, duration=row["duration"]
+            )
+        return row, dest, ok
+
+    return list(
+        await asyncio.gather(*(one(row, video, name) for row, video, name in pending))
+    )
+
+
 async def _episode_rows(session: AsyncSession, resource_id: int) -> list[Any]:
     result = await session.execute(
         text(
@@ -99,20 +125,21 @@ async def generate_episode_covers(
     *,
     force: bool = False,
 ) -> dict[str, int]:
-    """为每集抽帧封面。已有封面时跳过，除非 force。"""
+    """为每集抽帧封面。已有封面时跳过，除非 force。
+
+    抽帧是 CPU/磁盘密集的（实测 0.47s/集），113 集串行要 50 秒以上，
+    所以先并发抽帧、再串行写库（会话不是并发安全的）。
+    """
     generated = skipped = failed = 0
-    for row in await _episode_rows(session, resource_id):
-        if row["cover_file_id"] is not None and not force:
-            skipped += 1
-            continue
-        video = Path(str(row["video_path"]))
-        if not video.is_file():
-            failed += 1
-            continue
-        dest = video.parent / f"ep{int(row['episode_number']):02d}-cover.jpg"
-        ok = await asyncio.to_thread(
-            extract_cover, video, dest, duration=row["duration"]
-        )
+    episode_rows = list(await _episode_rows(session, resource_id))
+    pending = [
+        (row, Path(str(row["video_path"])), f"ep{int(row['episode_number']):02d}-cover.jpg")
+        for row in episode_rows
+        if force or row["cover_file_id"] is None
+    ]
+    skipped += len(episode_rows) - len(pending)
+    extracted = await _extract_many(pending)
+    for row, dest, ok in extracted:
         if not ok:
             failed += 1
             continue
@@ -131,18 +158,14 @@ async def generate_episode_covers(
         )
         generated += 1
 
-    for index, row in enumerate(await _extra_rows(session, resource_id), start=1):
-        if row["cover_file_id"] is not None and not force:
-            skipped += 1
-            continue
-        video = Path(str(row["video_path"]))
-        if not video.is_file():
-            failed += 1
-            continue
-        dest = video.parent / f"extra{index:02d}-cover.jpg"
-        ok = await asyncio.to_thread(
-            extract_cover, video, dest, duration=row["duration"]
-        )
+    extra_rows = list(await _extra_rows(session, resource_id))
+    extra_pending = [
+        (row, Path(str(row["video_path"])), f"extra{index:02d}-cover.jpg")
+        for index, row in enumerate(extra_rows, start=1)
+        if force or row["cover_file_id"] is None
+    ]
+    skipped += len(extra_rows) - len(extra_pending)
+    for row, dest, ok in await _extract_many(extra_pending):
         if not ok:
             failed += 1
             continue
