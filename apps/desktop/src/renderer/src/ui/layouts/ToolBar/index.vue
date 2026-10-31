@@ -270,7 +270,6 @@ import { NButton, NDropdown, NInput, NModal, NPopconfirm, NSelect, type Dropdown
 import { storeToRefs } from 'pinia'
 import { notify } from '@/application/notify'
 import ImportWizard from '@/components/ImportWizard/index.vue'
-import RestartBackendButton from '@/components/RestartBackendButton/index.vue'
 import SettingsModal from '@/components/SettingsModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { useShellBatchStore } from '@/application/stores/shellBatch'

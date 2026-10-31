@@ -8,7 +8,7 @@
   >
     <n-tabs
       type="line"
-      animated
+      display-directive="show"
       :value="activeTab"
       @update:value="activeTab = $event"
     >

@@ -1,5 +1,8 @@
 <template>
   <div class="home">
+    <div class="home__maintenance">
+      <RestartBackendButton />
+    </div>
     <div v-if="hasOverviewData">
       <section v-if="recent.length" class="home__section">
         <div class="home__section-head">
@@ -183,6 +186,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import RestartBackendButton from '@/components/RestartBackendButton/index.vue'
 import { useRouter } from 'vue-router'
 import { getHome, getResumeList, resolveCardImageUrl, resolveLibraryMediaUrl } from '@/infrastructure/http'
 import type { ResumeItem } from '@/domain/progress'
@@ -326,6 +330,10 @@ watch(
   },
 )
 </script>
+
+.home__maintenance {
+  margin-top: 16px;
+}
 
 <style scoped lang="less">
 .home {
