@@ -2,7 +2,8 @@
  * 导入向导：选类型 → 选文件/目录 → 轮询后端 job。
  */
 import { computed, ref } from 'vue'
-import { createImport, getCategoryTree, getImportJob, getTags, invalidateTags } from '@/infrastructure/http'
+import { createImport, getCategoryTree, getImportJob, getTags, invalidateTags, previewImport } from '@/infrastructure/http'
+import type { ImportPreview } from '@/infrastructure/http'
 import type { ImportJob, ImportSourceKind } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import {
@@ -40,6 +41,7 @@ export function useLibraryImport() {
   const tagNamesById = ref(new Map<number, string>())
   const job = ref<ImportJob | null>(null)
   const busy = ref(false)
+  const preview = ref<ImportPreview | null>(null)
   const picking = ref(false)
   const errorMessage = ref('')
   const allowsMultipleStorage = computed(
@@ -177,6 +179,22 @@ export function useLibraryImport() {
     }
   }
 
+  /** 预览：只算结构，不写盘。番剧/AV 的整目录导入才有意义。 */
+  async function previewStructure(): Promise<void> {
+    const dir = await window.electron.selectDirectory()
+    if (!dir) return
+    busy.value = true
+    errorMessage.value = ''
+    try {
+      preview.value = await previewImport({ type: resourceType.value, path: dir })
+    } catch {
+      errorMessage.value = '预览失败'
+      preview.value = null
+    } finally {
+      busy.value = false
+    }
+  }
+
   return {
     visible,
     step,
@@ -198,5 +216,7 @@ export function useLibraryImport() {
     close,
     goSource,
     pickAndImport,
+    preview,
+    previewStructure,
   }
 }

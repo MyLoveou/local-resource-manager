@@ -393,7 +393,7 @@ class ImportService:
             logger.warning("导入跳过 %s: %s", source, exc)
             job.skipped_error += 1
 
-    async def _plan_series(
+    async def plan_series(
         self,
         resources: ResourceRepository,
         root: Path,
@@ -437,7 +437,7 @@ class ImportService:
         auto_scrape: bool = True,
     ) -> None:
         """整夹进一部作品；集不是独立 Resource。"""
-        explained = await self._plan_series(resources, root, videos)
+        explained = await self.plan_series(resources, root, videos)
         job.message = explained.message
         job.code = explained.code
         job.details = list(explained.details)

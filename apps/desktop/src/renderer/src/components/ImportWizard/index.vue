@@ -17,6 +17,26 @@
           </n-radio>
         </n-space>
       </n-radio-group>
+      <div v-if="preview" class="wizard-preview">
+        <p class="hint">{{ preview.message }}</p>
+        <div v-if="preview.seasons.length" class="wizard-preview__body">
+          <div v-for="season in preview.seasons" :key="season.season" class="wizard-preview__season">
+            <strong>第 {{ season.season }} 季 · {{ season.episodes.length }} 集</strong>
+            <ul>
+              <li v-for="ep in season.episodes" :key="ep.episode">
+                {{ String(ep.episode).padStart(2, '0') }}
+                <span v-if="ep.title"> · {{ ep.title }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p v-if="preview.extras.length" class="muted">
+          特典 {{ preview.extras.length }} 个：{{ preview.extras.slice(0, 5).map((item: PreviewExtra) => item.title).join('、') }}
+        </p>
+        <ul v-if="preview.details.length" class="details">
+          <li v-for="(line, index) in preview.details" :key="index">{{ line }}</li>
+        </ul>
+      </div>
       <div class="actions">
         <n-button type="primary" @click="goSource">下一步</n-button>
       </div>
@@ -83,6 +103,9 @@
       />
       <div class="actions">
         <n-button :disabled="busy" @click="step = 'type'">上一步</n-button>
+<n-button :disabled="busy || sourceKind !== 'directory'" @click="previewStructure">
+          预览结构
+        </n-button>
         <n-button type="primary" :disabled="busy" @click="pickAndImport">选择并导入</n-button>
       </div>
     </div>
@@ -129,6 +152,7 @@ import { notify } from '@/application/notify'
 import SuggestionReview from '@/components/SuggestionReview/index.vue'
 import { getImportSettings, saveImportSettings } from '@/infrastructure/http/suggestions'
 import { ENABLED_IMPORT_TYPES, useLibraryImport } from '@/hooks/useLibraryImport'
+import type { PreviewExtra } from '@/infrastructure/http'
 import { SourceKind } from '@/domain'
 
 const {
@@ -152,6 +176,8 @@ const {
   close,
   goSource,
   pickAndImport,
+  preview,
+  previewStructure,
 } = useLibraryImport()
 
 const isTimelineMedia = computed(
@@ -233,6 +259,10 @@ function onShow(show: boolean): void {
 
 defineExpose({ open })
 </script>
+
+.wizard-preview { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--sm-color-border); border-radius: 8px; max-height: 260px; overflow: auto; }
+.wizard-preview__season { margin-bottom: 8px; font-size: 12px; }
+.wizard-preview__season ul { margin: 4px 0 0; padding-left: 18px; columns: 3; }
 
 <style scoped lang="less">
 .wizard-step {

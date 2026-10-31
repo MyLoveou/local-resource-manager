@@ -49,3 +49,38 @@ export async function getImportJob(jobId: string): Promise<ImportJob> {
   const { data } = await client.get<ImportJob>(`/library/imports/${jobId}`)
   return data
 }
+
+export interface PreviewEpisode {
+  season: number
+  episode: number
+  title?: string | null
+  file: string
+}
+
+export interface PreviewSeason {
+  season: number
+  episodes: PreviewEpisode[]
+}
+
+export interface PreviewExtra {
+  title: string
+  file: string
+}
+
+export interface ImportPreview {
+  ok: boolean
+  code?: string | null
+  message: string
+  details: string[]
+  totalFiles: number
+  seasons: PreviewSeason[]
+  extras: PreviewExtra[]
+}
+
+export async function previewImport(body: {
+  type: ResourceType
+  path: string
+}): Promise<ImportPreview> {
+  const { data } = await client.post<ImportPreview>('/library/imports/preview', body)
+  return data
+}
