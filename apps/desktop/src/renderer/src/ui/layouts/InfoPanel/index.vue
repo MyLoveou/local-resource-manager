@@ -76,6 +76,7 @@
             <div v-if="shown(durationLabel)" class="info-panel-meta">时长 {{ durationLabel }}</div>
             <div v-if="shown(fpsLabel)" class="info-panel-meta">帧率 {{ fpsLabel }}</div>
             <div v-if="shown(bitrateLabel)" class="info-panel-meta">码率 {{ bitrateLabel }}</div>
+            <div v-if="audioTrackCount > 1" class="info-panel-meta">音轨 {{ audioTrackCount }} 条</div>
             <div v-if="shown(qualityText)" class="info-panel-meta">画质 {{ qualityText }}</div>
             <div v-if="shown(takenAtLabel)" class="info-panel-meta">拍摄 {{ takenAtLabel }}</div>
             <div class="info-panel-meta">
@@ -292,6 +293,7 @@ import InfoPanelFooter from './InfoPanelFooter.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { getResource, getCategoryTree, listCharacters, listPersons, invalidateResourceCache, rebuildThumbnail, resolveCardImageUrl } from '@/infrastructure/http'
 import { openResource } from '@/infrastructure/consume/consumeResource'
+import { getAudioTracks } from '@/infrastructure/http/audio'
 import { createWorkNote, deleteWorkNote } from '@/infrastructure/http/workbench'
 import { useSelectionStore } from '@/application/stores/selection'
 import { useLibraryStore } from '@/application/stores/library'
@@ -676,6 +678,23 @@ function primaryFile(): ResourceFile | undefined {
   return files.find((f) => f.role === FILE_ROLE.PRIMARY) ?? files[0]
 }
 
+const audioTrackCount = ref(0)
+
+// 多音轨是视频才有的信息；ffprobe 现查，失败就当作 1 条（不显示）
+watch(
+  () => [resource.value?.id, primaryFile()?.id, isVideo.value] as const,
+  async ([rid, fid, video]) => {
+    audioTrackCount.value = 0
+    if (!video || rid == null || fid == null) return
+    try {
+      const tracks = await getAudioTracks(rid, fid)
+      if (resource.value?.id === rid) audioTrackCount.value = tracks.length
+    } catch {
+      audioTrackCount.value = 0
+    }
+  },
+  { immediate: true },
+)
 const sizeLabel = computed(() => formatBytes(primaryFile()?.size))
 const formatLabel = computed(() => primaryFile()?.format || '—')
 const resolutionLabel = computed(() => formatResolution(primaryFile()?.width, primaryFile()?.height))
