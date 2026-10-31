@@ -105,7 +105,7 @@
             </div>
           </template>
         </section>
-        <section v-if="resource.synopsis || resource.catalog" class="info-panel-section">
+        <section v-if="(resource.synopsis || resource.catalog) && !isSeries" class="info-panel-section">
           <div class="info-panel-section-title">作品资料</div>
           <div v-if="resource.synopsis" class="info-panel-synopsis">{{ resource.synopsis }}</div>
           <div v-if="resource.catalog?.nameCn" class="info-panel-meta">中文名 {{ resource.catalog.nameCn }}</div>
