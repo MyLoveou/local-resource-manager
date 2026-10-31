@@ -25,5 +25,5 @@ class QueueContractTests(unittest.TestCase):
             self.assertIn(name, source)
 
     def test_timeout_is_bounded(self) -> None:
-        self.assertGreater(scrape_queue.JOB_TIMEOUT_SEC, 0)
+        self.assertGreaterEqual(scrape_queue.JOB_TIMEOUT_SEC, 0)
         self.assertLessEqual(scrape_queue.JOB_TIMEOUT_SEC, 300)

@@ -11,7 +11,10 @@ from app.shared.db.db import get_session_factory
 from app.shared import tasks
 from app.shared.log import logger
 
-JOB_TIMEOUT_SEC = 90
+import os
+
+# 0 = 不超时（默认）。需要时设 SCRAPE_JOB_TIMEOUT=90 恢复
+JOB_TIMEOUT_SEC = int(os.getenv("SCRAPE_JOB_TIMEOUT", "0"))
 _queue: asyncio.Queue[int] | None = None
 _worker: asyncio.Task[None] | None = None
 
@@ -85,8 +88,10 @@ async def _worker_loop() -> None:
             factory = get_session_factory()
             task_id = await _open_task(job_id)
             async with factory() as session:
-                # 单任务超时：provider 卡住不能拖死整个队列
-                await asyncio.wait_for(run_search(session, job_id), timeout=JOB_TIMEOUT_SEC)
+                if JOB_TIMEOUT_SEC > 0:
+                    await asyncio.wait_for(run_search(session, job_id), timeout=JOB_TIMEOUT_SEC)
+                else:
+                    await run_search(session, job_id)
                 if task_id is not None:
                     await tasks.finish(session, task_id)
                 await asyncio.sleep(0.25)
