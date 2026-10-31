@@ -1,7 +1,6 @@
 <template>
   <div class="restart-backend">
-    <n-button size="small" :loading="restarting" @click="run">重启后端服务</n-button>
-    <span class="restart-backend__hint">改完后端代码后不用退出应用，这里直接重启服务</span>
+    <n-button size="small" :loading="restarting" @click="run">重启后端</n-button>
   </div>
 </template>
 
@@ -26,14 +25,5 @@ async function run(): Promise<void> {
 </script>
 
 <style scoped lang="less">
-.restart-backend {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
-.restart-backend__hint {
-  font-size: 12px;
-  color: var(--sm-color-text-muted, #6b7280);
-}
 </style>

@@ -24,6 +24,7 @@
     <n-dropdown trigger="click" :options="settingsOptions" @select="onSettingsSelect">
       <n-button size="small">设置</n-button>
     </n-dropdown>
+    <RestartBackendButton />
     <div class="tool-bar__spacer" />
     <div v-if="showCluster" class="tool-bar__batch">
       <template v-if="!batchMode">
@@ -270,6 +271,7 @@ import { NButton, NDropdown, NInput, NModal, NPopconfirm, NSelect, type Dropdown
 import { storeToRefs } from 'pinia'
 import { notify } from '@/application/notify'
 import ImportWizard from '@/components/ImportWizard/index.vue'
+import RestartBackendButton from '@/components/RestartBackendButton/index.vue'
 import SettingsModal from '@/components/SettingsModal/index.vue'
 import ScrapeConfirmQueue from '@/components/ScrapeConfirmQueue/index.vue'
 import { useShellBatchStore } from '@/application/stores/shellBatch'
@@ -674,11 +676,9 @@ onMounted(() => {
   const warning = theme.consumeHydrateWarning()
   if (warning) notify.toast.warning(warning)
 })
-
 onUnmounted(() => {
   window.removeEventListener('sm:open-settings', onOpenSettings)
 })
-
 async function onThemeSelect(key: string): Promise<void> {
   if (key === 'default' || key === 'reset') {
     theme.applyBuiltin('default')
