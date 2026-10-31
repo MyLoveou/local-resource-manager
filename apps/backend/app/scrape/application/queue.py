@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 
 from app.scrape.application.jobs import run_search
+from app.scrape.infrastructure.repo import ScrapeRepository
+from app.scrape.domain.models import ScrapeJobStatus
 from app.shared.db.db import get_session_factory
 from app.shared.log import logger
 
+JOB_TIMEOUT_SEC = 90
 _queue: asyncio.Queue[int] | None = None
 _worker: asyncio.Task[None] | None = None
 
@@ -23,6 +26,18 @@ async def enqueue_job(job_id: int) -> None:
     await scrape_queue().put(job_id)
 
 
+async def _mark_failed(job_id: int, reason: str) -> None:
+    """把任务落成 failed，避免卡在 running 挡住后续任务。"""
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            repo = ScrapeRepository(session)
+            job = await repo.get_job(job_id)
+            if job is not None and job.status != ScrapeJobStatus.DONE:
+                job.fail(reason)
+                await repo.save_job(job)
+    except Exception:  # noqa: BLE001 - 兜底失败不应该再抛
+        logger.exception("标记刮削失败时出错 job=%s", job_id)
 async def _worker_loop() -> None:
     queue = scrape_queue()
     while True:
@@ -30,12 +45,17 @@ async def _worker_loop() -> None:
         try:
             factory = get_session_factory()
             async with factory() as session:
-                await run_search(session, job_id)
+                # 单任务超时：provider 卡住不能拖死整个队列
+                await asyncio.wait_for(run_search(session, job_id), timeout=JOB_TIMEOUT_SEC)
                 await asyncio.sleep(0.25)
+        except asyncio.TimeoutError:
+            logger.warning("刮削任务超时，已标记失败 job=%s", job_id)
+            await _mark_failed(job_id, "搜索超时")
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             logger.exception("刮削任务失败 job=%s", job_id)
+            await _mark_failed(job_id, str(exc)[:200])
         finally:
             queue.task_done()
 

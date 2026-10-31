@@ -10,6 +10,7 @@
         @click="seasonNumber = item.seasonNumber"
       >
         第 {{ item.seasonNumber }} 季
+        <span v-if="!item.catalog && !item.coverUrl" class="season-panel__tab-badge">未刮</span>
       </button>
       <button
         v-if="extrasCount"
@@ -144,6 +145,12 @@ const siteEps = computed(() => catalog.value?.eps ?? catalog.value?.totalEpisode
   margin: 0;
   font-size: 12px;
   color: var(--sm-color-text-muted, #6b7280);
+}
+
+.season-panel__tab-badge {
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 <style scoped lang="less">
