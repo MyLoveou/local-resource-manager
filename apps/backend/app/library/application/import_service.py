@@ -27,6 +27,7 @@ from app.library.application.packages.layouts import PackageLayout
 from app.library.application.packages.resource_package import default_library_store
 from app.library.application.media_probe import ProbeFields, probe_media
 from app.library.application.series_plan import PlannedItem, explain_series_plan
+from app.library.application.series_title import ai_title_for, title_from_path
 from app.library.application.smart_import.pipeline import suggest_after_ingest
 from app.library.application.video_naming import ParsedVideoName, load_parse_settings, parse_video_name
 from app.library.infrastructure.import_job_store import ImportJobState
@@ -461,10 +462,11 @@ class ImportService:
 
         package: ResourcePackage | None = None
         try:
+            series_title_text = await ai_title_for(root, resources)
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=series_title_text,
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra={"importSourcePath": str(root)},
@@ -663,7 +665,7 @@ class ImportService:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=title_from_path(root),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=StorageKind.OWNED,
                     extra={"importSourcePath": str(root)},
@@ -745,7 +747,7 @@ class ImportService:
             resource = await resources.create(
                 Resource(
                     type=type_,
-                    title=root.name,
+                    title=title_from_path(root),
                     status=ResourceStatus.ACTIVE,
                     storage_kind=storage,
                     extra={"importSourcePath": str(root.resolve())},
