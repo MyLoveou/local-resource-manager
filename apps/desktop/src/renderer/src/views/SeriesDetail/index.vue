@@ -35,6 +35,7 @@
           :seasons="resource.seasons ?? []"
           :extras="resource.extras ?? []"
           allow-scrape
+          show-season-meta
           @play="playEpisode"
           @scrape="openSeasonScrape"
           @refresh="load"

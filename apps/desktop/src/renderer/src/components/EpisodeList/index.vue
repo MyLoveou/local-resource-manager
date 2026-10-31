@@ -11,6 +11,9 @@
       <div class="episode-list__label">
         第 {{ season.seasonNumber }} 季
         <span v-if="season.title" class="episode-list__season-title">{{ season.title }}</span>
+        <span v-if="seasonMeta(season)" class="episode-list__season-meta">
+          {{ seasonMeta(season) }}
+        </span>
         <button
           v-if="allowScrape"
           type="button"
@@ -96,6 +99,8 @@ const props = defineProps<{
   extras: SeriesExtra[]
   /** 允许按季刮削（详情页才有） */
   allowScrape?: boolean
+  /** 详情页才展示季的站点档案 */
+  showSeasonMeta?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -124,6 +129,20 @@ const summary = computed(() => {
   if (!total) return '暂无集'
   return `${total} 集 · 封面 ${withCover.value} · 字幕 ${withSubs.value}`
 })
+
+/** 季的站点档案摘要：原名 · 集数 · 放送 · 评分 */
+function seasonMeta(season: SeriesSeason): string {
+  const catalog = season.catalog
+  if (!catalog) return ''
+  const parts: string[] = []
+  const name = catalog.nameCn || catalog.originalTitle
+  if (name) parts.push(name)
+  const eps = catalog.eps ?? catalog.totalEpisodes
+  if (eps) parts.push(`${eps} 集`)
+  if (catalog.date) parts.push(catalog.date)
+  if (catalog.siteScore) parts.push(`${catalog.siteScore.toFixed(1)} 分`)
+  return parts.join(' · ')
+}
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
@@ -187,6 +206,23 @@ async function backfill(): Promise<void> {
 
 .episode-list__season-title {
   margin-left: 8px;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
+}
+
+.episode-list__season-meta {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sm-color-text-muted, #6b7280);
+}
+
+.episode-list__season-synopsis {
+  display: -webkit-box;
+  margin: 4px 0 8px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 12px;
   color: var(--sm-color-text-muted, #6b7280);
 }
