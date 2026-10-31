@@ -23,6 +23,9 @@
               <span class="episode-card__no">{{ pad(ep.episodeNumber) }}</span>
               <span v-if="ep.hasSubtitles" class="episode-card__sub" title="有字幕">字幕</span>
             </div>
+            <span v-if="ep.title" class="episode-card__ep-title" :title="ep.title">
+              {{ ep.title }}
+            </span>
             <span class="episode-card__duration">{{ durationLabel(ep.duration) }}</span>
           </button>
           <n-dropdown
@@ -256,6 +259,14 @@ async function backfill(): Promise<void> {
   color: var(--sm-color-text-muted, #9ca3af);
 }
 
+.episode-card__ep-title {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--sm-color-text-muted, #6b7280);
+}
 .episode-card__title {
   overflow: hidden;
   text-overflow: ellipsis;

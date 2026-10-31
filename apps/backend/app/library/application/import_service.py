@@ -52,7 +52,6 @@ from app.library.domain.models import (
     StorageKind,
 )
 
-
 def hash_file(path: Path) -> tuple[str, int]:
     """sha256 与字节大小。"""
     digest = hashlib.sha256()
@@ -534,6 +533,7 @@ class ImportService:
                         season_id,
                         file_row.id,
                         item.episode,
+                        title=item.title,
                         sort_index=item.episode,
                         commit=False,
                     )

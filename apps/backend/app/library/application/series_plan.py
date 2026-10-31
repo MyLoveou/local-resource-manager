@@ -17,6 +17,9 @@ from app.library.domain.media_types import (
     SERIES_EXTRA_TOKENS,
 )
 
+from app.library.application.episode_title import episode_title_from_stem
+from app.library.application.smart_import.title_clean import clean_release_name
+
 Kind = Literal["episode", "extra"]
 
 _SEASON_DIR = re.compile(
@@ -380,7 +383,7 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
             continue
         seen[key] = path.name
         dest = f"seasons/{season:02d}/S{season:02d}E{episode:02d}{path.suffix.lower()}"
-        items.append(PlannedItem(path, "episode", season, episode, dest, None))
+        items.append(PlannedItem(path, "episode", season, episode, dest, _episode_title(path)))
     if duplicates:
         return _fail("duplicate_episode", duplicates)
 
@@ -419,10 +422,13 @@ def season_from_stem_suffix(stem: str) -> int | None:
     return None
 
 
+def _episode_title(path: Path) -> str | None:
+    """每集标题：抽不出就留空，不拿作品名充数。"""
+    return episode_title_from_stem(path.stem)
+
+
 def _extra_title(path: Path) -> str:
     """特典标题：剥掉发布组/分辨率/编码等，但保留 PV、特典标记与番号。"""
-    from app.library.application.smart_import.title_clean import clean_release_name
-
     cleaned = clean_release_name(path.stem).title
     return cleaned or path.stem
 
