@@ -107,3 +107,56 @@ class TasksTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(removed, 1)
             rows = await tasks.list_tasks(session)
             self.assertEqual([row["id"] for row in rows], [alive])
+
+
+class RecoveryDedupeTests(unittest.IsolatedAsyncioTestCase):
+    """同一 dedupe_key 的多条中断任务，恢复时只能放回一条（否则撞唯一索引）。"""
+
+    async def asyncSetUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.db_path = root / "t.db"
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        migrate(conn)
+        conn.close()
+        self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.db_path.as_posix()}")
+        self.factory = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+        self._tmp.cleanup()
+
+    async def test_duplicate_keys_do_not_crash_recovery(self) -> None:
+        async with self.factory() as session:
+            # interrupted 不在唯一索引里，历史累积的多条同 key 任务是真实场景
+            for index in range(3):
+                await session.execute(
+                    tasks.text(
+                        "INSERT INTO tasks (id, kind, title, state, dedupe_key, created_at)"
+                        " VALUES (:id, :kind, :title, :state, :key, datetime('now'))"
+                    ),
+                    {
+                        "id": f"t{index}",
+                        "kind": tasks.KIND_SCRAPE,
+                        "title": "刮削",
+                        "state": tasks.INTERRUPTED,
+                        "key": "scrape:579:只有神知道的世界",
+                    },
+                )
+            await session.commit()
+
+            result = await tasks.recover_on_startup(session)
+            self.assertEqual(result["requeued"], 1)
+            self.assertEqual(result["superseded"], 2)
+
+            rows = await tasks.list_tasks(session, states=(tasks.QUEUED,))
+            self.assertEqual(len(rows), 1)
+
+    async def test_import_not_requeued(self) -> None:
+        async with self.factory() as session:
+            task_id = await tasks.create(session, kind=tasks.KIND_IMPORT, title="导入")
+            await tasks.start(session, task_id)
+            await tasks.recover_on_startup(session)
+            rows = await tasks.list_tasks(session)
+            self.assertEqual(rows[0]["state"], tasks.INTERRUPTED)

@@ -151,32 +151,55 @@ async def list_tasks(session: AsyncSession, *, states: tuple[str, ...] | None = 
 async def recover_on_startup(session: AsyncSession) -> dict[str, int]:
     """上次进程留下的 running：一律标成 interrupted，绝不静默续跑。
 
-    - 导入：由用户点「继续导入」再续（半截复制不能假装成功）
-    - 刮削/AI/封面：调用方按 kind 决定是否重新排队
+    自动重排时**每个 dedupe_key 只放回一个**——唯一索引要求同类任务只能有一个
+    活动行，一次放回多条会直接抛 IntegrityError 把启动搞崩（已踩过）。
+    同一批次里的其余任务标记为 cancelled，避免它们永远停在 interrupted。
     """
-    result = await session.execute(
-        text(
-            "UPDATE tasks SET state = :interrupted, heartbeat_at = :now"
-            " WHERE state = :running"
-        ),
-        {"interrupted": INTERRUPTED, "running": RUNNING, "now": _now()},
-    )
-    await session.commit()
-    interrupted = result.rowcount or 0
+    interrupted = 0
     requeued = 0
-    for kind in (KIND_SCRAPE, KIND_COVER):
-        rows = (
-            await session.execute(
-                text(
-                    "UPDATE tasks SET state = :queued WHERE kind = :kind AND state = :interrupted"
-                ),
-                {"queued": QUEUED, "kind": kind, "interrupted": INTERRUPTED},
-            )
-        ).rowcount or 0
-        requeued += rows
-    await session.commit()
-    return {"interrupted": interrupted, "requeued": requeued}
+    superseded = 0
+    try:
+        result = await session.execute(
+            text(
+                "UPDATE tasks SET state = :interrupted, heartbeat_at = :now"
+                " WHERE state = :running"
+            ),
+            {"interrupted": INTERRUPTED, "running": RUNNING, "now": _now()},
+        )
+        await session.commit()
+        interrupted = result.rowcount or 0
 
+        for kind in (KIND_SCRAPE, KIND_COVER):
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT id, dedupe_key FROM tasks"
+                        " WHERE kind = :kind AND state = :interrupted"
+                        " ORDER BY created_at DESC"
+                    ),
+                    {"kind": kind, "interrupted": INTERRUPTED},
+                )
+            ).mappings().all()
+            seen: set[str] = set()
+            for row in rows:
+                key = row["dedupe_key"] or row["id"]
+                if key in seen:
+                    await session.execute(
+                        text("UPDATE tasks SET state = :cancelled WHERE id = :id"),
+                        {"cancelled": CANCELLED, "id": row["id"]},
+                    )
+                    superseded += 1
+                    continue
+                seen.add(key)
+                await session.execute(
+                    text("UPDATE tasks SET state = :queued WHERE id = :id"),
+                    {"queued": QUEUED, "id": row["id"]},
+                )
+                requeued += 1
+        await session.commit()
+    except Exception:  # noqa: BLE001 - 恢复失败绝不能挡住启动
+        await session.rollback()
+    return {"interrupted": interrupted, "requeued": requeued, "superseded": superseded}
 
 async def prune(session: AsyncSession, days: int = RETENTION_DAYS) -> int:
     """清理过期终态任务，避免表无限增长。"""
