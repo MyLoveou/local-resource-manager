@@ -115,6 +115,9 @@ export interface SeriesExtra {
   fileId: number
   title: string
   duration?: number | null
+  /** 特典封面（已签名）；空则回退作品封面 */
+  coverUrl?: string | null
+  hasCover?: boolean
 }
 
 /** 资源关联的物理文件（一个资源可含多文件） */

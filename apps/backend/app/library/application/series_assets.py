@@ -78,6 +78,20 @@ async def _episode_rows(session: AsyncSession, resource_id: int) -> list[Any]:
     return list(result.mappings().all())
 
 
+async def _extra_rows(session: AsyncSession, resource_id: int) -> list[Any]:
+    result = await session.execute(
+        text(
+            "SELECT x.id AS extra_id, x.cover_file_id, "
+            "       f.path AS video_path, f.duration "
+            "FROM extras x JOIN files f ON f.id = x.file_id "
+            "WHERE x.resource_id = :rid AND x.status = 'active' "
+            "ORDER BY x.sort_index, x.id"
+        ),
+        {"rid": resource_id},
+    )
+    return list(result.mappings().all())
+
+
 async def generate_episode_covers(
     session: AsyncSession,
     resources: Any,
@@ -116,6 +130,37 @@ async def generate_episode_covers(
             {"fid": file_row.id, "eid": row["episode_id"]},
         )
         generated += 1
+
+    for index, row in enumerate(await _extra_rows(session, resource_id), start=1):
+        if row["cover_file_id"] is not None and not force:
+            skipped += 1
+            continue
+        video = Path(str(row["video_path"]))
+        if not video.is_file():
+            failed += 1
+            continue
+        dest = video.parent / f"extra{index:02d}-cover.jpg"
+        ok = await asyncio.to_thread(
+            extract_cover, video, dest, duration=row["duration"]
+        )
+        if not ok:
+            failed += 1
+            continue
+        file_row = await resources.add_file(
+            resource_id,
+            path=str(dest),
+            sha256=None,
+            size=dest.stat().st_size,
+            format_="jpg",
+            role=FILE_ROLE_EPISODE_COVER,
+            commit=False,
+        )
+        await session.execute(
+            text("UPDATE extras SET cover_file_id = :fid WHERE id = :xid"),
+            {"fid": file_row.id, "xid": row["extra_id"]},
+        )
+        generated += 1
+
     await session.commit()
     return {"generated": generated, "skipped": skipped, "failed": failed}
 

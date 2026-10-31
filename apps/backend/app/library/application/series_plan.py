@@ -153,6 +153,17 @@ def _dir_is_extra(part: str) -> bool:
     return False
 
 
+def _unknown_subdir(root: Path, path: Path) -> bool:
+    """文件是否落在「非季目录」的子目录里（如 `Megami Hen/`、`Tenri Hen/`）。"""
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    if len(relative.parts) < 2:
+        return False
+    return all(season_from_dir_name(part) is None for part in relative.parts[:-1])
+
+
 def _is_extra(root: Path, path: Path) -> bool:
     """目录关键字或文件名 token 命中特典表。"""
     if _SXXEXX.search(path.stem):
@@ -200,8 +211,12 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         return _fail("no_videos", [])
     extras: list[Path] = []
     episodes: list[Path] = []
+    # 根目录直接有视频时，非季目录子文件夹里的多半是 OVA/特别篇（Megami Hen 之类）
+    flat_root = any(path.parent.resolve() == root.resolve() for path in videos)
     for path in videos:
         if _is_extra(root, path):
+            extras.append(path)
+        elif flat_root and _unknown_subdir(root, path):
             extras.append(path)
         else:
             episodes.append(path)

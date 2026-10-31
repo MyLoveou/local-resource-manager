@@ -10,6 +10,7 @@
         @progress="onProgress"
       />
     </div>
+    <div v-if="nowPlayingLabel" class="video-player-overlay__now">{{ nowPlayingLabel }}</div>
     <n-button class="video-player-overlay__close" size="small" circle aria-label="关闭" @click="close">
       ×
     </n-button>
@@ -72,6 +73,38 @@ const activeFile = computed(() => {
 
 const videoSrc = computed(() => resolveLibraryMediaUrl(activeFile.value?.contentUrl ?? ''))
 
+/** 正在播放哪一集：集号 + 标题 + 时长，或特典标题 */
+const nowPlayingLabel = computed(() => {
+  const row = current.value
+  const fileId = player.currentFileId ?? activeFile.value?.id
+  if (!row || fileId == null) return ''
+  for (const season of row.seasons ?? []) {
+    for (const episode of season.episodes ?? []) {
+      if (episode.fileId !== fileId) continue
+      const parts = [`第 ${episode.episodeNumber} 集`]
+      if (episode.title) parts.push(episode.title)
+      const dur = formatDuration(episode.duration)
+      if (dur) parts.push(dur)
+      return parts.join(' · ')
+    }
+  }
+  const extra = (row.extras ?? []).find((item) => item.fileId === fileId)
+  if (extra) {
+    const dur = formatDuration(extra.duration)
+    return dur ? `${extra.title || '特典'} · ${dur}` : extra.title || '特典'
+  }
+  return ''
+})
+
+function formatDuration(seconds?: number | null): string {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return ''
+  const total = Math.round(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = total % 60
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`
+}
 /** 当前文件的音轨；多于一条时播放器才显示切换入口 */
 const audioTracks = ref<AudioTrack[]>([])
 
@@ -232,6 +265,17 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+.video-player-overlay__now {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+}
 .video-player-overlay__close {
   position: absolute;
   z-index: 21;

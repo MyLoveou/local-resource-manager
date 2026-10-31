@@ -76,6 +76,9 @@ class SeriesExtra(ApiModel):
     file_id: int
     title: str = ""
     duration: float | None = None
+    # 特典封面：没有则前端回退作品封面
+    cover_url: str | None = None
+    has_cover: bool = False
 
 
 class WorkCatalog(ApiModel):

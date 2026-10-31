@@ -33,6 +33,14 @@ const DEFAULT_MODE: Record<ResourceType, ChannelMode> = {
 
 export type OpenableResource = Pick<Resource, 'id' | 'type'>
 
+/** 系列默认播放目标：第一集的文件，没有集时退回第一个特典 */
+function firstEpisodeFileId(row: Resource): number | undefined {
+  for (const season of row.seasons ?? []) {
+    for (const episode of season.episodes ?? []) return episode.fileId
+  }
+  return row.extras?.[0]?.fileId
+}
+
 export type ResourceOpenOptions = {
   /** 查看器/播放器可前后切换的 ID 列表；不传则只打开当前项 */
   playlist?: number[]
@@ -69,10 +77,14 @@ export async function openResource(
   const command = configured?.command ?? ''
   const kind = consumeKindOf(row.type)
   const playlist = options.playlist?.length ? options.playlist : [row.id]
-  // 系列必须带具体集；只拿到作品卡时给出可执行提示，而不是静默失败
-  const seriesNeedsFile = kind === 'overlay-series' && options.fileId == null
+  // 系列必须带具体集；没给就默认第一集（用户从作品卡进入时不该被拦下）
+  let fileId = options.fileId
+  if (kind === 'overlay-series' && fileId == null) {
+    fileId = firstEpisodeFileId(row)
+  }
+  const seriesNeedsFile = kind === 'overlay-series' && fileId == null
   if (mode === 'embedded' && (kind == null || seriesNeedsFile)) {
-    if (seriesNeedsFile) fail('请从选集里选择一集播放')
+    if (seriesNeedsFile) fail('该作品还没有可播放的集')
     return false
   }
   void postConsumption(row.id, mode).catch(() => undefined)
@@ -113,13 +125,13 @@ export async function openResource(
   if (kind === 'overlay-model') {
     const format = (row.files?.find((file) => file.role === FILE_ROLE.PRIMARY)?.format ?? '').toLowerCase()
     if ((MODEL_PREVIEW_EXTENSIONS as readonly string[]).includes(format)) {
-      PlayerByConsume[kind].open(row.id, playlist, options.fileId)
+      PlayerByConsume[kind].open(row.id, playlist, fileId)
       return true
     }
     const message = await openLaunchOrPrimary(row)
     if (message) fail(message)
     return !message
   }
-  PlayerByConsume[kind].open(row.id, playlist, options.fileId)
+  PlayerByConsume[kind].open(row.id, playlist, fileId)
   return true
 }

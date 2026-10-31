@@ -101,6 +101,8 @@ async def attach_series_tree(session: AsyncSession, resource: Resource) -> None:
                 file_id=extra.file_id,
                 title=extra.title,
                 duration=media.duration if media else None,
+                cover_url=episode_cover_url(resource.id, extra.cover_file_id),
+                has_cover=extra.cover_file_id is not None,
             )
         )
 

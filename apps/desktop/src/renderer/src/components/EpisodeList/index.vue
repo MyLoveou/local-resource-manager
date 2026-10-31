@@ -23,6 +23,7 @@
               <span class="episode-card__no">{{ pad(ep.episodeNumber) }}</span>
               <span v-if="ep.hasSubtitles" class="episode-card__sub" title="有字幕">字幕</span>
             </div>
+            <span class="episode-card__duration">{{ durationLabel(ep.duration) }}</span>
           </button>
           <n-dropdown
             v-if="resourceId != null"
@@ -39,16 +40,24 @@
 
     <template v-if="extras.length">
       <div class="episode-list__label">特典</div>
-      <div class="episode-list__extras">
-        <button
-          v-for="extra in extras"
-          :key="extra.fileId"
-          type="button"
-          class="episode-card episode-card--extra"
-          @click="$emit('play', extra.fileId)"
-        >
-          <span>{{ extra.title || '特典' }}</span>
-        </button>
+      <div class="episode-list__grid">
+        <div v-for="extra in extras" :key="extra.fileId" class="episode-card-wrap">
+          <button type="button" class="episode-card" @click="$emit('play', extra.fileId)">
+            <img
+              v-if="extra.coverUrl"
+              class="episode-card__cover"
+              :src="resolveLibraryMediaUrl(extra.coverUrl)"
+              alt=""
+            />
+            <div v-else class="episode-card__cover episode-card__cover--empty">特典</div>
+            <div class="episode-card__meta">
+              <span class="episode-card__title" :title="extra.title || '特典'">
+                {{ extra.title || '特典' }}
+              </span>
+            </div>
+            <span class="episode-card__duration">{{ durationLabel(extra.duration) }}</span>
+          </button>
+        </div>
       </div>
     </template>
   </div>
@@ -100,6 +109,17 @@ const summary = computed(() => {
 
 function pad(value: number): string {
   return String(value).padStart(2, '0')
+}
+
+/** 时长：不足一小时用 mm:ss，超过用 h:mm:ss；未知返回空串 */
+function durationLabel(seconds?: number | null): string {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return ''
+  const total = Math.round(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = total % 60
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(rest)}`
+  return `${minutes}:${pad(rest)}`
 }
 
 async function onAction(ep: SeriesEpisode, key: string): Promise<void> {
@@ -188,6 +208,27 @@ async function backfill(): Promise<void> {
 }
 
 .episode-card {
+  position: relative;
+}
+
+.episode-card__duration {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 45%);
+  color: #fff;
+  font-size: 10px;
+}
+
+.episode-card--extra .episode-card__duration {
+  position: static;
+  margin-left: 6px;
+  background: transparent;
+  color: var(--sm-color-text-muted, #6b7280);
+}
+.episode-card {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -215,6 +256,12 @@ async function backfill(): Promise<void> {
   color: var(--sm-color-text-muted, #9ca3af);
 }
 
+.episode-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
 .episode-card__meta {
   display: flex;
   align-items: center;

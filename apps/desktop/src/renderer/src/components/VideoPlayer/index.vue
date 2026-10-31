@@ -10,6 +10,7 @@
       playsinline
       @loadedmetadata="seekToStart"
       @timeupdate="onTimeUpdate"
+      @ratechange="onRateChange"
       @pause="emitProgress(false)"
       @ended="emitProgress(true)"
     >
@@ -28,9 +29,6 @@
         <option v-for="track in tracks" :key="track.id" :value="track.id">
           {{ subtitleLabel(track) }}{{ track.renderable ? '' : '（渲染中…）' }}
         </option>
-      </select>
-      <select :value="rate" title="播放速度" @change="onRateChange">
-        <option v-for="value in RATES" :key="value" :value="value">{{ value }}×</option>
       </select>
       <select
         v-if="audioTracks.length > 1"
@@ -75,7 +73,7 @@ const activeId = ref<number | null>(null)
 const activeVttUrl = ref<string | null>(null)
 const hint = ref('')
 
-/** 播放速度：持久化，下一次播放沿用 */
+/** 播放速度交给原生控件（Chromium 自带倍速菜单），这里只负责记忆 */
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
 const RATE_KEY = 'sm.player.rate'
 const rate = ref<number>(loadRate())
@@ -85,12 +83,11 @@ function loadRate(): number {
   return RATES.includes(raw as (typeof RATES)[number]) ? raw : 1
 }
 
-function onRateChange(event: Event): void {
-  const value = Number((event.target as HTMLSelectElement).value)
-  const next = RATES.includes(value as (typeof RATES)[number]) ? value : 1
-  rate.value = next
-  localStorage.setItem(RATE_KEY, String(next))
-  applyRate()
+function onRateChange(): void {
+  const video = el.value
+  if (!video) return
+  rate.value = video.playbackRate
+  localStorage.setItem(RATE_KEY, String(rate.value))
 }
 
 function applyRate(): void {
