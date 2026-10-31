@@ -28,6 +28,7 @@ from app.shared.log import logger
 
 PROMPT_VERSION = "series-plan-v3"
 CHUNK_SIZE = 25
+MAX_TITLE = 120
 
 _NUMBERS = re.compile(r"\d{1,4}")
 
@@ -64,7 +65,12 @@ def parse_indices(reply: str, expected: int) -> set[int] | None:
     return numbers
 
 
-def build_plan(root: Path, videos: list[Path], extra_paths: set[str]) -> ExplainedPlan:
+def build_plan(
+    root: Path,
+    videos: list[Path],
+    extra_paths: set[str],
+    titles: dict[str, str] | None = None,
+) -> ExplainedPlan:
     """AI 判定特典后，其余按规则编号。"""
     extras: list[Path] = []
     episodes: list[Path] = []
@@ -100,10 +106,18 @@ def build_plan(root: Path, videos: list[Path], extra_paths: set[str]) -> Explain
         dest = f"seasons/{season:02d}/S{season:02d}E{episode:02d}{path.suffix.lower()}"
         items.append(PlannedItem(path, "episode", season, episode, dest, None))
 
+    cleaned = titles or {}
+    # 模型偶尔把多个文件清洗成同一个名字：这类退化结果不如规则名，退回规则
+    counts: dict[str, int] = {}
+    for path in extras:
+        value = cleaned.get(path.as_posix())
+        if value:
+            counts[value] = counts.get(value, 0) + 1
     for path in sorted(extras, key=lambda item: item.name.lower()):
-        items.append(
-            PlannedItem(path, "extra", 0, None, f"extras/{path.name}", _extra_title(path))
-        )
+        value = cleaned.get(path.as_posix())
+        if not value or counts.get(value, 0) > 1:
+            value = _extra_title(path)
+        items.append(PlannedItem(path, "extra", 0, None, f"extras/{path.name}", value))
     plan = _ok(items, 0)
     return replace(plan, message=f"AI 识别：{plan.message}")
 
@@ -141,4 +155,69 @@ async def plan_with_ai(
 
     if not extra_paths:
         logger.info("AI 结构：模型判定这批全部是正片")
-    return build_plan(root, videos, extra_paths)
+        return build_plan(root, videos, extra_paths)
+    extras = [path for path in ordered if path.as_posix() in extra_paths]
+    titles = await clean_titles(client, extras)
+    return build_plan(root, videos, extra_paths, titles)
+
+_TITLE_PROMPT = """下面是番剧特典文件的原始名字（编号: 名字）：
+
+{files}
+
+请为每一个把名字清洗成可读的中文名：去掉发布组 [VCB-Studio] 这类方括号、
+分辨率、编码（Ma10p/1080p/x265/flac）、集号方括号等冗余信息，保留作品名和特典本身的名称。
+
+只输出下面这种行，一行一个，不要解释：
+编号|清洗后的名字
+"""
+
+
+def build_title_prompt(videos: list[Path]) -> str:
+    lines = "\n".join(f"{index + 1}: {video.stem}" for index, video in enumerate(videos))
+    return _TITLE_PROMPT.format(files=lines)
+
+
+def parse_titles(reply: str, expected: int) -> dict[int, str] | None:
+    """解析 `编号|名字`；必须完整覆盖，否则视为失败。"""
+    found: dict[int, str] = {}
+    for raw in (reply or "").splitlines():
+        line = raw.strip().strip("`")
+        if "|" not in line and "｜" not in line:
+            continue
+        head, _, tail = line.replace("｜", "|").partition("|")
+        try:
+            index = int(head.strip().split()[-1])
+        except (ValueError, IndexError):
+            continue
+        if not (1 <= index <= expected):
+            continue
+        title = tail.strip()[:MAX_TITLE]
+        if title:
+            found[index] = title
+    if len(found) != expected:
+        return None
+    return found
+
+
+async def clean_titles(
+    client,
+    paths: list[Path],
+    *,
+    chunk_size: int = 10,
+) -> dict[str, str]:
+    """让模型清洗特典名；任何一批失败就整体放弃（调用方用规则名兜底）。"""
+    result: dict[str, str] = {}
+    for start in range(0, len(paths), chunk_size):
+        chunk = paths[start : start + chunk_size]
+        try:
+            reply = await client(build_title_prompt(chunk))
+        except Exception as exc:  # noqa: BLE001
+            logger.info("AI 标题清洗失败: %s", type(exc).__name__)
+            return {}
+        titles = parse_titles(reply or "", len(chunk))
+        if titles is None:
+            logger.info("AI 标题清洗未通过校验：批次 %s..%s", start + 1, start + len(chunk))
+            return {}
+        for position, path in enumerate(chunk, start=1):
+            result[path.as_posix()] = titles[position]
+    return result

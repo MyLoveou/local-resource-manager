@@ -10,7 +10,10 @@ from app.library.application.series_plan_ai import (
     CHUNK_SIZE,
     build_plan,
     build_prompt,
+    build_title_prompt,
+    clean_titles,
     parse_indices,
+    parse_titles,
     plan_with_ai,
 )
 
@@ -134,3 +137,63 @@ class PlanWithAITests(unittest.IsolatedAsyncioTestCase):
         plan = await plan_with_ai(root, videos, complete=fake)
         self.assertIsNotNone(plan)
         self.assertEqual(len(fake.prompts), 2)
+
+
+class TitleTests(unittest.TestCase):
+    def test_parse_titles_requires_full_coverage(self) -> None:
+        self.assertEqual(parse_titles("1|特典甲\n2|特典乙", 2), {1: "特典甲", 2: "特典乙"})
+        self.assertIsNone(parse_titles("1|特典甲", 2))
+
+    def test_prompt_mentions_cleaning(self) -> None:
+        prompt = build_title_prompt([Path("x.mkv")])
+        self.assertIn("清洗", prompt)
+        self.assertIn("编号|清洗后的名字", prompt)
+
+
+class CleanTitlesTests(unittest.IsolatedAsyncioTestCase):
+    async def test_titles_are_used(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        videos = _videos(root, main_count=2, ova_count=2)
+        extras = [path for path in videos if "Megami" in path.name]
+        fake = _Fake("1|女神篇 第一话\n2|女神篇 第二话")
+        titles = await clean_titles(fake, extras)
+        self.assertEqual(len(titles), 2)
+        self.assertIn("女神篇 第一话", titles.values())
+
+    async def test_failure_returns_empty(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        extras = [path for path in _videos(root) if "Megami" in path.name]
+        self.assertEqual(await clean_titles(_Fake("不知道"), extras), {})
+
+
+class PlanUsesAITitlesTests(unittest.IsolatedAsyncioTestCase):
+    async def test_extra_title_comes_from_model(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        videos = _videos(root, main_count=2, ova_count=2)
+        fake = _Fake(["3,4", "1|女神篇 上\n2|女神篇 下"])
+        plan = await plan_with_ai(root, videos, complete=fake)
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        titles = [item.title for item in plan.items if item.kind == "extra"]
+        self.assertIn("女神篇 上", titles)
+
+class TitleDegradeTests(unittest.IsolatedAsyncioTestCase):
+    """模型把两个文件清洗成同一个名字时，退回规则名而不是用重复结果。"""
+
+    async def test_duplicate_titles_fall_back(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        videos = _videos(root, main_count=2, ova_count=2)
+        fake = _Fake(["3,4", "1|同一名字\n2|同一名字"])
+        plan = await plan_with_ai(root, videos, complete=fake)
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        titles = [item.title for item in plan.items if item.kind == "extra"]
+        self.assertEqual(len(set(titles)), 2)
