@@ -105,11 +105,23 @@ def _int_group(match: re.Match[str]) -> int:
 
 
 def season_from_dir_name(name: str) -> int | None:
-    """Season 01 / S01 / 第1季。"""
+    """季目录名：`Season 01`、`S01`、`第1季`，以及 `... Sekai II` 这种带序号后缀的。
+
+    最后一条来自真实目录：整季被放进 `... Sekai II [Ma10p_1080p]` 这样的文件夹。
+    """
     match = _SEASON_DIR.match(name.strip())
-    if match is None:
-        return None
-    return _int_group(match)
+    if match is not None:
+        return _int_group(match)
+    return season_from_stem_suffix(name)
+
+
+def _dir_key(name: str) -> str:
+    """目录名的归一化键：去括号段、去季标记、去符号。"""
+    plain = _BRACKETED_GROUP.sub(" ", name)
+    plain = _ROMAN_TOKEN.sub(" ", plain)
+    plain = _ORDINAL_SEASON.sub(" ", plain)
+    plain = _NAMED_SEASON.sub(" ", plain)
+    return _NON_WORD.sub("", plain).lower()
 
 
 def _season_in_path(root: Path, src: Path) -> int | None:
@@ -117,10 +129,15 @@ def _season_in_path(root: Path, src: Path) -> int | None:
         relative = src.parent.resolve().relative_to(root.resolve())
     except ValueError:
         return None
+    root_key = _dir_key(root.name)
     for part in relative.parts:
         number = season_from_dir_name(part)
         if number is not None:
             return number
+        # 目录名和根名一致（`... Sekai [Ma10p]`）就是第 1 季；
+        # 其它没有季标记的目录（Megami Hen / 4-nin to Idol）留给特典判定
+        if root_key and _dir_key(part) == root_key:
+            return 1
     return None
 
 
@@ -267,10 +284,12 @@ def explain_series_plan(root: Path, videos: list[Path]) -> ExplainedPlan:
         return _fail("no_videos", [])
     extras: list[Path] = []
     episodes: list[Path] = []
-    # 根目录直接有视频时，非季目录子文件夹里的多半是 OVA/特别篇（Megami Hen 之类）
+    # 非季目录的子文件夹：里面的多半是 OVA/特别篇（Megami Hen / Tenri Hen 之类）
     flat_root = any(path.parent.resolve() == root.resolve() for path in videos)
     for path in videos:
         if _is_extra(root, path):
+            extras.append(path)
+        elif path.parent.resolve() != root.resolve() and _season_in_path(root, path) is None:
             extras.append(path)
         elif flat_root and _unknown_subdir(root, path):
             extras.append(path)

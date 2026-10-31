@@ -1,109 +1,97 @@
-"""AI 主导结构拆分：校验严格到"一条不合法就整份丢弃"。"""
+"""AI 结构拆分：模型只判断特典，编号由规则解析。"""
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from app.library.application.series_plan_ai import (
+    CHUNK_SIZE,
+    build_plan,
     build_prompt,
-    parse_reply,
+    parse_indices,
     plan_with_ai,
-    to_plan,
 )
 
-S1 = "[VCB-Studio] Sekai [{:02d}][1080p].mkv"
-S2 = "[VCB-Studio] Sekai II [{:02d}][1080p].mkv"
-IDOL = "Sekai 4-nin to Idol.mkv"
-GNCA = "GNCA-021002.mkv"
+MAIN = "[VCB-Studio] Sekai [{:02d}][1080p].mkv"
+OVA = "[VCB-Studio] Sekai Megami Hen [{:02d}][1080p].mkv"
 
 
-def _videos(root: Path) -> list[Path]:
-    names = [S1.format(i) for i in range(1, 4)] + [S2.format(i) for i in range(1, 3)]
-    names += [IDOL, GNCA]
-    for name in names:
-        (root / name).write_bytes(b"")
+def _videos(root: Path, main_count: int = 3, ova_count: int = 2) -> list[Path]:
+    for number in range(1, main_count + 1):
+        (root / MAIN.format(number)).write_bytes(b"")
+    for number in range(1, ova_count + 1):
+        (root / OVA.format(number)).write_bytes(b"")
     return sorted(root.glob("*.mkv"))
 
 
-GOOD = {
-    "files": [
-        {"name": "[VCB-Studio] Sekai [01][1080p]", "kind": "episode", "season": 1, "episode": 1},
-        {"name": "[VCB-Studio] Sekai [02][1080p]", "kind": "episode", "season": 1, "episode": 2},
-        {"name": "[VCB-Studio] Sekai [03][1080p]", "kind": "episode", "season": 1, "episode": 3},
-        {"name": "[VCB-Studio] Sekai II [01][1080p]", "kind": "episode", "season": 2, "episode": 1},
-        {"name": "[VCB-Studio] Sekai II [02][1080p]", "kind": "episode", "season": 2, "episode": 2},
-        {"name": "Sekai 4-nin to Idol", "kind": "extra", "title": "特典 4-nin to Idol"},
-        {"name": "GNCA-021002", "kind": "extra"},
-    ]
-}
-
-
-class ParseTests(unittest.TestCase):
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
-        self.videos = _videos(self.root)
-
-    def _parse(self, payload) -> object:
-        return parse_reply(json.dumps(payload, ensure_ascii=False), self.videos)
-
-    def test_good_reply_is_accepted(self) -> None:
-        items = self._parse(GOOD)
-        self.assertIsNotNone(items)
-        kinds = {item.name: item.kind for item in items}
-        self.assertEqual(kinds["Sekai 4-nin to Idol"], "extra")
-        self.assertEqual(kinds["[VCB-Studio] Sekai II [01][1080p]"], "episode")
-
-    def test_duplicate_episode_is_rejected(self) -> None:
-        payload = json.loads(json.dumps(GOOD))
-        payload["files"][1]["season"], payload["files"][1]["episode"] = 1, 1
-        self.assertIsNone(self._parse(payload))
-
-    def test_missing_file_is_rejected(self) -> None:
-        payload = json.loads(json.dumps(GOOD))
-        payload["files"].pop()
-        self.assertIsNone(self._parse(payload))
-
-    def test_unknown_name_is_rejected(self) -> None:
-        payload = json.loads(json.dumps(GOOD))
-        payload["files"].append({"name": "ghost", "kind": "extra"})
-        self.assertIsNone(self._parse(payload))
-
-    def test_out_of_range_is_rejected(self) -> None:
-        payload = json.loads(json.dumps(GOOD))
-        payload["files"][0]["episode"] = 0
-        self.assertIsNone(self._parse(payload))
-
-    def test_garbage_is_rejected(self) -> None:
-        self.assertIsNone(parse_reply("我不确定", self.videos))
-        self.assertIsNone(parse_reply("", self.videos))
-
-    def test_fenced_json_is_tolerated(self) -> None:
-        reply = "```json\n" + json.dumps(GOOD, ensure_ascii=False) + "\n```"
-        self.assertIsNotNone(parse_reply(reply, self.videos))
-
-    def test_plan_paths(self) -> None:
-        items = self._parse(GOOD)
-        assert items is not None
-        plan = to_plan(self.root, self.videos, items)
-        dests = {item.dest_rel for item in plan.items}
-        self.assertIn("seasons/02/S02E01.mkv", dests)
-        self.assertIn("extras/Sekai 4-nin to Idol.mkv", dests)
-        self.assertIn("AI 识别", plan.message)
-
-
 class _Fake:
-    def __init__(self, reply: str | None) -> None:
-        self.reply = reply
+    def __init__(self, replies: list[str] | str) -> None:
+        self.replies = replies if isinstance(replies, list) else [replies]
         self.prompts: list[str] = []
 
     async def __call__(self, prompt: str) -> str | None:
         self.prompts.append(prompt)
-        return self.reply
+        index = min(len(self.prompts) - 1, len(self.replies) - 1)
+        return self.replies[index]
+
+
+class ParseTests(unittest.TestCase):
+    def test_number_list(self) -> None:
+        self.assertEqual(parse_indices("2,5,7", 10), {2, 5, 7})
+
+    def test_none_means_empty(self) -> None:
+        self.assertEqual(parse_indices("none", 10), set())
+
+    def test_out_of_range_is_filtered(self) -> None:
+        self.assertEqual(parse_indices("1, 99", 10), {1})
+
+    def test_garbage_is_rejected(self) -> None:
+        self.assertIsNone(parse_indices("我不确定", 10))
+        self.assertIsNone(parse_indices("", 10))
+
+    def test_prompt_lists_every_file(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        videos = _videos(root)
+        prompt = build_prompt(videos)
+        self.assertIn("1: ", prompt)
+        self.assertIn("Sekai", prompt)
+        self.assertIn("只输出这些文件的编号", prompt)
+
+
+class BuildPlanTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.videos = _videos(self.root, main_count=3, ova_count=2)
+
+    def _extras(self) -> set[str]:
+        return {path.as_posix() for path in self.videos if "Megami" in path.name}
+
+    def test_ai_extras_become_extras(self) -> None:
+        plan = build_plan(self.root, self.videos, self._extras())
+        episodes = [item for item in plan.items if item.kind == "episode"]
+        extras = [item for item in plan.items if item.kind == "extra"]
+        self.assertEqual(len(episodes), 3)
+        self.assertEqual(len(extras), 2)
+        self.assertTrue(plan.message.startswith("AI 识别"))
+
+    def test_numbering_comes_from_filenames(self) -> None:
+        plan = build_plan(self.root, self.videos, self._extras())
+        numbers = sorted(item.episode for item in plan.items if item.kind == "episode")
+        self.assertEqual(numbers, [1, 2, 3])
+
+    def test_collision_becomes_extra(self) -> None:
+        """模型漏判时同一集号撞车：后来的那个归特典，而不是整单失败。"""
+        plan = build_plan(self.root, self.videos, set())
+        episodes = [item for item in plan.items if item.kind == "episode"]
+        extras = [item for item in plan.items if item.kind == "extra"]
+        self.assertEqual(len(episodes), 3)
+        self.assertEqual(len(extras), 2)
 
 
 class PlanWithAITests(unittest.IsolatedAsyncioTestCase):
@@ -111,26 +99,38 @@ class PlanWithAITests(unittest.IsolatedAsyncioTestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.videos = _videos(self.root)
+        self.videos = _videos(self.root, main_count=3, ova_count=2)
 
-    async def test_ai_plan_is_used(self) -> None:
-        plan = await plan_with_ai(self.root, self.videos, complete=_Fake(json.dumps(GOOD)))
+    async def test_uses_model_indices(self) -> None:
+        plan = await plan_with_ai(self.root, self.videos, complete=_Fake("4,5"))
         self.assertIsNotNone(plan)
         assert plan is not None
-        self.assertTrue(plan.ok)
-        episodes = [item for item in plan.items if item.kind == "episode"]
-        self.assertEqual(sorted({item.season for item in episodes}), [1, 2])
+        self.assertEqual(len([i for i in plan.items if i.kind == "extra"]), 2)
+        self.assertEqual(len([i for i in plan.items if i.kind == "episode"]), 3)
 
-    async def test_model_unavailable_returns_none(self) -> None:
+    async def test_none_reply_keeps_all_episodes(self) -> None:
+        plan = await plan_with_ai(self.root, self.videos, complete=_Fake("none"))
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(len([i for i in plan.items if i.kind == "episode"]), 3)
+
+    async def test_unparsable_reply_returns_none(self) -> None:
+        self.assertIsNone(await plan_with_ai(self.root, self.videos, complete=_Fake("不知道")))
+
+    async def test_model_failure_returns_none(self) -> None:
         self.assertIsNone(await plan_with_ai(self.root, self.videos, complete=_Fake(None)))
 
     async def test_single_file_skips_model(self) -> None:
-        fake = _Fake(json.dumps(GOOD))
-        one = [self.videos[0]]
-        self.assertIsNone(await plan_with_ai(self.root, one, complete=fake))
+        fake = _Fake("1")
+        self.assertIsNone(await plan_with_ai(self.root, self.videos[:1], complete=fake))
         self.assertEqual(fake.prompts, [])
 
-    def test_prompt_lists_files(self) -> None:
-        prompt = build_prompt(self.videos)
-        self.assertIn("Sekai II", prompt)
-        self.assertIn("不要输出解释", prompt)
+    async def test_large_folder_is_chunked(self) -> None:
+        big = tempfile.TemporaryDirectory()
+        self.addCleanup(big.cleanup)
+        root = Path(big.name)
+        videos = _videos(root, main_count=CHUNK_SIZE + 5, ova_count=0)
+        fake = _Fake(["none"] * 5)
+        plan = await plan_with_ai(root, videos, complete=fake)
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(fake.prompts), 2)
