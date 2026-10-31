@@ -48,6 +48,7 @@
         :resource-id="resource.id ?? 0"
         :season="scrapeSeason"
         :season-title="scrapeSeasonTitle"
+        :fallback-title="resource?.title ?? null"
         @applied="load"
       />
     </div>

@@ -1,9 +1,15 @@
 <template>
   <n-modal :show="show" preset="card" :title="`刮削第 ${season} 季`" style="width: 560px" @update:show="onShow">
-    <p class="season-scrape__hint">
-      {{ statusText }}
-    </p>
-    <p v-if="query" class="muted">搜索词：{{ query }}</p>
+    <div class="season-scrape__search">
+      <n-input
+        v-model:value="query"
+        size="small"
+        placeholder="搜索词，可修改后重新搜索"
+        @keyup.enter="run"
+      />
+      <n-button size="small" :disabled="busy" @click="run">搜索</n-button>
+    </div>
+    <p class="season-scrape__hint">{{ statusText }}</p>
 
     <ul v-if="candidates.length" class="season-scrape__list">
       <li v-for="item in candidates" :key="item.id ?? item.title" class="season-scrape__item">
@@ -31,7 +37,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NModal, NButton } from 'naive-ui'
+import { NModal, NButton, NInput } from 'naive-ui'
 import {
   createScrapeJob,
   getScrapeJob,
@@ -46,6 +52,7 @@ const props = defineProps<{
   resourceId: number
   season: number
   seasonTitle?: string | null
+  fallbackTitle?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -58,7 +65,7 @@ const busy = ref(false)
 const error = ref('')
 const jobId = ref<number | null>(null)
 
-const query = computed(() => props.seasonTitle?.trim() || '')
+const query = ref('')
 const statusText = computed(() => {
   if (busy.value) return '正在搜索与整理候选…'
   if (candidates.value.length) return `找到 ${candidates.value.length} 个候选`
@@ -126,7 +133,13 @@ async function applyCandidate(item: Candidate): Promise<void> {
 
 watch(
   () => [props.show, props.resourceId, props.season] as const,
-  () => {
+  ([show]) => {
+    if (!show) return
+    // 默认搜索词：季自己的名字优先；没有就用作品名 + 第 N 季
+    const base = (props.seasonTitle || props.fallbackTitle || '').trim()
+    query.value = base && !props.seasonTitle && props.season > 1
+      ? `${base} 第${props.season}季`
+      : base
     void run()
   },
   { immediate: true },
@@ -134,6 +147,12 @@ watch(
 </script>
 
 <style scoped lang="less">
+.season-scrape__search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .season-scrape__hint {
   margin: 0 0 6px;
   font-size: 13px;
