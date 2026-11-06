@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "gitmove": {
+      "command": "D:/Project/GitMove/gitmove-v2/target/release/gitmove-core.exe",
+      "args": ["-C", "D:/Project/资源管理器", "mcp"],
+      "env": {}
+    }
+  }
+}
