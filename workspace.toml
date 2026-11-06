@@ -1,0 +1,14 @@
+version = 1
+
+[workspace]
+name = "资源管理器"
+
+# 代码仓由 git 管理；这里只为「迁移前必须能回滚数据库」记录快照。
+# 资产范围 = snapshots/（由 scripts/db-snapshot.py 生成的 SQLite 在线备份）。
+[[backup.target]]
+name = "db-local"
+kind = "local"
+repo = "D:/Project/资源管理器/snapshots-restic"
+password_env = "GITMOVE_RESTIC_PASSWORD"
+priority = 1
+enabled = true

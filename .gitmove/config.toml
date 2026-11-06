@@ -1,0 +1,16 @@
+# 资产备份的排除项：workspace 根下除 snapshots/ 之外的东西都不进 restic。
+# 这样「资产」只等于数据库快照，与运行期媒体库无关（媒体库不在本仓管理）。
+[depot]
+excludes = [
+  ".git",
+  ".gitmove",
+  ".githooks",
+  "apps",
+  "docs",
+  "openspec",
+  "scripts",
+  "node_modules",
+  "reference",
+  "snapshots-restic",
+  "*.log",
+]
