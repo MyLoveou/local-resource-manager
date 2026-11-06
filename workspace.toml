@@ -9,6 +9,6 @@ name = "资源管理器"
 name = "db-local"
 kind = "local"
 repo = "D:/Project/资源管理器/snapshots-restic"
-password_env = "GITMOVE_RESTIC_PASSWORD"
+password_file = "C:/Users/cwt/.gitmove/restic-resource-manager.pass"
 priority = 1
 enabled = true
