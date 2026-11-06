@@ -1,0 +1,18 @@
+#!/bin/sh
+# 提交前门禁：文件规模。故意保持秒级，不拖慢提交。
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] 未找到 node，跳过文件规模检查" >&2
+  exit 0
+fi
+
+if ! node scripts/check-file-size.mjs; then
+  echo "" >&2
+  echo "[pre-commit] 文件规模门禁未通过，提交已阻止。" >&2
+  echo "[pre-commit] 处理方式：拆分文件，而不是改基线。" >&2
+  exit 1
+fi

@@ -38,3 +38,6 @@ data/
 
 # 外部参考项目（本地 clone，不入库）
 /reference/
+
+# 数据库快照（由 GitMove 修订记录）
+snapshots/
