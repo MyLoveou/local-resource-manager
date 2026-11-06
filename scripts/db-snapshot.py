@@ -19,6 +19,12 @@ TARGET_DIR = ROOT / "snapshots"
 
 
 def main() -> int:
+    # git 的 sh 环境里 stdout 可能是 cp1252，中文会崩；统一成 utf-8
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:  # noqa: BLE001
+        pass
+
     if not SOURCE.is_file():
         print(f"源数据库不存在：{SOURCE}")
         return 1

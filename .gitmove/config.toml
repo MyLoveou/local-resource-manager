@@ -1,16 +1,34 @@
-# 资产备份的排除项：workspace 根下除 snapshots/ 之外的东西都不进 restic。
-# 这样「资产」只等于数据库快照，与运行期媒体库无关（媒体库不在本仓管理）。
+# 资产备份 = 只有数据库快照。
+#
+# gitmove 的做法是在 workspace 根执行 `restic backup .`，且只支持排除，
+# 所以这里把根目录下**除 snapshots/ 之外**的全部条目排掉。
+# 新增顶层目录时记得同步这里，否则会被打进快照（曾经把 .claude 备份进去过）。
 [depot]
 excludes = [
   ".git",
   ".gitmove",
   ".githooks",
+  ".github",
+  ".claude",
+  ".codegraph",
+  ".cursor",
+  ".opencode",
+  ".pytest_cache",
+  ".vscode",
   "apps",
   "docs",
-  "openspec",
-  "scripts",
   "node_modules",
+  "openspec",
   "reference",
+  "release",
+  "scripts",
   "snapshots-restic",
+  ".gitignore",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "README.md",
+  "todo.md",
+  "workspace.toml",
   "*.log",
 ]

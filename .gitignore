@@ -41,3 +41,6 @@ data/
 
 # 数据库快照（由 GitMove 修订记录）
 snapshots/
+
+# GitMove 的 restic 仓库（含快照密文，绝不入库）
+snapshots-restic/

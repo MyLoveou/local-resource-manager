@@ -1,5 +1,5 @@
 #!/bin/sh
-# 提交前门禁：文件规模。故意保持秒级，不拖慢提交。
+# 提交前门禁：文件规模 + 迁移前自动打数据库快照。
 set -e
 
 root="$(git rev-parse --show-toplevel)"
@@ -7,12 +7,28 @@ cd "$root"
 
 if ! command -v node >/dev/null 2>&1; then
   echo "[pre-commit] 未找到 node，跳过文件规模检查" >&2
-  exit 0
+else
+  if ! node scripts/check-file-size.mjs; then
+    echo "" >&2
+    echo "[pre-commit] 文件规模门禁未通过，提交已阻止。" >&2
+    echo "[pre-commit] 处理方式：拆分文件，而不是改基线。" >&2
+    exit 1
+  fi
 fi
 
-if ! node scripts/check-file-size.mjs; then
-  echo "" >&2
-  echo "[pre-commit] 文件规模门禁未通过，提交已阻止。" >&2
-  echo "[pre-commit] 处理方式：拆分文件，而不是改基线。" >&2
-  exit 1
+# 本次提交动了迁移 ⇒ 先给数据库拍一份在线快照。
+# 快照落在 snapshots/（已 gitignore），随 `gitmove commit --assets` 一起进修订，
+# 这样回滚代码时才有对应的库可以恢复。
+if git diff --cached --name-only | grep -q 'apps/backend/app/shared/db/migrations/'; then
+  python="apps/backend/.venv/Scripts/python.exe"
+  if [ -x "$python" ]; then
+    echo "[pre-commit] 检测到迁移改动，生成数据库快照…"
+    if ! "$python" scripts/db-snapshot.py; then
+      echo "[pre-commit] 快照生成失败，提交已阻止（迁移必须可回滚）" >&2
+      exit 1
+    fi
+  else
+    echo "[pre-commit] 找不到后端 venv，无法生成快照，提交已阻止" >&2
+    exit 1
+  fi
 fi
