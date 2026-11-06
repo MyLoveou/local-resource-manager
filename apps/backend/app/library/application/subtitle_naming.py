@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.shared.media_types import SUBTITLE_EXTENSIONS, SUBTITLE_LANGUAGE_TAGS
+from app.library.domain.media_types import (
+    SUBTITLE_EXTENSIONS,
+    SUBTITLE_LANGUAGE_TAGS,
+)
 
 _UNSAFE = re.compile(r'[\\/:*?"<>|]+')
 

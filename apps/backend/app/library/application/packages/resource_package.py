@@ -3,13 +3,19 @@
 from pathlib import Path
 
 from app.shared.fs.file_ops import FileOps
-from app.shared.media_types import FILE_ROLE_SUBTITLE, THUMB_DIR, THUMB_GRID_NAME
-from app.shared.models import ResourceType
+from app.shared.runtime_paths import library_root
+from app.library.domain.media_types import (
+    FILE_ROLE_SUBTITLE,
+    PREVIEW_NAME,
+    THUMB_DIR,
+    THUMB_GRID_NAME,
+)
+from app.library.domain.models import ResourceType
 
 
 def default_library_store(db_path: Path) -> Path:
     """实现默认：与 db 同级的 library/。产品设置项本轮不做。"""
-    return db_path.parent / "library"
+    return library_root(db_path)
 
 
 class ResourcePackage:
@@ -57,8 +63,8 @@ class ResourcePackage:
         """复制字幕并使用给定文件名。"""
         return self.put_role("subtitle", src, dest_name)
 
-    def put_relative(self, src: Path, relative: str) -> Path:
-        """复制到包内相对路径（季集目录）。"""
+    def put_relative(self, src: Path, relative: str, on_chunk=None) -> Path:
+        """复制到包内相对路径（季集目录）；on_chunk 用于回报已写字节。"""
         self.ensure_dir()
         dest = (self.root / relative).resolve()
         try:
@@ -66,7 +72,9 @@ class ResourcePackage:
         except ValueError as exc:
             raise ValueError("destination outside package") from exc
         dest.parent.mkdir(parents=True, exist_ok=True)
-        return self._ops.copy(src, dest)
+        if on_chunk is None:
+            return self._ops.copy(src, dest)
+        return self._ops.copy_with_progress(src, dest, on_chunk)
 
     def put_primary(self, src: Path) -> Path:
         return self.put_role("primary", src)
@@ -84,7 +92,7 @@ class ResourcePackage:
         return dest
 
     def put_thumbnail(self, source_image: Path) -> Path | None:
-        """从源图生成网格 WebP。失败返回 None。"""
+        """把源图缩成 WebP；失败返回 None。"""
         from app.library.application.thumbnails import write_grid_thumbnail
         from app.shared.log import logger
 
@@ -95,6 +103,28 @@ class ResourcePackage:
         except Exception as exc:
             logger.warning("缩略图生成失败 %s: %s", source_image, exc)
             return None
+
+    def preview_dest(self) -> Path:
+        dest = (self.root / THUMB_DIR / PREVIEW_NAME).resolve()
+        try:
+            dest.relative_to(self.root.resolve())
+        except ValueError as exc:
+            raise ValueError("destination outside package") from exc
+        return dest
+
+    def put_preview(self, source_image: Path) -> Path | None:
+        """生成浏览器可显示的 JPEG 预览，供 HEIC 等格式使用。"""
+        from app.library.application.previews import write_preview
+        from app.shared.log import logger
+
+        dest = self.preview_dest()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            return write_preview(source_image, dest)
+        except Exception as exc:
+            logger.warning("预览图生成失败 %s: %s", source_image, exc)
+            return None
+
 
     def resolve_cover(self, role_paths: dict[str, Path]) -> Path | None:
         """有 cover 角色用它；否则按类型是否回退到 primary。"""

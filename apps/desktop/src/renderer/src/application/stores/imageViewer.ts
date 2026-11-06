@@ -4,7 +4,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useSelectionStore } from './selection'
-import { canGoNext } from './imageViewerNav'
+import { canGoNext } from '@/utils/canGoNext'
 
 export type ImageViewerPager = {
   hasMore: () => boolean
@@ -30,40 +30,40 @@ export const useImageViewerStore = defineStore('imageViewer', () => {
   const hasNext = computed(() =>
     canGoNext(index.value, playlistIds.value.length, listHasMore.value, listLoadingMore.value)
   )
-
+  // 绑定分页器
   function bindPager(next: ImageViewerPager): void {
     pager = next
     listHasMore.value = next.hasMore()
     listLoadingMore.value = next.loadingMore()
   }
-
+  // 解除绑定分页器
   function unbindPager(): void {
     pager = null
     listHasMore.value = false
     listLoadingMore.value = false
   }
-
+  // 通知分页器更新
   function notifyPager(): void {
     listHasMore.value = pager?.hasMore() ?? false
     listLoadingMore.value = pager?.loadingMore() ?? false
   }
-
+  // 获取绑定分页器的图片 ID 列表
   function boundImageIds(): number[] {
     return pager?.imageIds() ?? []
   }
-
+  // 同步播放列表
   function syncPlaylist(ids: number[]): void {
     if (!visible.value) return
     playlistIds.value = ids
   }
-
+  // 打开查看器
   function open(id: number, ids: number[]): void {
     playlistIds.value = ids
     currentId.value = id
     visible.value = true
     selection.select(id)
   }
-
+  // 关闭查看器
   function close(): void {
     visible.value = false
     currentId.value = null

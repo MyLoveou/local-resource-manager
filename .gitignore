@@ -9,11 +9,17 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.pytest_cache/
 
 # Electron
 dist/
 dist-electron/
 out/
+
+# Packaging output
+release/
+apps/backend/build/
+apps/desktop/build/ffprobe/*.exe
 
 # Editor / OS
 .vscode/*
@@ -32,3 +38,9 @@ data/
 
 # 外部参考项目（本地 clone，不入库）
 /reference/
+
+# 数据库快照（由 GitMove 修订记录）
+snapshots/
+
+# GitMove 的 restic 仓库（含快照密文，绝不入库）
+snapshots-restic/

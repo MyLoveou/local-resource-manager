@@ -8,11 +8,11 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.download.application.errors import DownloadError
-from app.download.application.ssrf import validate_http_url
+from app.shared.errors import DownloadError
+from app.shared.utils.ssrf import validate_http_url
 from app.scrape.application.images import public_image_url
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
-from app.shared.models import WorkCatalog
+from app.library.domain.models import WorkCatalog
 
 _MAX_HTML = 512 * 1024
 _HEADERS = {"User-Agent": "SourceManager/0.1 (local library; metadata scrape)", "Accept": "text/html"}

@@ -11,10 +11,11 @@
 │        │ HTTP + SSE/WebSocket（自有 REST，token）      │
 │  Electron 主进程 (TS)：窗口 / IPC / 进程编排 / 本地文件
 │        └── 后端服务 ── Python FastAPI，127.0.0.1:8000 + token
-│             ├── /scrape    抓取子应用（SearXNG + 站点适配器）
-│             ├── /download  下载子应用（aria2c + rqbit 双引擎）
+│             ├── /library   资源库子应用（导入/资源/监视）
+│             ├── /scrape    抓取子应用（官方 API + Open Graph）
+│             ├── /settings  设置子应用
 │             └── /health    总健康检查
-│  下载引擎以子进程运行：aria2c（HTTP/BT）、rqbit（BT/流式）、yt-dlp（站点兜底）
+│  下载：不自建，委托第三方成熟下载器（D-20261007-01）；产物经监视目录入库
 └────────────────────────────────────────────────────┘
 ```
 

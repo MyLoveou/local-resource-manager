@@ -57,7 +57,8 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { NButton, NInput, NModal, useMessage } from 'naive-ui'
+import { NButton, NInput, NModal } from 'naive-ui'
+import { notify } from '@/application/notify'
 import {
   createScrapeJob,
   getLatestScrapeJob,
@@ -66,7 +67,7 @@ import {
   previewScrapeCandidate,
   selectScrapeCandidate,
 } from '@/infrastructure/http/scrape'
-import { invalidateResourceCache } from '@/infrastructure/http'
+import { invalidateResourceCache, invalidateTags } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
 import type { Candidate, ScrapeJob, ScrapePreview } from '@/domain'
 import ScrapeCandidateList from './ScrapeCandidateList.vue'
@@ -88,7 +89,6 @@ const emit = defineEmits<{
   applied: []
 }>()
 
-const message = useMessage()
 const library = useLibraryStore()
 const queue = ref<number[]>([])
 const index = ref(0)
@@ -181,7 +181,7 @@ async function loadPreview(candidateId: number): Promise<void> {
   } catch (err) {
     if (mine !== gen) return
     preview.value = null
-    message.warning(err instanceof Error ? err.message : '封面预览失败')
+    notify.fromError(err, { context: '封面预览' })
   }
 }
 
@@ -203,12 +203,18 @@ async function confirmOne(): Promise<void> {
     })
     if (mine !== gen) return
     invalidateResourceCache()
-    library.bump(null)
+    invalidateTags()
+    library.invalidate({
+      resources: true,
+      categories: true,
+      home: true,
+      tags: true,
+    })
     emit('applied')
     await advance()
   } catch (err) {
     if (mine !== gen) return
-    message.error(err instanceof Error ? err.message : '回填失败')
+    notify.fromError(err, { context: '回填元数据' })
     busy.value = false
   }
 }
@@ -295,7 +301,7 @@ async function researchBili(): Promise<void> {
   const resourceId = queue.value[index.value]
   const typed = biliQuery.value.trim()
   if (resourceId == null || !typed) {
-    message.warning(props.queryEmptyHint || '请填写 BV 号、链接或视频名称')
+    notify.toast.warning(props.queryEmptyHint || '请填写 BV 号、链接或视频名称')
     return
   }
   clearPoll()

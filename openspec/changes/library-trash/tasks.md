@@ -1,5 +1,7 @@
 # 任务 · library-trash
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 > 用户授权 apply 后再实现。验证对照 `tests.md`。
 
 ## 1. 对齐

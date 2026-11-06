@@ -10,14 +10,18 @@ from unittest.mock import patch
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.download.application.errors import DownloadError
+from app.shared.errors import DownloadError
 from app.library.infrastructure.repositories import ResourceRepository
 from app.scrape.application.images import public_image_url, unique_https
 from app.scrape.application.jobs import ScrapeError, create_or_reuse_job, run_search
 from app.scrape.application.providers.base import MetadataProvider, SearchHit
 from app.scrape.application.providers.og import OgProvider, page_url_or_error, parse_open_graph
 from app.shared.db.migrations import migrate
-from app.shared.models import Resource, ResourceStatus, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+)
 
 _HTML = """
 <html><head>

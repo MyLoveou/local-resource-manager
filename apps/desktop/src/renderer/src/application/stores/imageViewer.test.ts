@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { canGoNext } from './imageViewerNav.ts'
+import { canGoNext } from '../../utils/canGoNext.ts'
 
 describe('canGoNext', () => {
   it('advances inside loaded playlist', () => {

@@ -3,7 +3,7 @@
  */
 export function resolveLibraryMediaUrl(path: string | null | undefined): string {
   if (!path) return ''
-  if (path.startsWith('http') || path.startsWith('data:')) return path
+  if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path
   const base = window.electron?.backend?.baseUrl ?? ''
   if (path.startsWith('/')) return `${base}${path}`
   return path
@@ -16,10 +16,12 @@ export function withMediaCacheBust(url: string, revision?: string | null): strin
   return `${url}${sep}v=${encodeURIComponent(revision)}`
 }
 
-/** 除查看器外：只允许缩略图，禁止 coverPath / content 回退。 */
+/** 网格封面：优先缩略图，旧库/生成失败时回退到原封面或主文件。 */
 export function resolveCardImageUrl(resource: {
   thumbnailPath?: string | null
+  coverPath?: string | null
   updatedAt?: string | null
 }): string {
-  return withMediaCacheBust(resolveLibraryMediaUrl(resource.thumbnailPath), resource.updatedAt)
+  const path = resource.thumbnailPath || resource.coverPath || ''
+  return withMediaCacheBust(resolveLibraryMediaUrl(path), resource.updatedAt)
 }

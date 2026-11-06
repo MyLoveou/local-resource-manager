@@ -1,7 +1,8 @@
-"""补生成缺失缩略图；仍失败则删除该资源包与行。须先退出桌面应用。
+"""补生成缺失缩略图；默认只补不删，删除资源必须显式指定。
 
 用法（在 apps/backend）：
-  .venv\\Scripts\\python scripts/repair_thumbnails.py --yes
+  .venv\\Scripts\\python scripts/repair_thumbnails.py --apply
+  .venv\\Scripts\\python scripts/repair_thumbnails.py --apply --delete-unrepairable
 """
 
 from __future__ import annotations
@@ -27,11 +28,11 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.shared.config import settings  # noqa: E402
 from app.shared.db.migrations import migrate  # noqa: E402
 from app.shared.fs.file_ops import FileOps  # noqa: E402
-from app.shared.media_types import FILE_ROLE_THUMBNAIL  # noqa: E402
+from app.library.domain.media_types import FILE_ROLE_THUMBNAIL  # noqa: E402
 import sqlite3  # noqa: E402
 
 
-async def _repair(*, apply: bool) -> int:
+async def _repair(*, apply: bool, delete_unrepairable: bool = False) -> int:
     db_path = settings.db_path.resolve()
     if not db_path.is_file():
         print(f"无库文件: {db_path}")
@@ -45,6 +46,7 @@ async def _repair(*, apply: bool) -> int:
     ops = FileOps()
     deleted = 0
     repaired = 0
+    skipped = 0
     ok = 0
     async with factory() as session:
         resources = ResourceRepository(session)
@@ -98,6 +100,10 @@ async def _repair(*, apply: bool) -> int:
                 repaired += 1
                 print(f"repaired {rid}")
                 continue
+            if not delete_unrepairable:
+                skipped += 1
+                print(f"skip {rid}: thumbnail unavailable (resource kept)")
+                continue
             if not apply:
                 print(f"would delete {rid}")
                 deleted += 1
@@ -106,18 +112,31 @@ async def _repair(*, apply: bool) -> int:
             deleted += 1
             print(f"deleted {rid}")
     await engine.dispose()
-    print(f"ok={ok} repaired={repaired} deleted={deleted}")
+    print(f"ok={ok} repaired={repaired} skipped={skipped} deleted={deleted}")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="补缩略图或删除残缺资源")
-    parser.add_argument("--yes", action="store_true", help="真正写入/删除")
+    parser = argparse.ArgumentParser(description="repair missing grid thumbnails")
+    parser.add_argument("--apply", action="store_true", help="write repaired thumbnails")
+    parser.add_argument(
+        "--delete-unrepairable",
+        action="store_true",
+        help="dangerous: purge resources whose thumbnail cannot be rebuilt",
+    )
     args = parser.parse_args()
     print(f"db: {settings.db_path.resolve()}")
-    if not args.yes:
-        print("未加 --yes，只预览。")
-    return asyncio.run(_repair(apply=args.yes))
+    if not args.apply:
+        print("dry-run; pass --apply to write changes")
+    if args.delete_unrepairable and not args.apply:
+        print("--delete-unrepairable ignored without --apply")
+    return asyncio.run(
+        _repair(
+            apply=args.apply,
+            delete_unrepairable=args.delete_unrepairable and args.apply,
+        )
+    )
+
 
 
 if __name__ == "__main__":

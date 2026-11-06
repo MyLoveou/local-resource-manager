@@ -12,8 +12,11 @@ from app.library.application.covers.origin import (
 from app.library.application.packages.resource_package import ResourcePackage
 from app.library.infrastructure.repositories import ResourceRepository
 from app.shared.log import logger
-from app.shared.media_types import FILE_ROLE_COVER, FILE_ROLE_THUMBNAIL
-from app.shared.models import Resource
+from app.library.domain.media_types import (
+    FILE_ROLE_COVER,
+    FILE_ROLE_THUMBNAIL,
+)
+from app.library.domain.models import Resource
 
 
 async def attach_cover_image(

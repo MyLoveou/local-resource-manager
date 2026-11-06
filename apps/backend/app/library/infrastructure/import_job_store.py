@@ -16,6 +16,9 @@ class ImportJobState:
     phase: str = "queued"
     total: int = 0
     done: int = 0
+    percent: float = 0.0
+    eta_seconds: int | None = None
+    speed_mbps: float | None = None
     imported: int = 0
     skipped_duplicate: int = 0
     skipped_error: int = 0

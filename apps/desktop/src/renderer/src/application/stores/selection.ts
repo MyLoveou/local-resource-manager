@@ -8,6 +8,8 @@ export const useSelectionStore = defineStore('selection', () => {
   const selectedIds = ref<number[]>([])
   const anchorId = ref<number | null>(null)
   const activeId = ref<number | null>(null)
+  /** 系列详情里选中的季；面板据此切换 */
+  const season = ref<number | null>(null)
 
   const selectedId = computed(() => activeId.value)
 
@@ -41,11 +43,33 @@ export const useSelectionStore = defineStore('selection', () => {
     activeId.value = toId
   }
 
+  function setSelection(ids: number[]): void {
+    const unique = [...new Set(ids)]
+    selectedIds.value = unique
+    anchorId.value = unique[0] ?? null
+    activeId.value = unique.at(-1) ?? null
+  }
+
+  function selectSeason(next: number | null): void {
+    season.value = next
+  }
+
   function clear(): void {
     selectedIds.value = []
     anchorId.value = null
     activeId.value = null
   }
 
-  return { selectedIds, selectedId, anchorId, select, toggle, selectRange, clear }
+  return {
+    selectedIds,
+    selectedId,
+    anchorId,
+    season,
+    select,
+    toggle,
+    selectRange,
+    setSelection,
+    selectSeason,
+    clear,
+  }
 })

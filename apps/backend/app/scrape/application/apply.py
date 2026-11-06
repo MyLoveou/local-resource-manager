@@ -15,7 +15,10 @@ from app.scrape.application.images import fetch_poster_bytes, normalize_https, u
 from app.scrape.application.providers.base import ScrapeDetail
 from app.shared.config import settings
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import Resource, WorkCatalog
+from app.library.domain.models import (
+    Resource,
+    WorkCatalog,
+)
 
 
 def _allowed_cover_set(detail: ScrapeDetail) -> set[str]:
@@ -54,8 +57,22 @@ async def apply_scrape_detail(
     apply_catalog: bool = True,
     apply_cover: bool = True,
     replace_user_cover: bool = False,
+    season: int | None = None,
 ) -> None:
     if resource.id is None:
+        return
+    if season is not None:
+        await _apply_to_season(
+            resources,
+            resource,
+            season,
+            detail,
+            apply_title=apply_title,
+            apply_catalog=apply_catalog,
+            apply_synopsis=apply_synopsis,
+            apply_cover=apply_cover,
+            cover_url=cover_url,
+        )
         return
     if not any((apply_title, apply_synopsis, apply_author, apply_tags, apply_catalog, apply_cover)):
         raise RuntimeError("至少选择一项写入")
@@ -69,11 +86,11 @@ async def apply_scrape_detail(
                 raise RuntimeError("封面不在候选中")
             if not (is_user_locked(resource) and not replace_user_cover):
                 payload = await fetch_poster_bytes(poster)
-    if apply_title:
+    if apply_title and detail.title.strip():
         resource.title = detail.title
     if apply_synopsis:
         resource.synopsis = detail.synopsis
-    if apply_catalog:
+    if apply_catalog and detail.catalog:
         resource.catalog = detail.catalog
     if apply_author:
         up = up_from_catalog(detail.catalog)
@@ -122,3 +139,86 @@ async def apply_scrape_detail(
     finally:
         if tmp_path is not None:
             tmp_path.unlink(missing_ok=True)
+
+
+async def _apply_to_season(
+    resources: ResourceRepository,
+    resource: Resource,
+    season: int,
+    detail: ScrapeDetail,
+    *,
+    apply_title: bool,
+    apply_catalog: bool,
+    apply_synopsis: bool,
+    apply_cover: bool,
+    cover_url: str | None,
+) -> None:
+    """把元数据写到某一季：档案、标题、简介，以及这一季自己的封面。"""
+    from sqlalchemy import text as sql_text
+
+    if resource.id is None:
+        return
+    session = resources._session
+    catalog = detail.catalog
+    payload = catalog.model_dump_json() if (apply_catalog and catalog is not None) else None
+    await session.execute(
+        sql_text(
+            "UPDATE seasons SET catalog_json = COALESCE(:catalog, catalog_json), "
+            "title = COALESCE(:title, title), "
+            "synopsis = COALESCE(:synopsis, synopsis) "
+            "WHERE resource_id = :rid AND season_number = :season"
+        ),
+        {
+            "catalog": payload,
+            "title": detail.title if apply_title and detail.title.strip() else None,
+            "synopsis": detail.synopsis if apply_synopsis and detail.synopsis else None,
+            "rid": resource.id,
+            "season": season,
+        },
+    )
+    if apply_cover:
+        cover_id = await _save_season_cover(resources, resource, season, detail, cover_url)
+        if cover_id is not None:
+            await session.execute(
+                sql_text(
+                    "UPDATE seasons SET cover_file_id = :fid "
+                    "WHERE resource_id = :rid AND season_number = :season"
+                ),
+                {"fid": cover_id, "rid": resource.id, "season": season},
+            )
+    await session.commit()
+
+
+async def _save_season_cover(
+    resources: ResourceRepository,
+    resource: Resource,
+    season: int,
+    detail: ScrapeDetail,
+    cover_url: str | None,
+) -> int | None:
+    """下载候选海报并存成季封面文件；失败不影响其它字段。"""
+    poster = normalize_https(cover_url) or normalize_https(detail.poster_url)
+    if not poster or poster not in _allowed_cover_set(detail):
+        return None
+    payload = await fetch_poster_bytes(poster)
+    if payload is None:
+        return None
+    data, mime = payload
+    suffix = { "image/png": ".png", "image/webp": ".webp" }.get(mime, ".jpg")
+    from app.library.domain.media_types import FILE_ROLE_COVER
+    from app.shared.config import settings
+
+    directory = settings.db_path.parent / "library" / resource.type.value / str(resource.id)
+    directory.mkdir(parents=True, exist_ok=True)
+    dest = directory / f"season{season:02d}-cover{suffix}"
+    dest.write_bytes(data)
+    file_row = await resources.add_file(
+        resource.id,
+        path=str(dest),
+        sha256=None,
+        size=dest.stat().st_size,
+        format_=suffix.lstrip("."),
+        role=FILE_ROLE_COVER,
+        commit=False,
+    )
+    return file_row.id

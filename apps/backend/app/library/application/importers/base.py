@@ -4,9 +4,12 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from app.shared.constants import SourceKind, is_hidden_fs_name
+from app.library.domain.models import (
+    SourceKind,
+    is_hidden_fs_name,
+)
 from app.library.domain.type_profile import IMPORT_EXTENSIONS, import_extensions, ingest_kind, profile_for
-from app.shared.models import ResourceType
+from app.library.domain.models import ResourceType
 
 
 class Importer:
