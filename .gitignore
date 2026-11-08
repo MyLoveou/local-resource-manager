@@ -44,3 +44,6 @@ snapshots/
 
 # GitMove 的 restic 仓库（含快照密文，绝不入库）
 snapshots-restic/
+
+# 跨项目经验总结（本地 junction，不跟踪）
+temp/
