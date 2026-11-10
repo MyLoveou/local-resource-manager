@@ -18,7 +18,10 @@ from app.scrape.application.schemas import ScrapeCurrent, ScrapePreview
 from app.scrape.domain.models import ScrapeJob, ScrapeJobStatus
 from app.scrape.infrastructure.repo import ScrapeRepository
 from app.shared.log import logger
-from app.shared.models import Resource, ResourceType
+from app.library.domain.models import (
+    Resource,
+    ResourceType,
+)
 
 
 class ScrapeError(Exception):
@@ -114,6 +117,7 @@ async def select_candidate(
     job_id: int,
     candidate_id: int,
     *,
+    season: int | None = None,
     cover_url: str | None = None,
     apply_title: bool = True,
     apply_synopsis: bool = True,
@@ -136,6 +140,21 @@ async def select_candidate(
     resource = await resources.get(job.resource_id)
     if resource is None:
         raise ScrapeError("资源不存在", 404)
+    if season is not None:
+        from sqlalchemy import select as _select
+
+        from app.library.infrastructure.orm import SeasonRow as _SeasonRow
+
+        found = (
+            await session.execute(
+                _select(_SeasonRow.id).where(
+                    _SeasonRow.resource_id == resource.id,
+                    _SeasonRow.season_number == season,
+                )
+            )
+        ).first()
+        if found is None:
+            raise ScrapeError(f"该作品没有第 {season} 季", 422)
     try:
         provider = provider_for_key(candidate.url)
         detail = await provider.detail(candidate.url)
@@ -151,6 +170,7 @@ async def select_candidate(
             apply_catalog=apply_catalog,
             apply_cover=apply_cover,
             replace_user_cover=replace_user_cover,
+            season=season,
         )
         await repo.mark_selected(candidate_id)
     except ScrapeError:
@@ -186,35 +206,47 @@ async def _search_channels(resource: Resource, job_query: str | None) -> list[Se
     return await _collect_hits(providers, title_q, title_q)
 
 
+# 每个渠道各自的上限；渠道之间互不挤占，也不做跨渠道去重
+_PER_PROVIDER_CAP = 15
+
+
 async def _collect_hits(
     providers: list[MetadataProvider],
     title: str,
     bili_blob: str,
 ) -> list[SearchHit]:
-    hits: list[SearchHit] = []
+    """逐渠道收集；同一渠道内的重复才丢弃，渠道之间各自独立。"""
+    merged: list[SearchHit] = []
     errors: list[str] = []
     for provider in providers:
         query = bili_blob if isinstance(provider, BilibiliProvider) else title
         if isinstance(provider, TmdbProvider):
             query = title
         try:
-            hits.extend(await provider.search(query))
+            found = await provider.search(query)
         except Exception as exc:
             name = type(provider).__name__
-            errors.append(f"{name}: {exc}")
-            logger.warning("刮削渠道失败 %s: %s", name, exc)
-    uniq: list[SearchHit] = []
-    seen: set[str] = set()
-    for hit in hits:
-        if hit.key in seen:
+            # 只带 str(exc) 常常是空的，补上类型名才能定位
+            detail = f"{type(exc).__name__}: {exc}".strip()
+            errors.append(f"{name}: {detail}")
+            logger.warning("刮削渠道失败 %s: %s", name, detail)
             continue
-        seen.add(hit.key)
-        uniq.append(hit)
-        if len(uniq) >= 20:
-            break
-    if not uniq and errors:
-        raise RuntimeError("；".join(errors))
-    return uniq
+        seen: set[str] = set()
+        kept = 0
+        for hit in found:
+            if hit.key in seen:
+                continue
+            seen.add(hit.key)
+            merged.append(hit)
+            kept += 1
+            if kept >= _PER_PROVIDER_CAP:
+                break
+    if not merged and errors:
+        hint = ""
+        if all(("ConnectError" in item or "Timeout" in item) for item in errors):
+            hint = "（网络不可达：请检查系统代理或节点）"
+        raise RuntimeError("；".join(errors) + hint)
+    return merged
 
 
 async def preview_candidate(session: AsyncSession, job_id: int, candidate_id: int) -> ScrapePreview:

@@ -4,9 +4,12 @@
  */
 import type { Resource } from './resource'
 import type { ResourceType } from './resource'
+import type { CollectionCardData } from './collection'
+import type { SavedView } from './savedView'
 /** 资源统计 */
 export interface ResourceStats {
   byType: Record<ResourceType, number>
+  previewsByType?: Record<string, string[]>
   totalSizeBytes: number
   trashedCount: number
   lostCount: number
@@ -26,6 +29,9 @@ export interface ConsumptionItem {
   title: string
   type: ResourceType
   action: string
+  thumbnailPath?: string | null
+  duration?: number | null
+  format?: string | null
   createdAt?: string | null
 }
 
@@ -36,4 +42,9 @@ export interface Overview {
   tasks: TaskSummary
   activeWork?: Resource[]
   recentConsumption?: ConsumptionItem[]
+}
+
+export interface HomeSummary extends Overview {
+  collections: CollectionCardData[]
+  savedTimelines: SavedView[]
 }

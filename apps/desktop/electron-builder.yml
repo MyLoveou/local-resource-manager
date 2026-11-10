@@ -1,0 +1,42 @@
+appId: com.myloveou.local-resource-manager
+productName: 资源管理器
+executableName: local-resource-manager
+
+directories:
+  output: ../../release
+  buildResources: build
+
+asar: true
+
+publish:
+  provider: github
+  owner: MyLoveou
+  repo: local-resource-manager
+
+# 随包后端：PyInstaller onedir 产物（release.mjs 先冻结再打包）
+extraResources:
+  - from: ../backend/dist/source-manager-backend
+    to: backend
+  - from: build/ffprobe
+    to: ffprobe
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+  artifactName: local-resource-manager-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 资源管理器
+  deleteAppDataOnUninstall: false
+  artifactName: local-resource-manager-${version}-win-${arch}-setup.${ext}

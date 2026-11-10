@@ -6,21 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.application.workbench import add_work_directory, add_work_note, delete_work_note, record_consumption
 from app.shared.db.db import get_session
-from app.shared.models import ApiModel, Resource
+from app.shared.models import ApiModel, StrictApiModel
+from app.library.domain.models import Resource
 
 router = APIRouter(tags=["library-workbench"])
 
 
-class WorkDirectoryCreate(ApiModel):
+class WorkDirectoryCreate(StrictApiModel):
     path: str = Field(min_length=1)
 
 
-class WorkNoteCreate(ApiModel):
+class WorkNoteCreate(StrictApiModel):
     title: str = ""
     content: str = ""
 
 
-class ConsumptionCreate(ApiModel):
+class ConsumptionCreate(StrictApiModel):
     resource_id: int
     action: str = "open"
 

@@ -28,3 +28,14 @@ import ToolBar from '@/ui/layouts/ToolBar/index.vue'
 2. 排查：打开 DevTools Console，`Failed to resolve component` 直接点名。
 3. 此项目踩过两次：占位组件目录是空的 + 组件未 import。
 4. 通用组件建议注册为全局组件或统一 barrel 导出，减少遗漏。
+
+## 扩展阅读
+
+### 站内（本仓）
+
+- [24-桌面端分层与模块封装](24-桌面端分层与模块封装.md)
+- [21-虚拟滚动与分页](21-虚拟滚动与分页.md)
+
+### 站外知识
+
+- [Vue 3 文档](https://cn.vuejs.org/guide/)

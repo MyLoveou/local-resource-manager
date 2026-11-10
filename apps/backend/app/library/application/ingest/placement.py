@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from app.library.domain.type_profile import GAME_LAUNCH_EXTENSIONS, IMAGE_EXTENSIONS
-from app.shared.constants import is_hidden_fs_name
+from app.library.domain.models import is_hidden_fs_name
 from app.shared.fs.file_ops import FileOps
 
 _SKIP_FILES = frozenset({"thumbs.db", "desktop.ini"})

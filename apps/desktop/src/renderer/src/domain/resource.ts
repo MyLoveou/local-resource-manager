@@ -4,6 +4,8 @@
  */
 
 import type { StorageKind } from './libraryTypes'
+import type { CharacterBrief } from './character'
+import type { PersonBrief } from './person'
 
 /** 资源类型。anime/av 是作品，不是单集。 */
 export type ResourceType =
@@ -35,6 +37,10 @@ export interface Resource {
   rating?: number | null
   /** 封面本地缓存路径 */
   coverPath?: string | null
+  /** 作品封面 URL（已签名）；详情页头部使用 */
+  coverUrl?: string | null
+  /** 导入时的原始文件名/目录名 */
+  sourceName?: string | null
   /** 网格/面板缩略图 URL；展示面禁止回退 coverPath */
   thumbnailPath?: string | null
   status: ResourceStatus
@@ -48,6 +54,11 @@ export interface Resource {
   extra?: Record<string, unknown>
   /** 有未确认的刮削候选 */
   scrapePending?: boolean
+  /** 照片时间线：null/undefined=按 EXIF 自动；true/false=手动 */
+  timelineVisible?: boolean | null
+  mapVisible?: boolean | null
+  characters?: CharacterBrief[]
+  persons?: PersonBrief[]
   createdAt?: string | null
   updatedAt?: string | null
   /** 资源级作者（自由文本） */
@@ -56,7 +67,7 @@ export interface Resource {
   files?: ResourceFile[]
   todos?: ResourceTodo[]
   /** 独立分类词条，不是资源 type */
-  category?: Category | null
+  categories?: Category[]
   /** 仅 anime/av 详情：季集树 */
   seasons?: SeriesSeason[]
   extras?: SeriesExtra[]
@@ -70,12 +81,24 @@ export interface SeriesEpisode {
   duration?: number | null
   width?: number | null
   height?: number | null
+  /** 每集封面（已签名）；空则回退作品封面 */
+  coverUrl?: string | null
+  hasCover?: boolean
+  /** 是否已挂字幕 */
+  hasSubtitles?: boolean
 }
 
 export interface SeriesSeason {
   id?: number
   seasonNumber: number
   title?: string | null
+  /** 季自己的站点档案（多季作品每季是独立条目） */
+  catalog?: WorkCatalog | null
+  /** 季简介（刮削写入） */
+  synopsis?: string | null
+  /** 季封面（已签名）；空则回退作品封面 */
+  coverUrl?: string | null
+  hasCover?: boolean
   episodes?: SeriesEpisode[]
 }
 
@@ -99,6 +122,9 @@ export interface SeriesExtra {
   fileId: number
   title: string
   duration?: number | null
+  /** 特典封面（已签名）；空则回退作品封面 */
+  coverUrl?: string | null
+  hasCover?: boolean
 }
 
 /** 资源关联的物理文件（一个资源可含多文件） */
@@ -106,7 +132,8 @@ export interface ResourceFile {
   id?: number
   resourceId: number
   path: string
-  /** 文件哈希，图片元数据匹配键 */
+  contentUrl?: string | null
+  /** 文件哈希，用于去重与完整性校验 */
   sha256?: string | null
   size?: number | null
   format?: string | null
@@ -122,6 +149,19 @@ export interface ResourceFile {
   bitrate?: number | null
   /** 图片拍摄时间（EXIF） */
   exifTakenAt?: string | null
+  /** WGS84 纬度 */
+  exifLat?: number | null
+  /** WGS84 经度 */
+  exifLng?: number | null
+  /** 机身 */
+  exifCamera?: string | null
+  /** 镜头 */
+  exifLens?: string | null
+  exifIso?: number | null
+  /** 光圈，如 f/2.8 */
+  exifAperture?: string | null
+  /** 快门，如 1/125 */
+  exifShutter?: string | null
   createdAt?: string | null
 }
 
@@ -138,6 +178,10 @@ export interface ResourceTodo {
 export interface Category {
   id?: number
   name: string
+  type?: ResourceType
+  parentId?: number | null
+  sort?: number
+  isSystem?: boolean
 }
 
 /** 标签 */
@@ -153,7 +197,7 @@ export interface MetadataDraft {
   synopsis: string
   author: string
   ratingStars: number
-  categoryName: string | null
+  categoryIds: number[]
   tagNames: string[]
   tagInput: string
   pendingCoverPath: string | null
@@ -185,6 +229,21 @@ export interface ResourcePageQuery {
   afterKey?: string | null
   q?: string
   tagIds?: number[]
+  categoryId?: number | null
+  categoryIds?: number[]
+  uncategorized?: boolean
+  dateFrom?: string
+  dateTo?: string
+  takenDate?: string
+  untimed?: boolean
+  timelineVisible?: boolean
+  timelineMedia?: boolean
+  mapVisible?: boolean
+  mapOnly?: boolean
+  characterIds?: number[]
+  personIds?: number[]
+  /** 主库默认隐藏合集成员；true 时一并返回 */
+  includeCollected?: boolean
   sort?: string
   order?: 'asc' | 'desc'
 }

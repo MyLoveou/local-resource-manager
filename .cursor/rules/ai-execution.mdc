@@ -1,0 +1,52 @@
+---
+description: "AI Agent 执行规范、子代理、Skill 触发与后端重启义务"
+alwaysApply: true
+---
+
+# AI 执行规范
+
+> 工作流：`workflows/README.md`
+
+## 必读索引
+
+| 类型 | 路径 |
+|------|------|
+| 总览 | `AGENTS.md` |
+| 浓缩基线 | `openspec/baseline.md` 或 `docs/product/baseline.md` |
+| 事实基线 | `docs/product/facts.md`（实现 + 方向） |
+| 决策记忆 | `docs/product/decisions.md` |
+| 工作流 | `workflows/README.md` |
+| MCP | `mcp.json`（OpenCode：`opencode.json` 的 `mcp`）· 说明 `mcp/README.md` |
+| 硬约束 | `constraints.md` |
+| 触发 | `rules/workflow-triggers` |
+| OpenSpec 门禁 | `rules/common-openspec` |
+
+## 子代理（Task / `@`）
+
+| 场景 | 使用 |
+|------|------|
+| 需求沉淀 | `@product-manager` |
+| 架构 | `@architect` / `@planner` |
+| 改 Java | `@backend-dev` |
+| 改 React | `@frontend-dev` |
+| 改 Vue | `@frontend-vue-dev` |
+| 写完代码 | `@code-reviewer` |
+| 文档 / 契约 | `@doc-sync` |
+| 验收 | `@qa-engineer` |
+| 新能力规划与实现 | `project-spec` |
+| 修缺陷 | `project-spec-fix` |
+| 改样式 | `project-spec-style` |
+| 界面方向 | `project-spec-design` |
+
+命中上表或 `workflow-triggers` **必须先读**对应 Skill。
+
+## 硬义务：后端改动后重启
+
+修改 `backend/**` 后交付前：停旧进程 → `.\mvnw.cmd spring-boot:run`（或项目启动命令）→ migration 检查 → HTTP 冒烟。
+
+## DoD 摘要
+
+- `verification-gate` Skill
+- `cd frontend && npm run build`、`.\mvnw.cmd test`（或 `mvn test`）
+- 新能力：OpenSpec 规划已确认后再编码；`tests.md` 已跑
+- 用户未要求时不 commit/push

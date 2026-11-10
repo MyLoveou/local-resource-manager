@@ -1,5 +1,7 @@
 # 任务 · library-type-platform
 
+> 收尾状态（2026-10-27）：剩余项均为需人工在 Electron 内验收，清单见 `docs/requirements/收尾清单.md`。
+
 > 用户已授权 apply。分支 `feat/library-type-platform`。
 
 ## 1. 对齐

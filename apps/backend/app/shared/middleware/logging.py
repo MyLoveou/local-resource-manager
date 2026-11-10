@@ -1,7 +1,7 @@
 """HTTP 访问日志。中间件只记 status；响应体在路由/用例里打（见 library overview）。"""
 from fastapi import Request
 
-from ..log import logger
+from ..log import logger, operations_logger
 
 
 async def log_requests(request: Request, call_next):
@@ -12,4 +12,8 @@ async def log_requests(request: Request, call_next):
     response = await call_next(request)
     if not quiet:
         logger.info("Response: %s %s -> %s", request.method, path, response.status_code)
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        operations_logger.info(
+            "operation: %s %s -> %s", request.method, path, response.status_code
+        )
     return response

@@ -7,7 +7,10 @@ import subprocess
 from pathlib import Path
 
 from app.shared.log import logger
-from app.shared.media_types import FFMPEG_BIN, FFMPEG_TIMEOUT_SEC
+from app.library.domain.media_types import (
+    FFMPEG_BIN,
+    FFMPEG_TIMEOUT_SEC,
+)
 
 
 def extract_audio_cover(audio: Path, dest_jpg: Path) -> bool:

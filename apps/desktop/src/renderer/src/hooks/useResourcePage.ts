@@ -1,10 +1,10 @@
 /**
- * 资源分页状态机：首屏替换、触底 keyset 追加、bump 只重拉首页。
+ * 资源分页状态机：首屏替换、触底 keyset 追加、resourceRevision 变化重拉第一页。
  */
 import { computed, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from 'vue'
 import { getResources, invalidateResourceCache } from '@/infrastructure/http'
 import { useLibraryStore } from '@/application/stores/library'
-import type { Resource, ResourceStatus, ResourceType } from '@/domain'
+import type { CollectionCardData, Resource, ResourceStatus, ResourceType } from '@/domain'
 
 const DEFAULT_LIMIT = 80
 
@@ -15,9 +15,18 @@ export function useResourcePage(options: {
   sort?: MaybeRefOrGetter<string>
   order?: MaybeRefOrGetter<'asc' | 'desc'>
   tagIds?: MaybeRefOrGetter<number[]>
+  characterIds?: MaybeRefOrGetter<number[]>
+  personIds?: MaybeRefOrGetter<number[]>
+  categoryIds?: MaybeRefOrGetter<number[]>
+  uncategorized?: MaybeRefOrGetter<boolean>
+  includeCollected?: MaybeRefOrGetter<boolean>
+  takenDate?: MaybeRefOrGetter<string | undefined>
+  untimed?: MaybeRefOrGetter<boolean>
+  timelineVisible?: MaybeRefOrGetter<boolean | undefined>
+  timelineMedia?: MaybeRefOrGetter<boolean>
   limit?: number
 }) {
-  const items = ref<Resource[]>([])
+  const items = ref<(Resource | CollectionCardData)[]>([])
   const total = ref(0)
   const hasMore = ref(true)
   const loading = ref(false)
@@ -36,6 +45,15 @@ export function useResourcePage(options: {
   const sort = computed(() => toValue(options.sort) ?? 'createdAt')
   const order = computed(() => toValue(options.order) ?? 'desc')
   const tagIds = computed(() => toValue(options.tagIds) ?? [])
+  const characterIds = computed(() => toValue(options.characterIds) ?? [])
+  const personIds = computed(() => toValue(options.personIds) ?? [])
+  const categoryIds = computed(() => toValue(options.categoryIds) ?? [])
+  const uncategorized = computed(() => toValue(options.uncategorized) ?? false)
+  const includeCollected = computed(() => toValue(options.includeCollected) ?? false)
+  const takenDate = computed(() => toValue(options.takenDate))
+  const untimed = computed(() => toValue(options.untimed) ?? false)
+  const timelineVisible = computed(() => toValue(options.timelineVisible))
+  const timelineMedia = computed(() => toValue(options.timelineMedia) ?? false)
 
   async function fetchPage(append: boolean): Promise<void> {
     const run = runFetch(append)
@@ -65,6 +83,15 @@ export function useResourcePage(options: {
         order: order.value,
         q: q.value.trim() || undefined,
         tagIds: tagIds.value.length ? tagIds.value : undefined,
+        characterIds: characterIds.value.length ? characterIds.value : undefined,
+        personIds: personIds.value.length ? personIds.value : undefined,
+        categoryIds: categoryIds.value.length ? categoryIds.value : undefined,
+        uncategorized: uncategorized.value,
+        includeCollected: includeCollected.value,
+        takenDate: takenDate.value,
+        untimed: untimed.value,
+        timelineVisible: timelineVisible.value,
+        timelineMedia: timelineMedia.value,
         afterKey: append ? cursorKey : undefined,
         afterId: append ? cursorId : undefined,
       })
@@ -106,6 +133,49 @@ export function useResourcePage(options: {
     await fetchPage(false)
   }
 
+  /** 监视导入软刷新：重拉首页，只把新项插到列表头部，保留浏览位置。 */
+  async function refreshTop(): Promise<void> {
+    const id = ++requestId
+    loading.value = true
+    error.value = null
+    try {
+      const page = await getResources({
+        type: type.value,
+        status: status.value,
+        limit,
+        sort: sort.value,
+        order: order.value,
+        q: q.value.trim() || undefined,
+        tagIds: tagIds.value.length ? tagIds.value : undefined,
+        characterIds: characterIds.value.length ? characterIds.value : undefined,
+        personIds: personIds.value.length ? personIds.value : undefined,
+        categoryIds: categoryIds.value.length ? categoryIds.value : undefined,
+        uncategorized: uncategorized.value,
+        includeCollected: includeCollected.value,
+        takenDate: takenDate.value,
+        untimed: untimed.value,
+        timelineVisible: timelineVisible.value,
+        timelineMedia: timelineMedia.value,
+      })
+      if (id !== requestId) return
+      total.value = page.total
+      hasMore.value = page.hasMore
+      const seen = new Set(items.value.map((item) => item.id))
+      const fresh = page.items.filter((item) => item.id !== undefined && !seen.has(item.id))
+      if (fresh.length) {
+        items.value = [...fresh, ...items.value]
+      }
+    } catch (err) {
+      if (id !== requestId) return
+      error.value = err
+    } finally {
+      if (id === requestId) {
+        loading.value = false
+        loadingMore.value = false
+      }
+    }
+  }
+
   async function loadMore(): Promise<void> {
     const waitingAppend = inflight != null && inflightAppend
     if (inflight) await inflight
@@ -120,20 +190,28 @@ export function useResourcePage(options: {
 
   const library = useLibraryStore()
   watch(
-    () => library.revision,
+    () => library.resourceRevision(type.value),
+    () => {
+      invalidateResourceCache()
+      void reset()
+    }
+  )
+
+  watch(
+    () => library.watchRevision,
     () => {
       invalidateResourceCache()
       if (
         type.value === undefined ||
-        library.importedType === null ||
-        library.importedType === type.value
+        library.watchType === null ||
+        library.watchType === type.value
       ) {
-        void reset()
+        void refreshTop()
       }
     }
   )
 
-  watch([type, q, sort, order, tagIds], () => {
+  watch([type, q, sort, order, tagIds, characterIds, personIds, categoryIds, uncategorized, includeCollected, takenDate, untimed, timelineVisible, timelineMedia], () => {
     void reset()
   })
 
@@ -145,6 +223,7 @@ export function useResourcePage(options: {
     loadingMore,
     error,
     reset,
+    refreshTop,
     loadMore,
   }
 }

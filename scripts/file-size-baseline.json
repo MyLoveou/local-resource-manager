@@ -1,0 +1,13 @@
+{
+  "apps/backend/app/library/infrastructure/repositories_resources.py": 1663,
+  "apps/desktop/src/renderer/src/ui/layouts/InfoPanel/index.vue": 1314,
+  "apps/desktop/src/renderer/src/views/AI/index.vue": 1266,
+  "apps/backend/app/ai/application/service.py": 1227,
+  "apps/backend/app/ai/application/search.py": 934,
+  "apps/backend/app/library/application/use_cases.py": 869,
+  "apps/backend/app/library/application/import_service.py": 828,
+  "apps/desktop/src/renderer/src/components/SettingsModal/index.vue": 769,
+  "apps/desktop/src/renderer/src/components/PhotoTimeline/index.vue": 708,
+  "apps/desktop/src/renderer/src/ui/layouts/ToolBar/index.vue": 700,
+  "apps/backend/app/library/infrastructure/repositories_people.py": 577
+}

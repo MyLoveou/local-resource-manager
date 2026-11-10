@@ -1,0 +1,32 @@
+---
+description: "Vue Composables & Lifecycle"
+globs: "**/composables/**/*.ts, **/use-*.ts, **/*.vue"
+alwaysApply: false
+---
+
+# Vue Composables & Lifecycle
+
+> Vue composables (`useX`) — not editor hooks runtime.
+
+## Lifecycle
+
+- `onMounted` / `onUnmounted` for DOM subscriptions
+- `onBeforeUnmount` for cleanup before tear-down
+- Avoid async setup without handling cancellation
+
+## Watchers
+
+- Prefer `watch` with explicit source over `watchEffect` when dependencies are unclear
+- Use `watchOnce` for one-time initialization when appropriate
+- Debounce expensive watchers on user input
+
+## Reactivity pitfalls
+
+- Do not destructure `reactive()` without `toRefs`
+- Use `shallowRef` for large immutable objects when deep tracking is unnecessary
+- `ref` in template auto-unwraps; in script use `.value`
+
+## Async
+
+- Race: abort previous fetch in composable when id/query changes
+- Loading / error state as explicit refs, not implicit globals

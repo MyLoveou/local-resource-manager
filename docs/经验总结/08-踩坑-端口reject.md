@@ -34,3 +34,16 @@ srv.close(() => resolve(port))   // ✅
 - 监听/回调边界处最容易手滑 `resolve`/`reject` 互换。
 - 这种 bug 症状很"远"（表现为后端没起来、界面连不上），但根因在最底层第一步。**排障从调用链最前端（端口获取）开始**。
 - 单元测试能 5 秒抓到：`getFreePort()` 应 resolve 一个端口数字。
+
+## 扩展阅读
+
+### 站内（本仓）
+
+- [02-Electron后端子进程编排](02-Electron后端子进程编排.md)
+- [09-踩坑-健康检查未就绪崩溃](09-踩坑-健康检查未就绪崩溃.md)
+- [48-图解-启动时序与发布流水线](48-图解-启动时序与发布流水线.md)
+
+### 站外知识
+
+- [Electron 文档](https://www.electronjs.org/zh/docs/latest/)
+- [Uvicorn](https://www.uvicorn.org/)

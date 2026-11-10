@@ -1,6 +1,6 @@
 # 模块拆解 · work-consumption-hub
 
-> 状态：**草案**（2026-09-03）
+> 状态：**已定稿**（2026-09-27 · 随 `work-consumption-hub` 定稿，`D-20260927-05`）
 > 主需求见 [work-consumption-hub.md](work-consumption-hub.md)。
 > 优先级：P0 = 消费渠道 + 工作目录 · P1 = 扩展类型 + 工作概览
 > 前置模块：LRM M0–M6（见 [lrm-modules.md](lrm-modules.md)）
@@ -130,7 +130,7 @@ interface WorkNote {
 - [ ] 空态：无进行中工作时友好提示
 - [ ] 后端 API：`GET /overview` 扩展字段（或独立 endpoint）
 
-## 6. API 增量（草案）
+## 6. API 增量
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

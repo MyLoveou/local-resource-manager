@@ -10,10 +10,16 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.library.infrastructure.repositories import ResourceRepository
-from app.shared.db.orm import ConsumptionEventRow, ResourceRow, ResourceTodoRow
-from app.shared.infrastructure.settings_repo import KEY_CONSUME, SettingsRepository
-from app.shared.media_types import FILE_ROLE_PRIMARY
-from app.shared.models import Resource, ResourceStatus, ResourceType, StorageKind
+from app.library.infrastructure.orm import ConsumptionEventRow, FileRow, ResourceRow, ResourceTodoRow
+from app.settings.domain.constants import KEY_CONSUME, KEY_SYSTEM
+from app.settings.infrastructure.settings_repo import SettingsRepository
+from app.library.domain.media_types import FILE_ROLE_PRIMARY
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    StorageKind,
+)
 
 ChannelMode = str
 MODES = ("embedded", "system", "command", "workbench")
@@ -61,6 +67,10 @@ async def save_channels(session: AsyncSession, channels: dict) -> dict[str, dict
     await SettingsRepository(session).put_json(KEY_CONSUME, {"channels": normalized})
     return normalized
 
+# 保存系统设置
+async def save_system_settings(session: AsyncSession, settings: dict) -> dict:
+    await SettingsRepository(session).put_json(KEY_SYSTEM, settings)
+    return settings
 
 async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
     folder = Path(raw_path)
@@ -68,8 +78,20 @@ async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
         raise ValueError("path is not a directory")
     resolved = str(folder.resolve())
     repo = ResourceRepository(session)
-    if await repo.file_exists_by_path(resolved):
-        raise ValueError("directory already added")
+    existing = await _work_directory_at(session, resolved)
+    if existing is not None and existing.id is not None:
+        if existing.status == ResourceStatus.ACTIVE:
+            raise ValueError("directory already added")
+        if existing.is_trashed:
+            existing.restore()
+        elif existing.is_lost:
+            existing.status = ResourceStatus.ACTIVE
+            existing._touch()
+        else:
+            raise ValueError("directory already added")
+        updated = await repo.update(existing.id, existing)
+        assert updated is not None
+        return updated
     created = await repo.create(
         Resource(
             type=ResourceType.WORK_DIRECTORY,
@@ -93,6 +115,23 @@ async def add_work_directory(session: AsyncSession, raw_path: str) -> Resource:
     got = await repo.get(created.id)
     assert got is not None
     return got
+
+
+async def _work_directory_at(session: AsyncSession, resolved: str) -> Resource | None:
+    stmt = (
+        select(ResourceRow.id)
+        .join(FileRow, FileRow.resource_id == ResourceRow.id)
+        .where(
+            FileRow.path == resolved,
+            FileRow.role == FILE_ROLE_PRIMARY,
+            ResourceRow.type == ResourceType.WORK_DIRECTORY.value,
+        )
+        .limit(1)
+    )
+    resource_id = await session.scalar(stmt)
+    if resource_id is None:
+        return None
+    return await ResourceRepository(session).get(int(resource_id))
 
 
 def _notes(resource: Resource) -> list[dict]:
@@ -147,12 +186,17 @@ async def record_consumption(session: AsyncSession, resource_id: int, action: st
 async def active_work(session: AsyncSession, limit: int = 10) -> list[Resource]:
     cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     open_ids = select(ResourceTodoRow.resource_id).where(ResourceTodoRow.done == 0)
+    recent_open = select(ConsumptionEventRow.resource_id).where(ConsumptionEventRow.created_at >= cutoff)
     stmt = (
         select(ResourceRow)
         .where(
             ResourceRow.type == ResourceType.WORK_DIRECTORY.value,
             ResourceRow.status == ResourceStatus.ACTIVE.value,
-            or_(ResourceRow.id.in_(open_ids), ResourceRow.updated_at >= cutoff),
+            or_(
+                ResourceRow.id.in_(open_ids),
+                ResourceRow.updated_at >= cutoff,
+                ResourceRow.id.in_(recent_open),
+            ),
         )
         .order_by(ResourceRow.updated_at.desc())
         .limit(limit)
@@ -176,14 +220,32 @@ async def recent_consumption(session: AsyncSession, limit: int = 10) -> list[dic
         .limit(limit)
     )
     found = (await session.execute(stmt)).all()
-    return [
-        {
-            "id": event.id,
-            "resource_id": event.resource_id,
-            "title": resource.title,
-            "type": resource.type,
-            "action": event.action,
-            "created_at": event.created_at,
-        }
-        for event, resource in found
-    ]
+    repo = ResourceRepository(session)
+    resources = await repo.attach_listed([_row(resource) for _event, resource in found])
+    await repo.attach_primary_files(resources)
+    by_id = {
+        resource.id: resource
+        for resource in resources
+        if resource.id is not None
+    }
+    items: list[dict] = []
+    for event, resource_row in found:
+        resource = by_id.get(resource_row.id)
+        primary = next(
+            (file for file in (resource.files if resource else []) if file.role == FILE_ROLE_PRIMARY),
+            None,
+        )
+        items.append(
+            {
+                "id": event.id,
+                "resource_id": event.resource_id,
+                "title": resource_row.title,
+                "type": resource_row.type,
+                "action": event.action,
+                "thumbnail_path": resource.thumbnail_path if resource else None,
+                "duration": primary.duration if primary else None,
+                "format": primary.format if primary else None,
+                "created_at": event.created_at,
+            }
+        )
+    return items

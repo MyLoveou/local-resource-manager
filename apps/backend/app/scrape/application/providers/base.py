@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.shared.models import WorkCatalog
+from app.library.domain.models import WorkCatalog
 
 
 @dataclass(frozen=True)

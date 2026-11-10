@@ -16,7 +16,12 @@ from app.scrape.application.jobs import ScrapeError, create_or_reuse_job, run_se
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
 from app.scrape.infrastructure.repo import ScrapeRepository
 from app.shared.db.migrations import migrate
-from app.shared.models import Resource, ResourceStatus, ResourceType, WorkCatalog
+from app.library.domain.models import (
+    Resource,
+    ResourceStatus,
+    ResourceType,
+    WorkCatalog,
+)
 
 
 class FakeProvider(MetadataProvider):

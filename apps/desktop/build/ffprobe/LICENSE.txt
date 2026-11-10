@@ -1,0 +1,13 @@
+FFprobe binary bundled with this application
+============================================
+
+The ffprobe.exe shipped in this directory is provided by the ffprobe-installer
+project (https://github.com/ffprobe-installer/ffprobe) and is built from
+FFmpeg (https://ffmpeg.org/).
+
+License: GPL-3.0 (as reported by the win32-x64 package). FFmpeg licensing
+details: https://ffmpeg.org/legal.html
+
+Source code:
+- FFmpeg: https://ffmpeg.org/download.html
+- Build used: https://www.gyan.dev/ffmpeg/builds/

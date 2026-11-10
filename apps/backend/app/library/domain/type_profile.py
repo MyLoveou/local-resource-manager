@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from app.shared.models import ResourceType, StorageKind
+from app.library.domain.models import (
+    ResourceType,
+    StorageKind,
+)
 
 IngestKind = Literal["file", "series", "package", "directory"]
 ConsumeKind = Literal[

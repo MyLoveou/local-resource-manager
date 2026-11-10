@@ -19,7 +19,10 @@ from app.library.infrastructure.repositories import ResourceRepository, TaskSumm
 from app.main import app
 from app.shared.db.migrations import migrate
 from app.shared.fs.file_ops import FileOps
-from app.shared.models import ResourceType, StorageKind
+from app.library.domain.models import (
+    ResourceType,
+    StorageKind,
+)
 
 _PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"

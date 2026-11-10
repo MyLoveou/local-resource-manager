@@ -1,6 +1,6 @@
 # 页面结构 · work-consumption-hub
 
-> 状态：**草案**（2026-09-03）
+> 状态：**已定稿**（2026-09-27 · 随 `work-consumption-hub` 定稿，`D-20260927-05`）
 > 主需求见 [work-consumption-hub.md](work-consumption-hub.md)。
 > 基础布局继承 [lrm-ui.md](lrm-ui.md) 三栏结构，以下为 **增量变更**。
 

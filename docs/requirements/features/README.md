@@ -1,16 +1,90 @@
 # L1 需求文档
 
+> 按资源类型/跨类型能力的需求视图见 [`../README.md`](../README.md)；本目录保留每个能力的详细 L1/L2/L3。
+
 需求沉淀维护的定稿需求。新能力用子目录 `features/<id>/需求.md`；文首含状态（草案 / 评审中 / 已定稿）。
 
-## library-collections（**设计待确认**）
+## smart-import（**L1 已定稿 · S1 L3 已出** · 2026-10-25）
 
-> 用户自建一组资源。不是系列。分支 `feat/library-collections`。禁止编码。
+> 导入时按资源类型产出「可解释 + 带置信度」的建议（改名 / 分类 / 是否值得 AI 分析），由用户选择采纳。不是自动跑 AI。
 
 | 文档 | 内容 |
 |------|------|
-| [`library-collections/需求.md`](library-collections/需求.md) | IN/OUT、C1–C8 |
-| [`library-collections/设计.md`](library-collections/设计.md) | 两张表、与系列的边界 |
-| [`library-collections/handoff.md`](library-collections/handoff.md) | 待确认设计 |
+| [`smart-import/需求.md`](smart-import/需求.md) | 现状缺口、ImportAction + Suggestion 模型、批量审阅、V1–V15 验收、Q1–Q5 已拍板 |
+| [`smart-import/实现方案.md`](smart-import/实现方案.md) | S1 L3：`0032` 迁移、动作注册表、清洗引擎、4 组接口、文件清单、风险 |
+
+## video-management（**L1 已定稿 · S1 L3 已出** · 2026-10-25 · D-20261025-01）
+
+> 图片库阶段手验通过后的下一阶段。播放进度与续播（S1）→ 播放器体验与字幕（S2）→ 视频专属维度与刮削（S3）。
+
+| 文档 | 内容 |
+|------|------|
+| [`video-management/需求.md`](video-management/需求.md) | 现状与缺口、5 块 IN/OUT、切片顺序、V1–V14 验收、Q1–Q5 已拍板 |
+| [`video-management/实现方案.md`](video-management/实现方案.md) | S1 L3：`0031` 迁移、4 个接口契约、文件清单、数据流、验收映射 |
+
+## photo-management-next（**R1 已落地 · R2–R4 需求收集** · 2026-10-18）
+
+> R1 批量加入合集已实现；多时间线（旅游/漫展）、角色维度（角色/作品/扮演者）、本地人脸识别与模型管理待设计。
+
+| 文档 | 内容 |
+|------|------|
+| [`photo-management-next/需求.md`](photo-management-next/需求.md) | R1–R4、候选方案、验收与开放问题；R1 实现记录 |
+
+## timeline-annotations（**v1 已实现 · 2026-10-20**）
+
+> 时间线某天/某条时间线的备注与手动地点名；日期备注全局一条、保存时间线备注一条；不改 EXIF。地图由 `photo-timeline-map` 的地图视图承接。
+
+| 文档 | 内容 |
+|------|------|
+| [`timeline-annotations/需求.md`](timeline-annotations/需求.md) | 日期备注/时间线备注/地点 IN-OUT、US-A.1–A.7、v1 实现记录 |
+
+## library-workspace（**已落地 · 待发版手验** · 2026-10-19）
+
+> 资源底层 + 每类型分类树 + 资源库/视图导航 + 首页工作台；含合集 D 卡与批量快捷键。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-workspace/需求.md`](library-workspace/需求.md) | 已确认决策、W1–W7 验收、IN/OUT |
+| [`library-workspace/设计.md`](library-workspace/设计.md) | L2：模型/交互/模块/切片/开放问题 |
+| [`library-workspace/实现方案.md`](library-workspace/实现方案.md) | L3：路径/契约/数据流/纵向步骤 |
+| [`library-workspace/handoff.md`](library-workspace/handoff.md) | 已落地；发版手验/提交待办 |
+
+## platform-debt（**已定稿 · 已落地** · D-20260927-06）
+
+> D1 Notify 迁移、D2 token 校验、D3 导入进度分相、D4 事件循环**四项均已落地**（2026-09-27）。余 Electron 手验（媒体豁免生效 + 导入大目录时 `/health` 可用）。
+
+| 文档 | 内容 |
+|------|------|
+| [`platform-debt/需求.md`](platform-debt/需求.md) | 四项债的 IN/OUT、可测验收 A1–A6 / B1–B3 |
+| [`platform-debt/设计.md`](platform-debt/设计.md) | token 中间件与豁免取舍、事件循环判定规则、切片契约 |
+| [`platform-debt/实现方案.md`](platform-debt/实现方案.md) | L3：文件清单、纵向步骤、阻塞点核对表 |
+
+## theme-tokens（**已定稿** · 来自 D-20260927-04）
+
+> 主题令牌补齐：状态色/交互态/背景层次/圆角，并清零组件内硬编码颜色。第一刀不做字号/阴影。
+
+| 文档 | 内容 |
+|------|------|
+| [`theme-tokens/需求.md`](theme-tokens/需求.md) | IN/OUT、T1–T6 验收、Q1–Q4 已确认 |
+
+## quality-and-deploy（**已定稿 · 边界结论** · D-20260927-04）
+
+> 只保留拆分与边界：S3 已拆为 `theme-tokens`；S4 Docker/远程后端**冻结**；S1/S2 退回观察；S5–S7 保持 OUT。本文件不再作为可实施需求。
+
+| 文档 | 内容 |
+|------|------|
+| [`quality-and-deploy/需求.md`](quality-and-deploy/需求.md) | 七条拆分（S1–S7）与逐条定论 §7 |
+| [`quality-and-deploy/handoff.md`](quality-and-deploy/handoff.md) | 轮次 2 结论 |
+
+## library-collections（**已定稿** · 需求 + L2 设计 · D-20260927-03）
+
+> 用户自建一组资源。不是系列。需求与 L2 设计均已定稿，待 L3 后才可编码。分支 `feat/library-collections`。
+
+| 文档 | 内容 |
+|------|------|
+| [`library-collections/需求.md`](library-collections/需求.md) | IN/OUT、C1–C8、轮次 2 决策清单 |
+| [`library-collections/设计.md`](library-collections/设计.md) | 两张表、与系列的边界（L2 已定稿） |
+| [`library-collections/handoff.md`](library-collections/handoff.md) | 下一步 L3 |
 
 ## app-settings-first（**已落地** · D-20260923-04）
 
@@ -23,27 +97,7 @@
 | [`app-settings-first/实现方案.md`](app-settings-first/实现方案.md) | REST、文件清单 |
 | [`app-settings-first/handoff.md`](app-settings-first/handoff.md) | 待 apply |
 
-## download-magnet-aria2（**已落地** · D-20260923-06）
-
-> 磁力：本机 aria2c → 复制进视频库。HTTP 直链仍走 httpx。无 rqbit。
-
-| 文档 | 内容 |
-|------|------|
-| [`download-magnet-aria2/需求.md`](download-magnet-aria2/需求.md) | IN/OUT |
-| [`download-magnet-aria2/设计.md`](download-magnet-aria2/设计.md) | RPC、校验 |
-| [`download-magnet-aria2/实现方案.md`](download-magnet-aria2/实现方案.md) | 文件与错误文案 |
-| [`download-magnet-aria2/handoff.md`](download-magnet-aria2/handoff.md) | 待手验 |
-
-## download-http-ingest（**已落地** · D-20260923-02）
-
-> 下载第一刀：HTTP(S) 直链 → 暂存 → 复制进视频库。无磁力、无 aria2。
-
-| 文档 | 内容 |
-|------|------|
-| [`download-http-ingest/需求.md`](download-http-ingest/需求.md) | IN/OUT、US-D.1–5 |
-| [`download-http-ingest/设计.md`](download-http-ingest/设计.md) | 队列、入库、抽屉 |
-| [`download-http-ingest/实现方案.md`](download-http-ingest/实现方案.md) | REST、文件清单 |
-| [`download-http-ingest/handoff.md`](download-http-ingest/handoff.md) | 已编码，待手验 |
+> 自建下载功能（download-http-ingest / download-magnet-aria2）已随方向调整移除（D-20261007-01：下载委托第三方成熟下载器，产物经监视目录入库）。
 
 ## scrape-confirm-ux（**已落地** · 待手验）
 
@@ -296,17 +350,17 @@
 | `lrm-ui.md` | 页面结构（三栏布局） |
 | `lrm-tech-stack.md` | 技术栈决策（三进程架构、双服务、双引擎） |
 
-## tag-category-hygiene（**草案**）
+## tag-category-hygiene（**已定稿** · D-20260927-02）
 
-> LRM **P1 增量**：标签/分类词表统计与删除。依赖 M4 打标能力；实现排在 MS4.1，不挡当前浏览闭环。
+> LRM **P1 增量**：标签/分类词表统计与删除。依赖 M4 打标能力；实现排在 MS4.1，不挡当前浏览闭环。需求已定稿，待 L2/L3。
 
 | 文档 | 内容 |
 |------|------|
-| `tag-category-hygiene.md` | 词表膨胀治理：统计、删除、与 M4 边界、开放问题 |
+| `tag-category-hygiene.md` | 词表膨胀治理：统计、删除、与 M4 边界、轮次 2 决策清单 |
 
-## work-consumption-hub（**草案**）
+## work-consumption-hub（**已定稿** · D-20260927-05）
 
-> LRM 增量 Feature：工作上下文 + 消费渠道。依赖 LRM M0–M6。
+> LRM 增量 Feature：工作上下文 + 消费渠道。三份文档已定稿；主体已编码待手验，MS5/MS6 不再返工。
 
 | 文档 | 内容 |
 |------|------|

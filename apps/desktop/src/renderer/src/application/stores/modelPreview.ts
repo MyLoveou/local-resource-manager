@@ -10,7 +10,7 @@ export const useModelPreviewStore = defineStore('modelPreview', () => {
   const resourceId = ref<number | null>(null)
   const selection = useSelectionStore()
 
-  function open(id: number, _ids?: number[]): void {
+  function open(id: number): void {
     resourceId.value = id
     visible.value = true
     selection.select(id)

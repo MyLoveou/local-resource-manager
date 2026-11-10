@@ -1,0 +1,31 @@
+# 项目核心
+
+> 硬约束：`constraints.md`  
+> 编码/安全/Git 基线：`rules/common-*`
+
+## 仓库
+
+| 目录 | 职责 |
+|------|------|
+| `backend/` | API、持久化 |
+| `frontend/` | 页面、客户端 |
+| `docs/` | 需求、设计、产品 |
+
+## 不变量（按项目填写；权威见 `docs/product/facts.md` + `openspec/baseline.md`）
+
+1. （按项目填写；无基线则先起草基线并请用户确认）
+2. （按项目填写）
+
+## 禁止
+
+- 提交密钥、`.env`、本地数据库文件
+- 新能力在规划未确认前编码（见 OpenSpec 门禁 G1/G2）
+- 使用已废弃 API 路径（按项目维护清单）
+- 把未确认推测写成业务事实
+
+
+## 验收
+
+- backend compile/test；改 backend 后重启
+- frontend build
+

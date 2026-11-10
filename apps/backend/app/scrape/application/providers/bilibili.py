@@ -10,7 +10,7 @@ import httpx
 
 from app.scrape.application.images import normalize_https, unique_https
 from app.scrape.application.providers.base import MetadataProvider, ScrapeDetail, SearchHit
-from app.shared.models import WorkCatalog
+from app.library.domain.models import WorkCatalog
 
 _API = "https://api.bilibili.com/x/web-interface/view"
 _SEARCH = "https://api.bilibili.com/x/web-interface/search/type"

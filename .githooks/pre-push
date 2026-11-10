@@ -1,0 +1,30 @@
+#!/bin/sh
+# 推送前门禁：前端类型检查 + 后端快测。
+# 全量 pytest 约 7 分钟，放在这里太慢；只跑与本次改动最相关的快速子集。
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+# 便于临时跳过（明确写出来，避免悄悄绕过）
+if [ "$SKIP_GATES" = "1" ]; then
+  echo "[pre-push] SKIP_GATES=1，跳过门禁" >&2
+  exit 0
+fi
+
+if command -v pnpm >/dev/null 2>&1; then
+  echo "[pre-push] typecheck…"
+  if ! pnpm --filter desktop typecheck >/dev/null 2>&1; then
+    echo "[pre-push] typecheck 失败，推送已阻止" >&2
+    exit 1
+  fi
+fi
+
+python="apps/backend/.venv/Scripts/python.exe"
+if [ -f "$python" ]; then
+  echo "[pre-push] 后端快测…"
+  if ! "$python" -m pytest -q apps/backend/tests/test_tasks.py apps/backend/tests/test_scrape_queue_contract.py >/dev/null 2>&1; then
+    echo "[pre-push] 后端快测失败，推送已阻止" >&2
+    exit 1
+  fi
+fi
