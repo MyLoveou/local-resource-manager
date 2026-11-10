@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.prompts.application import transfer
 from app.prompts.application.library import library_payload, reset_cache
 from app.prompts.infrastructure import repo
 from app.shared.db.migrations import migrate
@@ -143,3 +144,46 @@ class SaveRepoTests(unittest.IsolatedAsyncioTestCase):
             await repo.update_save(session, save_id, {"image_data": "data:image/jpeg;base64,BBBB"}, None)
             row = await repo.get_save(session, save_id)
             self.assertEqual(row["image_data"], "data:image/jpeg;base64,BBBB")
+
+    async def test_export_and_import_dedupe(self) -> None:
+        async with self.factory() as session:
+            await repo.create_save(
+                session,
+                {"title": "A", "model": "anima", "positive": "1girl, solo", "negative": ""},
+                ["1girl"],
+            )
+
+            exported = await transfer.export_all(session)
+            self.assertEqual(exported["version"], 1)
+            self.assertEqual(len(exported["saves"]), 1)
+            self.assertEqual(exported["saves"][0]["tags"], ["1girl"])
+
+            # 同一份再导入一次 → 按正向去重
+            result = await transfer.import_payload(session, exported)
+            self.assertEqual(result["saves"], 0)
+            self.assertEqual(result["skipped"], 1)
+
+            # 换一条新的，能进
+            result = await transfer.import_payload(
+                session, {"saves": [{"title": "B", "positive": "1boy, solo"}]}
+            )
+            self.assertEqual(result["saves"], 1)
+            self.assertEqual(len(await repo.list_saves(session)), 2)
+
+    async def test_import_accepts_promptforge_shape(self) -> None:
+        async with self.factory() as session:
+            payload = {
+                "saves": [
+                    {"name": "PF 存档", "prompt": "1girl, smile", "neg": "lowres"},
+                    {"title": "空记录", "prompt": ""},
+                    "not a dict",
+                ],
+                "custom": {"tags": [{"en": "my tag", "zh": "我的"}]},
+            }
+            result = await transfer.import_payload(session, payload)
+            self.assertEqual(result["saves"], 1)
+            self.assertEqual(result["skipped"], 1)
+
+            row = (await repo.list_saves(session))[0]
+            self.assertEqual(row["positive"], "1girl, smile")
+            self.assertEqual(row["negative"], "lowres")

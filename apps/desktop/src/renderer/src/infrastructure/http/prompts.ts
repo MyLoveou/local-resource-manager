@@ -80,3 +80,18 @@ export async function addPromptHistory(body: {
 }): Promise<void> {
   await client.post('/prompts/history', body)
 }
+
+export async function exportPrompts(): Promise<Record<string, unknown>> {
+  const { data } = await client.get<Record<string, unknown>>('/prompts/export')
+  return data
+}
+
+export async function importPrompts(payload: Record<string, unknown>): Promise<{
+  saves: number
+  customTags: number
+  customPresets: number
+  skipped: number
+}> {
+  const { data } = await client.post('/prompts/import', payload)
+  return data
+}

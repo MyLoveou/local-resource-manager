@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.prompts.application import transfer
 from app.prompts.application.library import library_payload
 from app.prompts.infrastructure import repo
 from app.shared.db.db import get_session
@@ -215,3 +216,17 @@ async def put_settings(body: dict, session: AsyncSession = Depends(get_session))
         raise HTTPException(status_code=400, detail="需要对象")
     await repo.put_settings(session, body)
     return {"ok": True}
+
+
+@router.get("/export")
+async def export_saves(session: AsyncSession = Depends(get_session)) -> dict:
+    """导出全部存档与自定义内容，可直接保存为 JSON 备份。"""
+    return await transfer.export_all(session)
+
+
+@router.post("/import")
+async def import_saves(body: dict, session: AsyncSession = Depends(get_session)) -> dict:
+    """导入备份或 PromptForge 的导出 JSON；按正向内容去重。"""
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="需要 JSON 对象")
+    return await transfer.import_payload(session, body)

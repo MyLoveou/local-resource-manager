@@ -182,6 +182,7 @@ import {
 } from '@/infrastructure/http/prompts'
 import { notify } from '@/application/notify'
 import { compact, compose, pinyinOf, shrinkImage, trimEnd, type PickedTag } from '@/domain/prompts/format'
+import { downloadBackup, importBackup } from '@/domain/prompts/transfer'
 
 interface Tag {
   key: string
@@ -208,6 +209,7 @@ const saveTitle = ref('')
 const saving = ref(false)
 const draftImage = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const importInput = ref<HTMLInputElement | null>(null)
 
 const sortOptions = [
   { label: '按热度', value: 'hot' },
@@ -376,6 +378,33 @@ async function onPickImage(event: Event): Promise<void> {
     draftImage.value = await shrinkImage(file)
   } catch {
     notify.toast.error('图片处理失败')
+  }
+}
+
+async function doExport(): Promise<void> {
+  try {
+    await downloadBackup()
+    notify.toast.success('已导出')
+  } catch {
+    notify.toast.error('导出失败')
+  }
+}
+
+async function onImportFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const result = await importBackup(file)
+    notify.toast.success(
+      `导入完成：存档 ${result.saves} · 标签 ${result.customTags} · 预设 ${result.customPresets}（跳过 ${result.skipped}）`,
+    )
+    await loadSaves()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    notify.toast.error(detail ? `导入失败：${detail}` : '导入失败')
+  } finally {
+    input.value = ''
   }
 }
 
