@@ -8,7 +8,7 @@ export interface ImportResult {
   skipped: number
 }
 
-export async function downloadBackup(): Promise<void> {
+export async function downloadBackup(): Promise<number> {
   const payload = await exportPrompts()
   const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -17,6 +17,7 @@ export async function downloadBackup(): Promise<void> {
   link.download = `prompts-${new Date().toISOString().slice(0, 10)}.json`
   link.click()
   URL.revokeObjectURL(url)
+  return Array.isArray(payload.saves) ? payload.saves.length : 0
 }
 
 export async function importBackup(file: File): Promise<ImportResult> {

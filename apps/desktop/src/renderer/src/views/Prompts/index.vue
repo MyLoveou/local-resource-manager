@@ -179,12 +179,12 @@ import {
   getPromptLibrary,
   getPromptSettings,
   listPromptSaves,
-  putPromptSettings,
   type PromptLibrary,
   type PromptSave,
 } from '@/infrastructure/http/prompts'
 import { notify } from '@/application/notify'
 import { compact, compose, pinyinOf, shrinkImage, trimEnd, type PickedTag } from '@/domain/prompts/format'
+import { persistShowNsfw } from '@/domain/prompts/settings'
 import { downloadBackup, importBackup } from '@/domain/prompts/transfer'
 
 interface Tag {
@@ -385,7 +385,8 @@ async function onPickImage(event: Event): Promise<void> {
 }
 
 async function doExport(): Promise<void> {
-  await downloadBackup().then(() => notify.toast.success('已导出'), () => notify.toast.error('导出失败'))
+  const count = await downloadBackup()
+  notify.toast.success(count ? `已导出 ${count} 条存档` : '当前没有存档可导出')
 }
 
 async function onImportFile(event: Event): Promise<void> {
@@ -394,6 +395,10 @@ async function onImportFile(event: Event): Promise<void> {
   if (!file) return
   try {
     const result = await importBackup(file)
+    if (!result.saves && !result.skipped) {
+      notify.toast.warning('文件里没有可导入的存档')
+      return
+    }
     notify.toast.success(
       `导入完成：存档 ${result.saves} · 标签 ${result.customTags} · 预设 ${result.customPresets}（跳过 ${result.skipped}）`,
     )
@@ -415,11 +420,7 @@ async function loadSaves(): Promise<void> {
 }
 
 async function saveNsfw(value: boolean): Promise<void> {
-  try {
-    await putPromptSettings({ showNsfw: value })
-  } catch {
-    notify.toast.error('设置保存失败')
-  }
+  await persistShowNsfw(value).catch(() => notify.toast.error('设置保存失败'))
 }
 
 async function doSave(): Promise<void> {
