@@ -14,12 +14,14 @@ const IS_WIN = process.platform === 'win32'
 // electron-builder downloads Electron from GitHub by default, which is often
 // slow or blocked on Windows. Keep the build reproducible with the mirror used
 // by this project, while allowing an explicit override.
-if (IS_WIN && !process.env.ELECTRON_MIRROR) {
+// 镜像只在本地（国内网络）使用：GitHub Actions 直连下载更快，强行走镜像反而超时
+const USE_CN_MIRROR = IS_WIN && !process.env.CI
+if (USE_CN_MIRROR && !process.env.ELECTRON_MIRROR) {
   process.env.ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
 }
 
 // electron-builder 还会从 GitHub 拉 winCodeSign / nsis 等工具包，国内同样会超时
-if (IS_WIN && !process.env.ELECTRON_BUILDER_BINARIES_MIRROR) {
+if (USE_CN_MIRROR && !process.env.ELECTRON_BUILDER_BINARIES_MIRROR) {
   process.env.ELECTRON_BUILDER_BINARIES_MIRROR =
     'https://npmmirror.com/mirrors/electron-builder-binaries/'
 }
