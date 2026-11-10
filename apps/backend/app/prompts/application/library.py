@@ -11,6 +11,15 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
+LIBRARY_VERSION = 1
+
+
+def external_path() -> Path:
+    """用户导入的内置库文件；安装包不带数据时靠它。"""
+    from app.shared.config import settings
+
+    return settings.db_path.resolve().parent / "prompt-library.json"
+
 
 def _read(name: str):
     path = DATA_DIR / name
@@ -35,6 +44,14 @@ def _parse_tag_lines(blob: str) -> list[dict]:
             continue
         items.append({"en": en, "zh": zh.strip()})
     return items
+
+
+def _bundled_available() -> bool:
+    return (DATA_DIR / "tags.json").is_file()
+
+
+def is_available() -> bool:
+    return external_path().is_file() or _bundled_available()
 
 
 @lru_cache(maxsize=1)
@@ -84,6 +101,17 @@ def library_payload() -> dict:
         for item in _read("tpls.json")
     ]
 
+    external = external_path()
+    if external.is_file():
+        import json as _json
+
+        payload = _json.loads(external.read_text(encoding="utf-8"))
+        payload["source"] = "imported"
+        for model in (payload.get("models") or {}).values():
+            if isinstance(model, dict):
+                model["prefix"] = (model.get("prefix") or "").rstrip(" ,，")
+        return payload
+
     models = _read("models.json")
     # 模型前缀以 ", " 结尾时与后续标签拼接会出现双重逗号
     for model in models.values():
@@ -91,6 +119,7 @@ def library_payload() -> dict:
             model["prefix"] = (model.get("prefix") or "").rstrip(" ,，")
 
     return {
+        "source": "bundled" if _bundled_available() else "missing",
         "models": models,
         "danbooru": _read("danbooru.json"),
         "categories": categories,
@@ -109,3 +138,31 @@ def library_payload() -> dict:
 
 def reset_cache() -> None:
     library_payload.cache_clear()
+
+
+def export_payload() -> dict:
+    """导出内置库：结构与 /prompts/library 一致，另有版本号。"""
+    payload = dict(library_payload())
+    payload.pop("source", None)
+    return {"version": LIBRARY_VERSION, "app": "local-resource-manager", **payload}
+
+
+def import_payload(payload: dict) -> dict:
+    """写入用户数据目录，随后从该文件加载。"""
+    if not isinstance(payload, dict) or not isinstance(payload.get("categories"), list):
+        raise ValueError("不是有效的内置库文件")
+    path = external_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    import json as _json
+
+    path.write_text(_json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    reset_cache()
+    loaded = library_payload()
+    return {
+        "categories": len(loaded.get("categories") or []),
+        "characters": len(loaded.get("characters") or []),
+        "presets": len(loaded.get("presets") or []),
+        "templates": len(loaded.get("templates") or []),
+        "danbooru": len(loaded.get("danbooru") or []),
+        "path": str(path),
+    }

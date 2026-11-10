@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.prompts.application import library as prompt_library
 from app.prompts.application import transfer
 from app.prompts.application.library import library_payload, reset_cache
 from app.prompts.infrastructure import repo
@@ -187,3 +188,32 @@ class SaveRepoTests(unittest.IsolatedAsyncioTestCase):
             row = (await repo.list_saves(session))[0]
             self.assertEqual(row["positive"], "1girl, smile")
             self.assertEqual(row["negative"], "lowres")
+
+    def test_library_export_import_roundtrip(self) -> None:
+        import tempfile
+
+        payload = prompt_library.export_payload()
+        self.assertEqual(payload["version"], 1)
+        self.assertGreaterEqual(len(payload["categories"]), 20)
+        self.assertGreaterEqual(len(payload["danbooru"]), 1000)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "prompt-library.json"
+            original = prompt_library.external_path
+            prompt_library.external_path = lambda: target  # type: ignore[assignment]
+            try:
+                info = prompt_library.import_payload(payload)
+                self.assertTrue(target.is_file())
+                self.assertGreaterEqual(info["danbooru"], 1000)
+
+                prompt_library.reset_cache()
+                loaded = prompt_library.library_payload()
+                self.assertEqual(loaded.get("source"), "imported")
+                self.assertGreaterEqual(len(loaded["categories"]), 20)
+            finally:
+                prompt_library.external_path = original  # type: ignore[assignment]
+                prompt_library.reset_cache()
+
+    def test_library_import_rejects_garbage(self) -> None:
+        with self.assertRaises(ValueError):
+            prompt_library.import_payload({"nope": []})

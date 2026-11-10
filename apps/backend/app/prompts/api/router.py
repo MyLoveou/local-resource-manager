@@ -9,6 +9,7 @@ from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.prompts.application import transfer
+from app.prompts.application import library
 from app.prompts.application.library import library_payload
 from app.prompts.infrastructure import repo
 from app.shared.db.db import get_session
@@ -65,6 +66,25 @@ class CustomPresetIn(StrictApiModel):
     name: str
     category: str | None = None
     tags: str = ""
+
+
+@router.get("/library/status")
+async def library_status() -> dict:
+    return {"available": library.is_available(), "source": library_payload().get("source")}
+
+
+@router.get("/library/export")
+async def export_library() -> dict:
+    """导出内置库，便于安装包不带数据时手动导入。"""
+    return library.export_payload()
+
+
+@router.post("/library/import")
+async def import_library(body: dict) -> dict:
+    try:
+        return library.import_payload(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/library")

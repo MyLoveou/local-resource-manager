@@ -21,10 +21,17 @@
         保存
       </n-button>
       <n-button size="small" quaternary :disabled="!hasAny" @click="clearAll">清空</n-button>
-      <n-button size="small" quaternary @click="doExport">导出</n-button>
-      <n-button size="small" quaternary @click="importInput?.click()">导入</n-button>
-      <input ref="importInput" type="file" accept="application/json,.json" class="ps__file" @change="onImportFile" />
+      <n-dropdown trigger="click" :options="transferOptions" @select="onTransfer">
+        <n-button size="small" quaternary>导入导出</n-button>
+      </n-dropdown>
+      <input ref="saveInput" type="file" accept="application/json,.json" class="ps__file" @change="onImportFile" />
+      <input ref="libInput" type="file" accept="application/json,.json" class="ps__file" @change="onLibraryFile" />
     </header>
+
+    <div v-if="!libraryReady" class="ps__notice">
+      内置库尚未导入，当前只能使用已保存的提示词。
+      <button type="button" class="ps__link" @click="libInput?.click()">导入内置库</button>
+    </div>
 
     <div class="ps__body">
       <nav class="ps__rail">
@@ -44,106 +51,34 @@
         </template>
       </nav>
 
-      <section class="ps__stage">
-        <div class="ps__stage-head">
-          <strong>{{ stageTitle }}</strong>
-          <span class="ps__muted">{{ stageCount }} 项</span>
-          <span v-if="selectedTotal" class="ps__muted">· 已选 {{ selectedTotal }}</span>
-          <span v-if="search.trim()" class="ps__muted">· 全局搜索</span>
-        </div>
+      <PromptStage
+        :title="stageTitle"
+        :total="stageCount"
+        :tags="visibleTags"
+        :picked="picked"
+        :selected="selectedTotal"
+        :searching="!!search.trim()"
+        :remaining="stageCount - visibleTags.length"
+        @toggle="toggle"
+        @more="limit += PAGE"
+      />
 
-        <div class="ps__tags">
-          <button
-            v-for="tag in visibleTags"
-            :key="tag.key"
-            type="button"
-            :class="['ps__tag', { 'is-on': picked.has(tag.en), 'is-artist': tag.cat === 'artist' }]"
-            :title="`${tag.en}${tag.zh ? ' · ' + tag.zh : ''}`"
-            @click="toggle(tag)"
-          >
-            <span class="ps__tag-name">{{ tag.zh || tag.en }}</span>
-            <em v-if="tag.count" class="ps__tag-count">{{ compact(tag.count) }}</em>
-          </button>
-          <p v-if="!visibleTags.length" class="ps__empty">没有匹配的标签</p>
-        </div>
-
-        <footer v-if="hasMore" class="ps__more">
-          <n-button size="tiny" quaternary @click="limit += PAGE">加载更多（还有 {{ stageCount - visibleTags.length }}）</n-button>
-        </footer>
-      </section>
-
-      <aside class="ps__composer">
-        <div class="ps__tabs">
-          <button
-            type="button"
-            :class="['ps__tab', { 'is-active': tab === 'positive' }]"
-            @click="tab = 'positive'"
-          >
-            正面 <em>{{ pos.length }}</em>
-          </button>
-          <button
-            type="button"
-            :class="['ps__tab', { 'is-active': tab === 'negative' }]"
-            @click="tab = 'negative'"
-          >
-            负面 <em>{{ neg.length }}</em>
-          </button>
-          <button
-            v-if="tab === 'negative'"
-            type="button"
-            class="ps__link"
-            @click="fillModelNegative"
-          >
-            载入模型负面
-          </button>
-        </div>
-
-        <div class="ps__chips">
-          <span v-for="(item, index) in activeList" :key="item.en" class="ps__chip">
-            <span class="ps__chip-name" :title="item.en">{{ item.zh || item.en }}</span>
-            <template v-if="tab === 'positive'">
-              <button type="button" @click="bump(index, -0.1)">−</button>
-              <em>{{ item.weight.toFixed(1) }}</em>
-              <button type="button" @click="bump(index, 0.1)">+</button>
-            </template>
-            <button type="button" class="ps__chip-x" @click="activeList.splice(index, 1)">×</button>
-          </span>
-          <p v-if="!activeList.length" class="ps__empty">
-            {{ tab === 'positive' ? '从中间点选标签' : '可留空，或载入模型负面' }}
-          </p>
-        </div>
-
-        <textarea
-          v-if="tab === 'positive'"
-          class="ps__out"
-          readonly
-          rows="6"
-          :value="positive"
-        />
-        <textarea
-          v-else
-          class="ps__out"
-          rows="6"
-          :value="negative"
-          @input="onNegativeInput"
-        />
-
-        <div class="ps__stage-head">
-          <strong>最近存档</strong>
-          <button type="button" class="ps__link" @click="loadSaves">刷新</button>
-        </div>
-        <ul v-if="saves.length" class="ps__saves">
-          <li v-for="item in saves" :key="item.id">
-            <img v-if="item.image_data" class="ps__thumb" :src="item.image_data" alt="" />
-            <span v-else class="ps__thumb ps__thumb--empty" />
-            <button type="button" class="ps__save-name" :title="item.positive" @click="loadSave(item)">
-              {{ item.title }}
-            </button>
-            <button type="button" class="ps__chip-x" @click="removeSave(item.id)">×</button>
-          </li>
-        </ul>
-        <p v-else class="ps__empty">还没有存档</p>
-      </aside>
+      <PromptComposer
+        :tab="tab"
+        :items="activeList"
+        :output="tab === 'positive' ? positive : negative"
+        :positive-count="pos.length"
+        :negative-count="neg.length"
+        :saves="saves"
+        @update:tab="tab = $event"
+        @bump="bump"
+        @remove="activeList.splice($event, 1)"
+        @fill-negative="fillModelNegative"
+        @write="onNegativeInput"
+        @refresh-saves="loadSaves"
+        @load-save="loadSave"
+        @remove-save="removeSave"
+      />
     </div>
 
     <n-modal
@@ -171,7 +106,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { NButton, NInput, NModal, NSelect, NSwitch } from 'naive-ui'
+import { NButton, NDropdown, NInput, NModal, NSelect, NSwitch } from 'naive-ui'
 import {
   addPromptHistory,
   createPromptSave,
@@ -183,9 +118,12 @@ import {
   type PromptSave,
 } from '@/infrastructure/http/prompts'
 import { notify } from '@/application/notify'
+import type { StageTag } from '@/components/PromptStage/index.vue'
 import { compact, compose, pinyinOf, shrinkImage, trimEnd, type PickedTag } from '@/domain/prompts/format'
+import PromptComposer from '@/components/PromptComposer/index.vue'
+import PromptStage from '@/components/PromptStage/index.vue'
 import { persistShowNsfw } from '@/domain/prompts/settings'
-import { downloadBackup, importBackup } from '@/domain/prompts/transfer'
+import { downloadBackup, downloadLibrary, importBackup, importLibrary } from '@/domain/prompts/transfer'
 
 interface Tag {
   key: string
@@ -212,7 +150,21 @@ const saveTitle = ref('')
 const saving = ref(false)
 const draftImage = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
-const importInput = ref<HTMLInputElement | null>(null)
+const saveInput = ref<HTMLInputElement | null>(null)
+const libInput = ref<HTMLInputElement | null>(null)
+
+const transferOptions = [
+  { label: '导出存档', key: 'export-saves' },
+  { label: '导入存档', key: 'import-saves' },
+  { label: '导出内置库', key: 'export-library' },
+  { label: '导入内置库', key: 'import-library' },
+]
+
+const libraryReady = computed(() => {
+  const lib = library.value
+  if (!lib) return true
+  return (lib.categories?.length ?? 0) > 0 || (lib.danbooru?.length ?? 0) > 0
+})
 
 const sortOptions = [
   { label: '按热度', value: 'hot' },
@@ -324,7 +276,7 @@ function selectCategory(id: string): void {
   search.value = ''
 }
 
-function toggle(tag: Tag): void {
+function toggle(tag: StageTag): void {
   const list = activeList.value
   const index = list.findIndex((item) => item.en === tag.en)
   if (index >= 0) list.splice(index, 1)
@@ -345,8 +297,7 @@ function fillModelNegative(): void {
     .map((en) => ({ en, zh: '', weight: 1 }))
 }
 
-function onNegativeInput(event: Event): void {
-  const text = (event.target as HTMLTextAreaElement).value
+function onNegativeInput(text: string): void {
   neg.value = text
     .split(',')
     .map((part) => part.trim())
@@ -387,6 +338,34 @@ async function onPickImage(event: Event): Promise<void> {
 async function doExport(): Promise<void> {
   const count = await downloadBackup()
   notify.toast.success(count ? `已导出 ${count} 条存档` : '当前没有存档可导出')
+}
+
+function onTransfer(key: string): void {
+  if (key === 'export-saves') void doExport()
+  else if (key === 'import-saves') saveInput.value?.click()
+  else if (key === 'export-library') void doLibraryExport()
+  else if (key === 'import-library') libInput.value?.click()
+}
+
+async function doLibraryExport(): Promise<void> {
+  const count = await downloadLibrary().catch(() => -1)
+  if (count < 0) notify.toast.error('内置库导出失败')
+  else notify.toast.success(`已导出内置库（${count} 项）`)
+}
+
+async function onLibraryFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    notify.toast.success(await importLibrary(file))
+    library.value = await getPromptLibrary()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    notify.toast.error(detail ? `导入失败：${detail}` : '导入失败')
+  } finally {
+    input.value = ''
+  }
 }
 
 async function onImportFile(event: Event): Promise<void> {
@@ -533,6 +512,17 @@ onMounted(async () => {
 
 .ps__spacer {
   flex: 1;
+}
+
+.ps__notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--sm-color-border, #e5e7eb);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
 }
 
 .ps__body {

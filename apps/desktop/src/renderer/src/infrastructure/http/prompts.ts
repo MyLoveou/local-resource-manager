@@ -95,3 +95,20 @@ export async function importPrompts(payload: Record<string, unknown>): Promise<{
   const { data } = await client.post('/prompts/import', payload)
   return data
 }
+
+export async function exportPromptLibrary(): Promise<Record<string, unknown>> {
+  const { data } = await client.get<Record<string, unknown>>('/prompts/library/export')
+  return data
+}
+
+export async function importPromptLibrary(payload: Record<string, unknown>): Promise<{
+  categories: number
+  characters: number
+  presets: number
+  templates: number
+  danbooru: number
+  path: string
+}> {
+  const { data } = await client.post('/prompts/library/import', payload)
+  return data
+}
