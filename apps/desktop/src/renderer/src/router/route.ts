@@ -60,7 +60,7 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Prompts/index.vue'),
     meta: {
       title: '提示词',
-      icon: 'robot',
+      icon: 'tag-text-outline',
     },
   },
   {

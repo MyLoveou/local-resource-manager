@@ -1,137 +1,145 @@
 <template>
   <div class="ps">
-    <header class="ps__head">
-      <div class="ps__head-left">
-        <n-select v-model:value="model" size="small" :options="modelOptions" class="ps__model" />
-        <n-input
-          v-model:value="search"
-          size="small"
-          clearable
-          placeholder="搜索标签：中文 / 英文 / 拼音"
-          class="ps__search"
-        />
-      </div>
-      <div class="ps__head-right">
-        <n-button size="small" :disabled="!positive" @click="copy(positive)">复制正面</n-button>
-        <n-button size="small" :disabled="!negative" @click="copy(negative)">复制负面</n-button>
-        <n-button size="small" type="primary" :disabled="!positive" @click="saveOpen = true">
-          保存
-        </n-button>
-        <span class="ps__switch"><n-switch v-model:value="showNsfw" size="small" @update:value="saveNsfw" /> 成人向</span>
-        <n-button size="small" quaternary :disabled="!hasAny" @click="clearAll">清空</n-button>
-      </div>
+    <header class="ps__top">
+      <n-select v-model:value="model" size="small" :options="modelOptions" class="ps__model" />
+      <n-input
+        v-model:value="search"
+        size="small"
+        clearable
+        placeholder="搜索全部标签：中文 / 英文 / 拼音"
+        class="ps__search"
+      />
+      <n-select v-model:value="sortMode" size="small" class="ps__sort" :options="sortOptions" />
+      <label class="ps__nsfw">
+        <n-switch v-model:value="showNsfw" size="small" @update:value="saveNsfw" />
+        成人向
+      </label>
+      <div class="ps__spacer" />
+      <n-button size="small" :disabled="!positive" @click="copy(positive)">复制正面</n-button>
+      <n-button size="small" :disabled="!negative" @click="copy(negative)">复制负面</n-button>
+      <n-button size="small" type="primary" :disabled="!positive" @click="saveOpen = true">
+        保存
+      </n-button>
+      <n-button size="small" quaternary :disabled="!hasAny" @click="clearAll">清空</n-button>
     </header>
 
     <div class="ps__body">
-      <nav class="ps__nav">
-        <button
-          v-for="item in navItems"
-          :key="item.id"
-          type="button"
-          :class="['ps__nav-item', { 'is-active': item.id === category }]"
-          @click="category = item.id"
-        >
-          <span class="ps__nav-name">{{ item.icon }} {{ item.name }}</span>
-          <span class="ps__nav-count">{{ item.count }}</span>
-        </button>
+      <nav class="ps__rail">
+        <template v-for="group in navGroups" :key="group.label">
+          <div class="ps__group">{{ group.label }}</div>
+          <button
+            v-for="item in group.items"
+            :key="item.id"
+            type="button"
+            :class="['ps__nav', { 'is-active': item.id === category }]"
+            @click="selectCategory(item.id)"
+          >
+            <span class="ps__nav-icon">{{ item.icon }}</span>
+            <span class="ps__nav-name">{{ item.name }}</span>
+            <span class="ps__nav-count">{{ compact(item.count) }}</span>
+          </button>
+        </template>
       </nav>
 
-      <section class="ps__pick">
-        <div class="ps__mode">
-          <button
-            type="button"
-            :class="['ps__mode-btn', { 'is-active': mode === 'positive' }]"
-            @click="mode = 'positive'"
-          >
-            正向 <em>{{ pos.length }}</em>
-          </button>
-          <button
-            type="button"
-            :class="['ps__mode-btn', { 'is-active': mode === 'negative' }]"
-            @click="mode = 'negative'"
-          >
-            负面 <em>{{ neg.length }}</em>
-          </button>
-          <span class="ps__mode-hint">点击标签会加入当前编辑的一侧</span>
-          <n-select
-            v-model:value="sortMode"
-            size="tiny"
-            class="ps__sort"
-            :options="[
-              { label: '按热度', value: 'hot' },
-              { label: '按名称', value: 'name' },
-            ]"
-          />
+      <section class="ps__stage">
+        <div class="ps__stage-head">
+          <strong>{{ stageTitle }}</strong>
+          <span class="ps__muted">{{ stageCount }} 项</span>
+          <span v-if="selectedTotal" class="ps__muted">· 已选 {{ selectedTotal }}</span>
+          <span v-if="search.trim()" class="ps__muted">· 全局搜索</span>
         </div>
 
         <div class="ps__tags">
           <button
             v-for="tag in visibleTags"
-            :key="tag.en"
+            :key="tag.key"
             type="button"
-            :class="['ps__tag', { 'is-on': picked.has(tag.en) }]"
-            :title="tag.en"
+            :class="['ps__tag', { 'is-on': picked.has(tag.en), 'is-artist': tag.cat === 'artist' }]"
+            :title="`${tag.en}${tag.zh ? ' · ' + tag.zh : ''}`"
             @click="toggle(tag)"
           >
-            <span>{{ tag.zh || tag.en }}</span>
+            <span class="ps__tag-name">{{ tag.zh || tag.en }}</span>
             <em v-if="tag.count" class="ps__tag-count">{{ compact(tag.count) }}</em>
           </button>
           <p v-if="!visibleTags.length" class="ps__empty">没有匹配的标签</p>
         </div>
+
+        <footer v-if="hasMore" class="ps__more">
+          <n-button size="tiny" quaternary @click="limit += PAGE">加载更多（还有 {{ stageCount - visibleTags.length }}）</n-button>
+        </footer>
       </section>
 
-      <aside class="ps__side">
-        <section class="ps__card">
-          <div class="ps__card-head">
-            <span>正面 · {{ pos.length }}</span>
-            <button type="button" class="ps__link" :disabled="!pos.length" @click="pos = []">
-              清空
-            </button>
-          </div>
-          <ul v-if="pos.length" class="ps__chips">
-            <li v-for="(item, index) in pos" :key="item.en" class="ps__chip">
-              <span class="ps__chip-name" :title="item.en">{{ item.zh || item.en }}</span>
-              <button type="button" @click="bump(pos, index, -0.1)">−</button>
+      <aside class="ps__composer">
+        <div class="ps__tabs">
+          <button
+            type="button"
+            :class="['ps__tab', { 'is-active': tab === 'positive' }]"
+            @click="tab = 'positive'"
+          >
+            正面 <em>{{ pos.length }}</em>
+          </button>
+          <button
+            type="button"
+            :class="['ps__tab', { 'is-active': tab === 'negative' }]"
+            @click="tab = 'negative'"
+          >
+            负面 <em>{{ neg.length }}</em>
+          </button>
+          <button
+            v-if="tab === 'negative'"
+            type="button"
+            class="ps__link"
+            @click="fillModelNegative"
+          >
+            载入模型负面
+          </button>
+        </div>
+
+        <div class="ps__chips">
+          <span v-for="(item, index) in activeList" :key="item.en" class="ps__chip">
+            <span class="ps__chip-name" :title="item.en">{{ item.zh || item.en }}</span>
+            <template v-if="tab === 'positive'">
+              <button type="button" @click="bump(index, -0.1)">−</button>
               <em>{{ item.weight.toFixed(1) }}</em>
-              <button type="button" @click="bump(pos, index, 0.1)">+</button>
-              <button type="button" class="ps__chip-x" @click="pos.splice(index, 1)">×</button>
-            </li>
-          </ul>
-          <p v-else class="ps__empty">从中间选标签</p>
-          <textarea class="ps__out" readonly rows="4" :value="positive" />
-        </section>
+              <button type="button" @click="bump(index, 0.1)">+</button>
+            </template>
+            <button type="button" class="ps__chip-x" @click="activeList.splice(index, 1)">×</button>
+          </span>
+          <p v-if="!activeList.length" class="ps__empty">
+            {{ tab === 'positive' ? '从中间点选标签' : '可留空，或载入模型负面' }}
+          </p>
+        </div>
 
-        <section class="ps__card">
-          <div class="ps__card-head">
-            <span>负面 · {{ neg.length }}</span>
-            <button type="button" class="ps__link" @click="fillModelNegative">载入模型负面</button>
-          </div>
-          <ul v-if="neg.length" class="ps__chips">
-            <li v-for="(item, index) in neg" :key="item.en" class="ps__chip">
-              <span class="ps__chip-name" :title="item.en">{{ item.zh || item.en }}</span>
-              <button type="button" class="ps__chip-x" @click="neg.splice(index, 1)">×</button>
-            </li>
-          </ul>
-          <p v-else class="ps__empty">可留空，或点「载入模型负面」</p>
-          <textarea class="ps__out" rows="3" :value="negative" @input="onNegativeInput" />
-        </section>
+        <textarea
+          v-if="tab === 'positive'"
+          class="ps__out"
+          readonly
+          rows="6"
+          :value="positive"
+        />
+        <textarea
+          v-else
+          class="ps__out"
+          rows="6"
+          :value="negative"
+          @input="onNegativeInput"
+        />
 
-        <section class="ps__card ps__card--list">
-          <div class="ps__card-head">
-            <span>最近存档</span>
-            <button type="button" class="ps__link" @click="loadSaves">刷新</button>
-          </div>
-          <ul v-if="saves.length" class="ps__saves">
-            <li v-for="item in saves" :key="item.id">
-              <img v-if="item.image_data" class="ps__thumb" :src="item.image_data" alt="" />
-              <button type="button" class="ps__save-name" :title="item.positive" @click="loadSave(item)">
-                {{ item.title }}
-              </button>
-              <button type="button" class="ps__chip-x" @click="removeSave(item.id)">×</button>
-            </li>
-          </ul>
-          <p v-else class="ps__empty">还没有存档</p>
-        </section>
+        <div class="ps__stage-head">
+          <strong>最近存档</strong>
+          <button type="button" class="ps__link" @click="loadSaves">刷新</button>
+        </div>
+        <ul v-if="saves.length" class="ps__saves">
+          <li v-for="item in saves" :key="item.id">
+            <img v-if="item.image_data" class="ps__thumb" :src="item.image_data" alt="" />
+            <span v-else class="ps__thumb ps__thumb--empty" />
+            <button type="button" class="ps__save-name" :title="item.positive" @click="loadSave(item)">
+              {{ item.title }}
+            </button>
+            <button type="button" class="ps__chip-x" @click="removeSave(item.id)">×</button>
+          </li>
+        </ul>
+        <p v-else class="ps__empty">还没有存档</p>
       </aside>
     </div>
 
@@ -141,7 +149,7 @@
         <input ref="fileInput" type="file" accept="image/*" class="ps__file" @change="onPickImage" />
         <n-button size="tiny" @click="pickImage">选择风格预览图</n-button>
         <img v-if="draftImage" class="ps__preview" :src="draftImage" alt="" />
-        <span class="ps__empty">{{ pos.length }} 正向 · {{ neg.length }} 负面 · {{ modelLabel }}</span>
+        <span class="ps__muted">{{ pos.length }} 正向 · {{ neg.length }} 负面 · {{ modelLabel }}</span>
       </div>
       <div class="ps__modal-actions">
         <n-button size="small" @click="saveOpen = false">取消</n-button>
@@ -152,8 +160,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { NButton, NInput, NModal, NSelect } from 'naive-ui'
+import { computed, onMounted, ref, watch } from 'vue'
+import { NButton, NInput, NModal, NSelect, NSwitch } from 'naive-ui'
 import {
   addPromptHistory,
   createPromptSave,
@@ -166,44 +174,43 @@ import {
   type PromptSave,
 } from '@/infrastructure/http/prompts'
 import { notify } from '@/application/notify'
+import { compact, compose, pinyinOf, shrinkImage, trimEnd, type PickedTag } from '@/domain/prompts/format'
 
-interface Picked {
+interface Tag {
+  key: string
   en: string
   zh: string
-  weight: number
+  count: number
+  cat: string
 }
 
+const PAGE = 240
 const library = ref<PromptLibrary | null>(null)
 const model = ref('anima')
-const category = ref('')
+const category = ref('danbooru:general')
 const search = ref('')
-const mode = ref<'positive' | 'negative'>('positive')
-const pos = ref<Picked[]>([])
-const neg = ref<Picked[]>([])
+const sortMode = ref<'hot' | 'name'>('hot')
+const showNsfw = ref(false)
+const tab = ref<'positive' | 'negative'>('positive')
+const limit = ref(PAGE)
+const pos = ref<PickedTag[]>([])
+const neg = ref<PickedTag[]>([])
 const saves = ref<PromptSave[]>([])
 const saveOpen = ref(false)
 const saveTitle = ref('')
-const showNsfw = ref(false)
-const sortMode = ref<'hot' | 'name'>('hot')
 const saving = ref(false)
 const draftImage = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const categories = computed(() =>
+const sortOptions = [
+  { label: '按热度', value: 'hot' },
+  { label: '按名称', value: 'name' },
+]
+
+const builtinCategories = computed(() =>
   (library.value?.categories ?? []).filter((item) => showNsfw.value || item.id !== 'nsfw'),
 )
 const danbooru = computed(() => library.value?.danbooru ?? [])
-const navItems = computed(() => [
-  { id: 'danbooru:general', name: 'Danbooru 热门', icon: '📚', count: danbooru.value.filter((x) => x.cat === 'general').length },
-  { id: 'danbooru:artist', name: 'Danbooru 画师', icon: '🎨', count: danbooru.value.filter((x) => x.cat === 'artist').length },
-  { id: 'danbooru:character', name: 'Danbooru 角色', icon: '🎭', count: danbooru.value.filter((x) => x.cat === 'character').length },
-  ...categories.value.map((item) => ({
-    id: item.id,
-    name: item.name,
-    icon: item.icon,
-    count: item.tags.length,
-  })),
-])
 const modelOptions = computed(() =>
   Object.entries(library.value?.models ?? {}).map(([value, item]) => ({
     label: item.name || value,
@@ -213,82 +220,105 @@ const modelOptions = computed(() =>
 const modelLabel = computed(() => library.value?.models?.[model.value]?.name ?? model.value)
 const prefix = computed(() => trimEnd(library.value?.models?.[model.value]?.prefix ?? ''))
 const modelNegative = computed(() => library.value?.models?.[model.value]?.negative ?? '')
+const activeList = computed(() => (tab.value === 'positive' ? pos.value : neg.value))
 const hasAny = computed(() => pos.value.length > 0 || neg.value.length > 0)
-const picked = computed(
-  () => new Set([...pos.value, ...neg.value].map((item) => item.en)),
-)
-
-const visibleTags = computed(() => {
-  const list = currentTags.value
-  const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return sortTags(list).slice(0, 400)
-  const filtered = list.filter((tag) => {
-      const zh = (tag.zh || '').toLowerCase()
-      if (tag.en.toLowerCase().includes(keyword) || zh.includes(keyword)) return true
-      return pinyinOf(zh).startsWith(keyword)
-    })
-  return sortTags(filtered).slice(0, 200)
-})
-
-function sortTags(tags: { en: string; zh: string; count: number }[]) {
-  if (sortMode.value === 'name') return [...tags].sort((a, b) => a.en.localeCompare(b.en))
-  return [...tags].sort((a, b) => b.count - a.count)
-}
-
-const currentTags = computed(() => {
-  if (category.value.startsWith('danbooru:')) {
-    const cat = category.value.split(':')[1]
-    return danbooru.value
-      .filter((item) => item.cat === cat && (showNsfw.value || !item.nsfw))
-      .map((item) => ({ en: item.en, zh: item.zh, count: item.count }))
-  }
-  return (categories.value.find((item) => item.id === category.value)?.tags ?? []).map((item) => ({
-    ...item,
-    count: 0,
-  }))
-})
-
+const selectedTotal = computed(() => pos.value.length + neg.value.length)
+const picked = computed(() => new Set([...pos.value, ...neg.value].map((item) => item.en)))
 const positive = computed(() => compose(pos.value, prefix.value))
 const negative = computed(() => compose(neg.value, ''))
 
-function trimEnd(text: string): string {
-  return text.replace(/[\s,，]+$/, '')
+const navGroups = computed(() => {
+  const danbooruItems = [
+    { id: 'danbooru:general', name: '热门标签', icon: '📚' },
+    { id: 'danbooru:artist', name: '画师', icon: '🎨' },
+    { id: 'danbooru:character', name: '角色', icon: '🎭' },
+  ].map((item) => ({
+    ...item,
+    count: danbooru.value.filter((tag) => tag.cat === item.id.split(':')[1]).length,
+  }))
+  return [
+    { label: 'Danbooru', items: danbooruItems },
+    {
+      label: '内置标签',
+      items: builtinCategories.value.map((item) => ({
+        id: item.id,
+        name: item.name,
+        icon: item.icon,
+        count: item.tags.length,
+      })),
+    },
+  ]
+})
+
+const stageTitle = computed(() => {
+  if (search.value.trim()) return '搜索结果'
+  for (const group of navGroups.value) {
+    const found = group.items.find((item) => item.id === category.value)
+    if (found) return `${found.icon} ${found.name}`
+  }
+  return '标签'
+})
+
+/** 当前分类或全局搜索得到的完整列表（未排序未分页） */
+const allTags = computed<Tag[]>(() => {
+  const keyword = search.value.trim().toLowerCase()
+  if (keyword) {
+    const fromBuiltin = builtinCategories.value.flatMap((categoryItem) =>
+      categoryItem.tags.map((tag) => ({ key: `${categoryItem.id}:${tag.en}`, en: tag.en, zh: tag.zh, count: 0, cat: categoryItem.id })),
+    )
+    const fromDanbooru = danbooru.value
+      .filter((tag) => showNsfw.value || !tag.nsfw)
+      .map((tag) => ({ key: `danbooru:${tag.en}`, en: tag.en, zh: tag.zh, count: tag.count, cat: tag.cat }))
+    return [...fromBuiltin, ...fromDanbooru].filter((tag) => {
+      if (tag.en.toLowerCase().includes(keyword) || (tag.zh || '').toLowerCase().includes(keyword)) return true
+      return pinyinOf(tag.zh || '', library.value?.pinyin ?? {}).startsWith(keyword)
+    })
+  }
+  if (category.value.startsWith('danbooru:')) {
+    const cat = category.value.split(':')[1]
+    return danbooru.value
+      .filter((tag) => tag.cat === cat && (showNsfw.value || !tag.nsfw))
+      .map((tag) => ({ key: `danbooru:${tag.en}`, en: tag.en, zh: tag.zh, count: tag.count, cat: tag.cat }))
+  }
+  const found = builtinCategories.value.find((item) => item.id === category.value)
+  return (found?.tags ?? []).map((tag) => ({
+    key: `${category.value}:${tag.en}`,
+    en: tag.en,
+    zh: tag.zh,
+    count: 0,
+    cat: category.value,
+  }))
+})
+
+const stagedTags = computed(() => {
+  const list = [...allTags.value]
+  if (sortMode.value === 'name') list.sort((a, b) => a.en.localeCompare(b.en))
+  else list.sort((a, b) => b.count - a.count)
+  return list
+})
+
+const stageCount = computed(() => stagedTags.value.length)
+const visibleTags = computed(() => stagedTags.value.slice(0, limit.value))
+const hasMore = computed(() => visibleTags.value.length < stageCount.value)
+
+watch([category, search, sortMode, showNsfw], () => {
+  limit.value = PAGE
+})
+
+function selectCategory(id: string): void {
+  category.value = id
+  search.value = ''
 }
 
-function compose(list: Picked[], head: string): string {
-  const body = list
-    .map((item) => (item.weight === 1 ? item.en : `(${item.en}:${item.weight.toFixed(1)})`))
-    .join(', ')
-  if (!head) return body
-  return body ? `${head}, ${body}` : head
+function toggle(tag: Tag): void {
+  const list = activeList.value
+  const index = list.findIndex((item) => item.en === tag.en)
+  if (index >= 0) list.splice(index, 1)
+  else list.push({ en: tag.en, zh: tag.zh, weight: 1 })
 }
 
-function compact(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`
-  return String(value)
-}
-
-function pinyinOf(zh: string): string {
-  const dict = library.value?.pinyin ?? {}
-  let out = ''
-  for (const char of zh) out += dict[char]?.split(',')[0] ?? char
-  return out
-}
-
-function activeList(): typeof pos {
-  return mode.value === 'positive' ? pos : neg
-}
-
-function toggle(tag: { en: string; zh: string }): void {
-  const list = activeList()
-  const index = list.value.findIndex((item) => item.en === tag.en)
-  if (index >= 0) list.value.splice(index, 1)
-  else list.value.push({ en: tag.en, zh: tag.zh, weight: 1 })
-}
-
-function bump(list: Picked[], index: number, delta: number): void {
-  const item = list[index]
+function bump(index: number, delta: number): void {
+  const item = activeList.value[index]
   if (!item) return
   item.weight = Math.min(2, Math.max(0.5, Number((item.weight + delta).toFixed(1))))
 }
@@ -326,11 +356,33 @@ async function copy(text: string): Promise<void> {
   }
 }
 
+function pickImage(): void {
+  fileInput.value?.click()
+}
+
+async function onPickImage(event: Event): Promise<void> {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  try {
+    draftImage.value = await shrinkImage(file)
+  } catch {
+    notify.toast.error('图片处理失败')
+  }
+}
+
 async function loadSaves(): Promise<void> {
   try {
     saves.value = await listPromptSaves({})
   } catch {
     saves.value = []
+  }
+}
+
+async function saveNsfw(value: boolean): Promise<void> {
+  try {
+    await putPromptSettings({ showNsfw: value })
+  } catch {
+    notify.toast.error('设置保存失败')
   }
 }
 
@@ -359,43 +411,6 @@ async function doSave(): Promise<void> {
   }
 }
 
-function pickImage(): void {
-  fileInput.value?.click()
-}
-
-async function onPickImage(event: Event): Promise<void> {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  draftImage.value = await shrink(file)
-}
-
-/** 缩到 384px 的 JPEG data URL，避免存档列表过大 */
-function shrink(file: File, max = 384): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () => reject(new Error('读取图片失败'))
-    reader.onload = () => {
-      const image = new Image()
-      image.onerror = () => reject(new Error('解析图片失败'))
-      image.onload = () => {
-        const scale = Math.min(1, max / Math.max(image.width, image.height))
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.round(image.width * scale)
-        canvas.height = Math.round(image.height * scale)
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject(new Error('画布不可用'))
-          return
-        }
-        ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.82))
-      }
-      image.src = String(reader.result)
-    }
-    reader.readAsDataURL(file)
-  })
-}
-
 function loadSave(item: PromptSave): void {
   model.value = item.model
   pos.value = item.positive
@@ -416,20 +431,11 @@ async function removeSave(id: number): Promise<void> {
   await loadSaves()
 }
 
-async function saveNsfw(value: boolean): Promise<void> {
-  try {
-    await putPromptSettings({ showNsfw: value })
-  } catch {
-    notify.toast.error('设置保存失败')
-  }
-}
-
 onMounted(async () => {
   try {
     library.value = await getPromptLibrary()
     const settings = await getPromptSettings()
     showNsfw.value = Boolean(settings.showNsfw)
-    category.value = library.value.categories[0]?.id ?? ''
   } catch {
     notify.toast.error('内置库加载失败')
   }
@@ -443,26 +449,30 @@ onMounted(async () => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 16px 18px;
-  gap: 12px;
-  background: var(--sm-color-bg, transparent);
+  gap: 10px;
+  padding: 14px 16px;
 }
 
-.ps__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.ps__head-left,
-.ps__head-right {
+.ps__top {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.ps__switch {
+.ps__model {
+  width: 120px;
+}
+
+.ps__search {
+  width: 260px;
+}
+
+.ps__sort {
+  width: 100px;
+}
+
+.ps__nsfw {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -470,52 +480,71 @@ onMounted(async () => {
   color: var(--sm-color-text-muted, #6b7280);
 }
 
-.ps__model {
-  width: 132px;
-}
-
-.ps__search {
-  width: 280px;
+.ps__spacer {
+  flex: 1;
 }
 
 .ps__body {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr) 360px;
-  gap: 14px;
-  min-height: 0;
+  grid-template-columns: 168px minmax(0, 1fr) 372px;
+  gap: 12px;
   flex: 1;
+  min-height: 0;
+}
+
+.ps__rail {
+  overflow: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ps__group {
+  margin: 10px 0 4px;
+  padding-left: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--sm-color-text-muted, #9ca3af);
+}
+
+.ps__group:first-child {
+  margin-top: 0;
 }
 
 .ps__nav {
-  overflow: auto;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-right: 4px;
-}
-
-.ps__nav-item {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   border: none;
   background: transparent;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   font-size: 12.5px;
   color: inherit;
   cursor: pointer;
   text-align: left;
 }
 
-.ps__nav-item:hover {
+.ps__nav:hover {
   background: var(--sm-color-bg-muted, #f3f4f6);
 }
 
-.ps__nav-item.is-active {
+.ps__nav.is-active {
   background: var(--sm-color-bg-muted, #e9edf3);
   font-weight: 600;
+}
+
+.ps__nav-icon {
+  width: 16px;
+}
+
+.ps__nav-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ps__nav-count {
@@ -523,79 +552,51 @@ onMounted(async () => {
   color: var(--sm-color-text-muted, #9ca3af);
 }
 
-.ps__pick {
+.ps__stage {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 10px;
   border: 1px solid var(--sm-color-border, #e5e7eb);
   border-radius: 12px;
-  padding: 12px;
+  overflow: hidden;
 }
 
-.ps__mode {
+.ps__stage-head {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.ps__mode-btn {
-  border: 1px solid var(--sm-color-border, #e5e7eb);
-  background: transparent;
-  border-radius: 999px;
-  padding: 4px 14px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--sm-color-border, #e5e7eb);
   font-size: 12.5px;
-  color: inherit;
-  cursor: pointer;
 }
 
-.ps__mode-btn.is-active {
-  border-color: var(--sm-color-primary, #2080f0);
-  color: var(--sm-color-primary, #2080f0);
-  background: color-mix(in srgb, var(--sm-color-primary, #2080f0) 8%, transparent);
-}
-
-.ps__mode-btn em {
-  font-style: normal;
-  opacity: 0.7;
-  margin-left: 2px;
-}
-
-.ps__mode-hint {
+.ps__muted {
   font-size: 11.5px;
   color: var(--sm-color-text-muted, #9ca3af);
 }
 
 .ps__tags {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 6px;
-  overflow: auto;
-  padding-right: 4px;
 }
 
 .ps__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
   border: 1px solid var(--sm-color-border, #e5e7eb);
   background: transparent;
-  border-radius: 999px;
-  padding: 3px 11px;
+  border-radius: 8px;
+  padding: 4px 9px;
   font-size: 12.5px;
   color: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.ps__tag-count {
-  font-style: normal;
-  font-size: 10.5px;
-  margin-left: 4px;
-  opacity: 0.55;
-}
-
-.ps__sort {
-  width: 100px;
-  margin-left: auto;
 }
 
 .ps__tag:hover {
@@ -604,41 +605,75 @@ onMounted(async () => {
 
 .ps__tag.is-on {
   border-color: var(--sm-color-primary, #2080f0);
+  background: color-mix(in srgb, var(--sm-color-primary, #2080f0) 9%, transparent);
   color: var(--sm-color-primary, #2080f0);
-  background: color-mix(in srgb, var(--sm-color-primary, #2080f0) 8%, transparent);
 }
 
-.ps__side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: auto;
-  min-height: 0;
+.ps__tag.is-artist .ps__tag-name::before {
+  content: '@';
+  opacity: 0.5;
+  margin-right: 1px;
 }
 
-.ps__card {
-  border: 1px solid var(--sm-color-border, #e5e7eb);
-  border-radius: 12px;
-  padding: 10px 12px;
+.ps__tag-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ps__tag-count {
+  font-style: normal;
+  font-size: 10.5px;
+  opacity: 0.5;
+}
+
+.ps__more {
+  padding: 6px 12px;
+  border-top: 1px solid var(--sm-color-border, #e5e7eb);
+  text-align: center;
+}
+
+.ps__composer {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+  border: 1px solid var(--sm-color-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 10px 12px;
+  overflow: auto;
 }
 
-.ps__card--list {
-  flex: 1;
-  min-height: 120px;
-}
-
-.ps__card-head {
+.ps__tabs {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 12.5px;
-  font-weight: 600;
+  gap: 6px;
+}
+
+.ps__tab {
+  border: 1px solid var(--sm-color-border, #e5e7eb);
+  background: transparent;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ps__tab.is-active {
+  border-color: var(--sm-color-primary, #2080f0);
+  color: var(--sm-color-primary, #2080f0);
+}
+
+.ps__tab em {
+  font-style: normal;
+  opacity: 0.65;
+  margin-left: 2px;
 }
 
 .ps__link {
+  margin-left: auto;
   border: none;
   background: transparent;
   color: var(--sm-color-primary, #2080f0);
@@ -647,24 +682,20 @@ onMounted(async () => {
   padding: 0;
 }
 
-.ps__link:disabled {
-  color: var(--sm-color-text-muted, #cbd5e1);
-  cursor: default;
-}
-
 .ps__chips {
-  margin: 0;
-  padding: 0;
-  list-style: none;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: 132px;
+  min-height: 54px;
+  max-height: 150px;
   overflow: auto;
+  border: 1px dashed var(--sm-color-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 8px;
 }
 
 .ps__chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
   border: 1px solid var(--sm-color-border, #e5e7eb);
@@ -674,7 +705,7 @@ onMounted(async () => {
 }
 
 .ps__chip-name {
-  max-width: 130px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -692,13 +723,13 @@ onMounted(async () => {
 
 .ps__chip em {
   font-style: normal;
-  color: var(--sm-color-text-muted, #6b7280);
   min-width: 22px;
   text-align: center;
+  color: var(--sm-color-text-muted, #6b7280);
 }
 
 .ps__chip-x {
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .ps__out {
@@ -727,13 +758,24 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  overflow: auto;
 }
 
 .ps__saves li {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+.ps__thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.ps__thumb--empty {
+  background: var(--sm-color-bg-muted, #f3f4f6);
 }
 
 .ps__save-name {
@@ -757,7 +799,7 @@ onMounted(async () => {
 }
 
 .ps__modal {
-  width: 420px;
+  width: 440px;
 }
 
 .ps__attach {
@@ -778,14 +820,6 @@ onMounted(async () => {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--sm-color-border, #e5e7eb);
-}
-
-.ps__thumb {
-  width: 22px;
-  height: 22px;
-  object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
 }
 
 .ps__modal-actions {
