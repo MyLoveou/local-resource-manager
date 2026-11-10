@@ -143,12 +143,19 @@
       </aside>
     </div>
 
-    <n-modal v-model:show="saveOpen" preset="card" title="保存提示词" class="ps__modal">
+    <n-modal
+      v-model:show="saveOpen"
+      preset="card"
+      title="保存提示词"
+      :style="{ width: '460px' }"
+      class="ps__modal"
+    >
       <n-input v-model:value="saveTitle" placeholder="给这条提示词起个名字" />
       <div class="ps__attach">
         <input ref="fileInput" type="file" accept="image/*" class="ps__file" @change="onPickImage" />
         <n-button size="tiny" @click="pickImage">选择风格预览图</n-button>
         <img v-if="draftImage" class="ps__preview" :src="draftImage" alt="" />
+        <button v-if="draftImage" type="button" class="ps__preview-x" @click="draftImage = ''">×</button>
         <span class="ps__muted">{{ pos.length }} 正向 · {{ neg.length }} 负面 · {{ modelLabel }}</span>
       </div>
       <div class="ps__modal-actions">
@@ -800,9 +807,10 @@ onMounted(async () => {
   background: var(--sm-color-bg-muted, #f3f4f6);
 }
 
-.ps__modal {
-  width: 440px;
-}
+
+</style>
+
+<style lang="less">
 
 .ps__attach {
   display: flex;
@@ -822,6 +830,7 @@ onMounted(async () => {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--sm-color-border, #e5e7eb);
+  flex-shrink: 0;
 }
 
 .ps__modal-actions {
@@ -829,5 +838,17 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+.ps__preview-x {
+  border: 1px solid var(--sm-color-border, #e5e7eb);
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
 }
 </style>
