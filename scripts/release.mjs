@@ -4,7 +4,7 @@
  * 任一步失败即非零退出。
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -87,9 +87,25 @@ try {
     { shell: false }
   )
   run('ffprobe', 'node', [join(ROOT, 'scripts/copy-ffprobe.mjs')])
-  run('打包安装包', 'pnpm', ['exec', 'electron-builder', '--win', '--x64', '--publish', 'never'], {
-    cwd: join(ROOT, 'apps/desktop'),
-  })
+  // electron-builder 生成 NSIS 卸载器时会在输出目录里执行临时安装包；
+  // 仓库路径含中文时这一步会失败（exit 2），所以先输出到同盘的 ASCII 目录再搬回。
+  const stage = join(dirname(ROOT), '.lrm-release-out')
+  rmSync(stage, { recursive: true, force: true })
+  mkdirSync(stage, { recursive: true })
+  run(
+    '打包安装包',
+    'pnpm',
+    ['exec', 'electron-builder', '--win', '--x64', '--publish', 'never',
+     `--config.directories.output=${stage.replace(/\\/g, '/')}`],
+    { cwd: join(ROOT, 'apps/desktop') }
+  )
+  const releaseDir = join(ROOT, 'release')
+  mkdirSync(releaseDir, { recursive: true })
+  for (const entry of readdirSync(stage)) {
+    rmSync(join(releaseDir, entry), { recursive: true, force: true })
+    renameSync(join(stage, entry), join(releaseDir, entry))
+  }
+  rmSync(stage, { recursive: true, force: true })
   run('校验产物', 'node', [join(ROOT, 'scripts/verify-release.mjs')])
   console.log('\n==> 发布完成：release/')
 } catch (error) {
