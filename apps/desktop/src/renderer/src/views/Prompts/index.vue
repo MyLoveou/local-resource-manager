@@ -53,6 +53,15 @@
             负面 <em>{{ neg.length }}</em>
           </button>
           <span class="ps__mode-hint">点击标签会加入当前编辑的一侧</span>
+          <n-select
+            v-model:value="sortMode"
+            size="tiny"
+            class="ps__sort"
+            :options="[
+              { label: '按热度', value: 'hot' },
+              { label: '按名称', value: 'name' },
+            ]"
+          />
         </div>
 
         <div class="ps__tags">
@@ -64,7 +73,8 @@
             :title="tag.en"
             @click="toggle(tag)"
           >
-            {{ tag.zh || tag.en }}
+            <span>{{ tag.zh || tag.en }}</span>
+            <em v-if="tag.count" class="ps__tag-count">{{ compact(tag.count) }}</em>
           </button>
           <p v-if="!visibleTags.length" class="ps__empty">没有匹配的标签</p>
         </div>
@@ -174,6 +184,7 @@ const saves = ref<PromptSave[]>([])
 const saveOpen = ref(false)
 const saveTitle = ref('')
 const showNsfw = ref(false)
+const sortMode = ref<'hot' | 'name'>('hot')
 const saving = ref(false)
 const draftImage = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -183,7 +194,9 @@ const categories = computed(() =>
 )
 const danbooru = computed(() => library.value?.danbooru ?? [])
 const navItems = computed(() => [
-  { id: 'danbooru', name: 'Danbooru 热门', icon: '📚', count: danbooru.value.length },
+  { id: 'danbooru:general', name: 'Danbooru 热门', icon: '📚', count: danbooru.value.filter((x) => x.cat === 'general').length },
+  { id: 'danbooru:artist', name: 'Danbooru 画师', icon: '🎨', count: danbooru.value.filter((x) => x.cat === 'artist').length },
+  { id: 'danbooru:character', name: 'Danbooru 角色', icon: '🎭', count: danbooru.value.filter((x) => x.cat === 'character').length },
   ...categories.value.map((item) => ({
     id: item.id,
     name: item.name,
@@ -208,23 +221,31 @@ const picked = computed(
 const visibleTags = computed(() => {
   const list = currentTags.value
   const keyword = search.value.trim().toLowerCase()
-  if (!keyword) return list.slice(0, 400)
-  return list
-    .filter((tag) => {
+  if (!keyword) return sortTags(list).slice(0, 400)
+  const filtered = list.filter((tag) => {
       const zh = (tag.zh || '').toLowerCase()
       if (tag.en.toLowerCase().includes(keyword) || zh.includes(keyword)) return true
       return pinyinOf(zh).startsWith(keyword)
     })
-    .slice(0, 200)
+  return sortTags(filtered).slice(0, 200)
 })
 
+function sortTags(tags: { en: string; zh: string; count: number }[]) {
+  if (sortMode.value === 'name') return [...tags].sort((a, b) => a.en.localeCompare(b.en))
+  return [...tags].sort((a, b) => b.count - a.count)
+}
+
 const currentTags = computed(() => {
-  if (category.value === 'danbooru') {
+  if (category.value.startsWith('danbooru:')) {
+    const cat = category.value.split(':')[1]
     return danbooru.value
-      .filter((item) => showNsfw.value || !item.nsfw)
-      .map((item) => ({ en: item.en, zh: item.zh }))
+      .filter((item) => item.cat === cat && (showNsfw.value || !item.nsfw))
+      .map((item) => ({ en: item.en, zh: item.zh, count: item.count }))
   }
-  return categories.value.find((item) => item.id === category.value)?.tags ?? []
+  return (categories.value.find((item) => item.id === category.value)?.tags ?? []).map((item) => ({
+    ...item,
+    count: 0,
+  }))
 })
 
 const positive = computed(() => compose(pos.value, prefix.value))
@@ -240,6 +261,12 @@ function compose(list: Picked[], head: string): string {
     .join(', ')
   if (!head) return body
   return body ? `${head}, ${body}` : head
+}
+
+function compact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`
+  return String(value)
 }
 
 function pinyinOf(zh: string): string {
@@ -557,6 +584,18 @@ onMounted(async () => {
   color: inherit;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ps__tag-count {
+  font-style: normal;
+  font-size: 10.5px;
+  margin-left: 4px;
+  opacity: 0.55;
+}
+
+.ps__sort {
+  width: 100px;
+  margin-left: auto;
 }
 
 .ps__tag:hover {

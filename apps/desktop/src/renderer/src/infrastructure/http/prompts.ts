@@ -7,7 +7,7 @@ export interface PromptLibrary {
   characters: { game: string; name: string; tag: string; charZh: string; auto: string }[]
   presets: { name: string; desc: string; cat: string; tags: { en: string; zh: string }[] }[]
   templates: { id: string; name: string; desc: string; tags: { en: string; zh: string }[] }[]
-  danbooru?: { en: string; zh: string; count: number; aliases: string[]; nsfw: boolean }[]
+  danbooru?: { en: string; zh: string; count: number; aliases: string[]; nsfw: boolean; cat: string }[]
   rules: Record<string, unknown>
   pinyin: Record<string, string>
 }
