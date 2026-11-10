@@ -32,7 +32,7 @@ function groupForPath(path: string): (typeof GROUP_ORDER)[number] | null {
     path.startsWith('/characters') ||
     path.startsWith('/persons')
   ) return 'organize'
-  if (path === '/trash' || path === '/ai') return 'tools'
+  if (path === '/trash' || path === '/ai' || path === '/prompts') return 'tools'
   return null
 }
 
