@@ -80,7 +80,9 @@ async function waitHealth(url, timeoutMs) {
 }
 
 async function smokeFrozenBackend() {
-  const dir = mkdtempSync(join(tmpdir(), 'lrm-verify-'))
+  // 放在 release/ 下而不是系统临时目录：受限环境里子进程对 %TEMP% 可能没有写权限，
+  // 会让冻结后端在创建日志目录时以 WinError 5 失败。
+  const dir = mkdtempSync(join(RELEASE, '.verify-'))
   const port = await freePort()
   const dbPath = join(dir, 'library.db')
   const child = spawn(

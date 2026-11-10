@@ -18,6 +18,12 @@ if (IS_WIN && !process.env.ELECTRON_MIRROR) {
   process.env.ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
 }
 
+// electron-builder 还会从 GitHub 拉 winCodeSign / nsis 等工具包，国内同样会超时
+if (IS_WIN && !process.env.ELECTRON_BUILDER_BINARIES_MIRROR) {
+  process.env.ELECTRON_BUILDER_BINARIES_MIRROR =
+    'https://npmmirror.com/mirrors/electron-builder-binaries/'
+}
+
 function run(label, command, args, opts = {}) {
   console.log(`\n==> ${label}`)
   const result = spawnSync(command, args, {
