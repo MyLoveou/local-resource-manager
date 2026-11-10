@@ -420,19 +420,33 @@ async function doSave(): Promise<void> {
   }
 }
 
+/** 解析一条已保存的提示词：去掉模型前缀、还原 (tag:1.2) 权重、去重。 */
+function parsePrompt(text: string, head: string): PickedTag[] {
+  let body = text.trim()
+  if (head && body.startsWith(head)) {
+    body = body.slice(head.length).replace(/^[\s,，]+/, '')
+  }
+  const seen = new Set<string>()
+  const result: PickedTag[] = []
+  for (const part of body.split(',')) {
+    const piece = part.trim()
+    if (!piece) continue
+    const weighted = piece.match(/^\((.*):([\d.]+)\)$/)
+    const en = weighted ? weighted[1].trim() : piece
+    if (!en || seen.has(en)) continue
+    seen.add(en)
+    result.push({ en, zh: '', weight: weighted ? Number(weighted[2]) : 1 })
+  }
+  return result
+}
+
 function loadSave(item: PromptSave): void {
   model.value = item.model
-  pos.value = item.positive
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((en) => en !== prefix.value)
-    .map((en) => ({ en, zh: '', weight: 1 }))
-  neg.value = item.negative
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((en) => ({ en, zh: '', weight: 1 }))
+  // 用该存档自己的模型前缀清理，避免把前缀当成普通标签又拼一次
+  const ownPrefix = trimEnd(library.value?.models?.[item.model]?.prefix ?? '')
+  pos.value = parsePrompt(item.positive, ownPrefix)
+  neg.value = parsePrompt(item.negative, '')
+  tab.value = 'positive'
 }
 
 async function removeSave(id: number): Promise<void> {
