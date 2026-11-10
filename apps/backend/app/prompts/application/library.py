@@ -92,6 +92,7 @@ def library_payload() -> dict:
 
     return {
         "models": models,
+        "danbooru": _read("danbooru.json"),
         "categories": categories,
         "characters": characters,
         "presets": presets,

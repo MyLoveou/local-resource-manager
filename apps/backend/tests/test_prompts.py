@@ -24,6 +24,10 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(len(payload["templates"]), 12)
         self.assertIn("anima", payload["models"])
         self.assertIn("moss", payload["models"])
+        self.assertGreaterEqual(len(payload["danbooru"]), 1000)
+        top = payload["danbooru"][0]
+        self.assertIn("count", top)
+        self.assertGreater(top["count"], 1000)
 
     def test_tags_parsed(self) -> None:
         reset_cache()

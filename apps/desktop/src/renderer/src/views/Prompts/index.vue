@@ -17,6 +17,7 @@
         <n-button size="small" type="primary" :disabled="!positive" @click="saveOpen = true">
           保存
         </n-button>
+        <span class="ps__switch"><n-switch v-model:value="showNsfw" size="small" @update:value="saveNsfw" /> 成人向</span>
         <n-button size="small" quaternary :disabled="!hasAny" @click="clearAll">清空</n-button>
       </div>
     </header>
@@ -24,14 +25,14 @@
     <div class="ps__body">
       <nav class="ps__nav">
         <button
-          v-for="item in categories"
+          v-for="item in navItems"
           :key="item.id"
           type="button"
           :class="['ps__nav-item', { 'is-active': item.id === category }]"
           @click="category = item.id"
         >
           <span class="ps__nav-name">{{ item.icon }} {{ item.name }}</span>
-          <span class="ps__nav-count">{{ item.tags.length }}</span>
+          <span class="ps__nav-count">{{ item.count }}</span>
         </button>
       </nav>
 
@@ -148,7 +149,9 @@ import {
   createPromptSave,
   deletePromptSave,
   getPromptLibrary,
+  getPromptSettings,
   listPromptSaves,
+  putPromptSettings,
   type PromptLibrary,
   type PromptSave,
 } from '@/infrastructure/http/prompts'
@@ -170,11 +173,24 @@ const neg = ref<Picked[]>([])
 const saves = ref<PromptSave[]>([])
 const saveOpen = ref(false)
 const saveTitle = ref('')
+const showNsfw = ref(false)
 const saving = ref(false)
 const draftImage = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const categories = computed(() => library.value?.categories ?? [])
+const categories = computed(() =>
+  (library.value?.categories ?? []).filter((item) => showNsfw.value || item.id !== 'nsfw'),
+)
+const danbooru = computed(() => library.value?.danbooru ?? [])
+const navItems = computed(() => [
+  { id: 'danbooru', name: 'Danbooru 热门', icon: '📚', count: danbooru.value.length },
+  ...categories.value.map((item) => ({
+    id: item.id,
+    name: item.name,
+    icon: item.icon,
+    count: item.tags.length,
+  })),
+])
 const modelOptions = computed(() =>
   Object.entries(library.value?.models ?? {}).map(([value, item]) => ({
     label: item.name || value,
@@ -190,7 +206,7 @@ const picked = computed(
 )
 
 const visibleTags = computed(() => {
-  const list = categories.value.find((item) => item.id === category.value)?.tags ?? []
+  const list = currentTags.value
   const keyword = search.value.trim().toLowerCase()
   if (!keyword) return list.slice(0, 400)
   return list
@@ -200,6 +216,15 @@ const visibleTags = computed(() => {
       return pinyinOf(zh).startsWith(keyword)
     })
     .slice(0, 200)
+})
+
+const currentTags = computed(() => {
+  if (category.value === 'danbooru') {
+    return danbooru.value
+      .filter((item) => showNsfw.value || !item.nsfw)
+      .map((item) => ({ en: item.en, zh: item.zh }))
+  }
+  return categories.value.find((item) => item.id === category.value)?.tags ?? []
 })
 
 const positive = computed(() => compose(pos.value, prefix.value))
@@ -364,9 +389,19 @@ async function removeSave(id: number): Promise<void> {
   await loadSaves()
 }
 
+async function saveNsfw(value: boolean): Promise<void> {
+  try {
+    await putPromptSettings({ showNsfw: value })
+  } catch {
+    notify.toast.error('设置保存失败')
+  }
+}
+
 onMounted(async () => {
   try {
     library.value = await getPromptLibrary()
+    const settings = await getPromptSettings()
+    showNsfw.value = Boolean(settings.showNsfw)
     category.value = library.value.categories[0]?.id ?? ''
   } catch {
     notify.toast.error('内置库加载失败')
@@ -398,6 +433,14 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.ps__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--sm-color-text-muted, #6b7280);
 }
 
 .ps__model {

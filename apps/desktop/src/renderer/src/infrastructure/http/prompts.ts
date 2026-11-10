@@ -7,6 +7,7 @@ export interface PromptLibrary {
   characters: { game: string; name: string; tag: string; charZh: string; auto: string }[]
   presets: { name: string; desc: string; cat: string; tags: { en: string; zh: string }[] }[]
   templates: { id: string; name: string; desc: string; tags: { en: string; zh: string }[] }[]
+  danbooru?: { en: string; zh: string; count: number; aliases: string[]; nsfw: boolean }[]
   rules: Record<string, unknown>
   pinyin: Record<string, string>
 }
@@ -29,6 +30,15 @@ export interface PromptSave {
 export async function getPromptLibrary(): Promise<PromptLibrary> {
   const { data } = await client.get<PromptLibrary>('/prompts/library')
   return data
+}
+
+export async function getPromptSettings(): Promise<Record<string, unknown>> {
+  const { data } = await client.get<Record<string, unknown>>('/prompts/settings')
+  return data
+}
+
+export async function putPromptSettings(values: Record<string, unknown>): Promise<void> {
+  await client.put('/prompts/settings', values)
 }
 
 export async function listPromptSaves(params: { q?: string; tag?: string; favorite?: boolean } = {}) {
