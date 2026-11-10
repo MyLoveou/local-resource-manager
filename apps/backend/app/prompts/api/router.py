@@ -26,6 +26,7 @@ class SaveIn(StrictApiModel):
     categories: list[str] | None = None
     favorite: bool = False
     resource_id: int | None = None
+    image_data: str | None = None
     tags: list[str] = Field(default_factory=list)
 
 
@@ -38,6 +39,7 @@ class SavePatch(StrictApiModel):
     params: dict | str | None = None
     categories: list[str] | None = None
     favorite: bool | None = None
+    image_data: str | None = None
     tags: list[str] | None = None
 
 

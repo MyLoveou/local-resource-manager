@@ -12,7 +12,8 @@
         />
       </div>
       <div class="ps__head-right">
-        <n-button size="small" :disabled="!positive" @click="copyPositive">复制正面</n-button>
+        <n-button size="small" :disabled="!positive" @click="copy(positive)">复制正面</n-button>
+        <n-button size="small" :disabled="!negative" @click="copy(negative)">复制负面</n-button>
         <n-button size="small" type="primary" :disabled="!positive" @click="saveOpen = true">
           保存
         </n-button>
@@ -111,6 +112,7 @@
           </div>
           <ul v-if="saves.length" class="ps__saves">
             <li v-for="item in saves" :key="item.id">
+              <img v-if="item.image_data" class="ps__thumb" :src="item.image_data" alt="" />
               <button type="button" class="ps__save-name" :title="item.positive" @click="loadSave(item)">
                 {{ item.title }}
               </button>
@@ -124,7 +126,12 @@
 
     <n-modal v-model:show="saveOpen" preset="card" title="保存提示词" class="ps__modal">
       <n-input v-model:value="saveTitle" placeholder="给这条提示词起个名字" />
-      <p class="ps__empty">{{ pos.length }} 正向 · {{ neg.length }} 负面 · {{ modelLabel }}</p>
+      <div class="ps__attach">
+        <input ref="fileInput" type="file" accept="image/*" class="ps__file" @change="onPickImage" />
+        <n-button size="tiny" @click="pickImage">选择风格预览图</n-button>
+        <img v-if="draftImage" class="ps__preview" :src="draftImage" alt="" />
+        <span class="ps__empty">{{ pos.length }} 正向 · {{ neg.length }} 负面 · {{ modelLabel }}</span>
+      </div>
       <div class="ps__modal-actions">
         <n-button size="small" @click="saveOpen = false">取消</n-button>
         <n-button size="small" type="primary" :loading="saving" @click="doSave">保存</n-button>
@@ -164,6 +171,8 @@ const saves = ref<PromptSave[]>([])
 const saveOpen = ref(false)
 const saveTitle = ref('')
 const saving = ref(false)
+const draftImage = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const categories = computed(() => library.value?.categories ?? [])
 const modelOptions = computed(() =>
@@ -254,10 +263,11 @@ function clearAll(): void {
   neg.value = []
 }
 
-async function copyPositive(): Promise<void> {
+async function copy(text: string): Promise<void> {
+  if (!text) return
   try {
-    await navigator.clipboard.writeText(positive.value)
-    notify.toast.success('已复制正面')
+    await navigator.clipboard.writeText(text)
+    notify.toast.success('已复制')
     await addPromptHistory({ model: model.value, positive: positive.value, negative: negative.value })
   } catch {
     notify.toast.error('复制失败')
@@ -282,10 +292,12 @@ async function doSave(): Promise<void> {
       positive: positive.value,
       negative: negative.value,
       tags: pos.value.map((item) => item.en),
+      image_data: draftImage.value || undefined,
     })
     notify.toast.success('已保存')
     saveOpen.value = false
     saveTitle.value = ''
+    draftImage.value = ''
     await loadSaves()
   } catch (error) {
     const detail = error instanceof Error ? error.message : ''
@@ -293,6 +305,43 @@ async function doSave(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+function pickImage(): void {
+  fileInput.value?.click()
+}
+
+async function onPickImage(event: Event): Promise<void> {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  draftImage.value = await shrink(file)
+}
+
+/** 缩到 384px 的 JPEG data URL，避免存档列表过大 */
+function shrink(file: File, max = 384): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('读取图片失败'))
+    reader.onload = () => {
+      const image = new Image()
+      image.onerror = () => reject(new Error('解析图片失败'))
+      image.onload = () => {
+        const scale = Math.min(1, max / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(image.width * scale)
+        canvas.height = Math.round(image.height * scale)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('画布不可用'))
+          return
+        }
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      image.src = String(reader.result)
+    }
+    reader.readAsDataURL(file)
+  })
 }
 
 function loadSave(item: PromptSave): void {
@@ -627,6 +676,34 @@ onMounted(async () => {
 
 .ps__modal {
   width: 420px;
+}
+
+.ps__attach {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.ps__file {
+  display: none;
+}
+
+.ps__preview {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--sm-color-border, #e5e7eb);
+}
+
+.ps__thumb {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .ps__modal-actions {

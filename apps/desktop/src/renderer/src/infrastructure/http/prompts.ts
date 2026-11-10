@@ -21,6 +21,7 @@ export interface PromptSave {
   params?: Record<string, unknown> | null
   categories?: string[] | null
   favorite: boolean
+  image_data?: string | null
   created_at: string
   updated_at: string
 }
@@ -44,6 +45,7 @@ export async function createPromptSave(body: {
   params?: Record<string, unknown>
   favorite?: boolean
   tags?: string[]
+  image_data?: string
 }): Promise<{ id: number }> {
   const { data } = await client.post<{ id: number }>('/prompts/saves', body)
   return data

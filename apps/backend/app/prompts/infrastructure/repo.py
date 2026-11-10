@@ -83,9 +83,9 @@ async def create_save(session: AsyncSession, payload: dict, tags: list[str]) -> 
         text(
             "INSERT INTO prompt_saves"
             " (title, model, positive, negative, params_json, note, categories_json,"
-            "  favorite, resource_id, created_at, updated_at)"
+            "  favorite, resource_id, image_data, created_at, updated_at)"
             " VALUES (:title, :model, :positive, :negative, :params, :note, :categories,"
-            "         :favorite, :rid, :now, :now)"
+            "         :favorite, :rid, :image, :now, :now)"
         ),
         {
             "title": payload["title"],
@@ -101,6 +101,7 @@ async def create_save(session: AsyncSession, payload: dict, tags: list[str]) -> 
             else None,
             "favorite": 1 if payload.get("favorite") else 0,
             "rid": payload.get("resource_id"),
+            "image": payload.get("image_data"),
             "now": now,
         },
     )
@@ -123,6 +124,7 @@ async def update_save(
         "negative": payload.get("negative", row["negative"]),
         "note": payload.get("note", row["note"]),
         "favorite": 1 if payload.get("favorite", row["favorite"]) else 0,
+        "image": payload.get("image_data", row.get("image_data")),
         "params": json.dumps(payload["params"], ensure_ascii=False)
         if payload.get("params") is not None
         else (json.dumps(row["params"], ensure_ascii=False) if row["params"] else None),
@@ -136,7 +138,7 @@ async def update_save(
         text(
             "UPDATE prompt_saves SET title = :title, model = :model, positive = :positive,"
             " negative = :negative, note = :note, favorite = :favorite, params_json = :params,"
-            " categories_json = :categories, updated_at = :now WHERE id = :id"
+            " categories_json = :categories, image_data = :image, updated_at = :now WHERE id = :id"
         ),
         fields,
     )

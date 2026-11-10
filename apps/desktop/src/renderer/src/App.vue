@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
 import MenuBar from '@/ui/layouts/MenuBar/index.vue'
 import ToolBar from '@/ui/layouts/ToolBar/index.vue'
@@ -18,6 +19,8 @@ import { useThemeStore } from '@/application/stores/theme'
 import { readNaiveOverrides } from '@/ui/theme/applyTheme'
 import { useWatchAutoRefresh } from '@/hooks/useWatchAutoRefresh'
 
+const route = useRoute()
+const showInspector = computed(() => !route.path.startsWith('/prompts'))
 const menuItems = computed(() => menuFromRoutes(routes, isSectionHidden))
 const theme = useThemeStore()
 const themeOverrides = computed(() => {
@@ -51,7 +54,7 @@ useWatchAutoRefresh()
         <ModelPreviewOverlay />
         <SuggestionBadge />
         <template #inspector>
-          <InfoPanel />
+          <InfoPanel v-if="showInspector" />
         </template>
       </AppShell>
     </n-message-provider>

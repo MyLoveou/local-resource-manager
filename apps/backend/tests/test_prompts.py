@@ -120,3 +120,22 @@ class SaveRepoTests(unittest.IsolatedAsyncioTestCase):
             settings = await repo.get_settings(session)
             self.assertEqual(settings["defaultModel"], "moss")
             self.assertFalse(settings["showNsfw"])
+    async def test_save_keeps_preview_image(self) -> None:
+        async with self.factory() as session:
+            save_id = await repo.create_save(
+                session,
+                {
+                    "title": "带图",
+                    "model": "anima",
+                    "positive": "1girl",
+                    "negative": "",
+                    "image_data": "data:image/jpeg;base64,AAAA",
+                },
+                [],
+            )
+            row = await repo.get_save(session, save_id)
+            self.assertEqual(row["image_data"], "data:image/jpeg;base64,AAAA")
+
+            await repo.update_save(session, save_id, {"image_data": "data:image/jpeg;base64,BBBB"}, None)
+            row = await repo.get_save(session, save_id)
+            self.assertEqual(row["image_data"], "data:image/jpeg;base64,BBBB")
