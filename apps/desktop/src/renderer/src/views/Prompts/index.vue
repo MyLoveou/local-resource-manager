@@ -21,6 +21,9 @@
         保存
       </n-button>
       <n-button size="small" quaternary :disabled="!hasAny" @click="clearAll">清空</n-button>
+      <n-button size="small" quaternary @click="doExport">导出</n-button>
+      <n-button size="small" quaternary @click="importInput?.click()">导入</n-button>
+      <input ref="importInput" type="file" accept="application/json,.json" class="ps__file" @change="onImportFile" />
     </header>
 
     <div class="ps__body">
@@ -382,12 +385,7 @@ async function onPickImage(event: Event): Promise<void> {
 }
 
 async function doExport(): Promise<void> {
-  try {
-    await downloadBackup()
-    notify.toast.success('已导出')
-  } catch {
-    notify.toast.error('导出失败')
-  }
+  await downloadBackup().then(() => notify.toast.success('已导出'), () => notify.toast.error('导出失败'))
 }
 
 async function onImportFile(event: Event): Promise<void> {
