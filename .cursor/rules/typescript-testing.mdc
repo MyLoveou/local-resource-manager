@@ -1,0 +1,13 @@
+---
+description: "TypeScript testing extending common rules"
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+alwaysApply: false
+---
+
+# TypeScript/JavaScript Testing
+
+> This file extends the common testing rule with TypeScript/JavaScript specific content.
+
+## E2E
+
+关键链路用项目已有的浏览器或接口检查，记入 `tests.md`。本库没有 `e2e-runner` Agent。

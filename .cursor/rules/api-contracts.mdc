@@ -1,0 +1,21 @@
+---
+description: "API 契约与响应信封（改接口时必读）"
+globs: "{backend/**/controller/**,backend/**/dto/**,frontend/**/api/**,docs/design/*API*}"
+alwaysApply: false
+---
+
+# API 契约
+
+> 项目权威：`docs/design/03-API设计.md`（路径按项目调整）
+
+## 信封
+
+成功：`{ "data": T, "meta?": {}, "page?": {} }`  
+失败：`{ "error": { "code", "message", "details" } }`
+
+## 变更检查单
+
+1. 路径与 API 文档一致
+2. DTO 与数据模型文档一致
+3. 前端 types + api 同步
+4. 需求已定稿（新能力）或 bug 范围明确

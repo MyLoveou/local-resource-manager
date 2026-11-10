@@ -26,8 +26,9 @@ def main() -> int:
         pass
 
     if not SOURCE.is_file():
-        print(f"源数据库不存在：{SOURCE}")
-        return 1
+        # 全新环境（库还没建）不该阻止提交；此时也没有需要快照的迁移状态
+        print(f"源数据库不存在，跳过快照：{SOURCE}")
+        return 0
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     target = TARGET_DIR / f"library-{stamp}.db"

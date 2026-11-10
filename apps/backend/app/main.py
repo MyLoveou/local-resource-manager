@@ -271,6 +271,8 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 app.include_router(library_router, prefix="/library")
 from app.tasks_api.router import router as tasks_router
 app.include_router(tasks_router)
+from app.prompts.api.router import router as prompts_router
+app.include_router(prompts_router)
 app.include_router(ai_router, prefix="/ai")
 app.include_router(scrape_router, prefix="/scrape")
 app.include_router(settings_router, prefix="/settings")

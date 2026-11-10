@@ -1,0 +1,34 @@
+---
+description: "Vue Testing"
+globs: "**/*.spec.ts, **/*.test.ts, **/__tests__/**/*.ts, **/*.vue"
+alwaysApply: false
+---
+
+# Vue Testing
+
+> Extends `typescript-testing` and `common-testing`.
+
+## Stack
+
+- **Vitest** + **@vue/test-utils** (preferred for Vite projects)
+- Mount with `global.plugins` for Pinia and Router stubs
+
+## Component tests
+
+- Test behavior and emitted events, not implementation details
+- Use `data-testid` or roles for queries; avoid brittle CSS selectors
+- Stub child components when testing parent orchestration
+
+## Composable tests
+
+- Test composables with `withSetup` helper or mount dummy component
+- Mock `fetch` / API layer, not internal refs
+
+## E2E
+
+- 关键链路：登录、主路径、失败态
+- 跨页验收走 `verification-gate`。本库没有 `@e2e-runner`
+
+## Coverage
+
+以 `constraints.md` 与 `common/testing.md` 为准。优先 store、composable、表单校验。不强制覆盖率百分比。

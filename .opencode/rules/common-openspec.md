@@ -1,0 +1,59 @@
+# OpenSpec 门禁
+
+新能力与大改走 `project-spec` Skill。修缺陷、改样式、先定界面方向分别走 `project-spec-fix` / `project-spec-style` / `project-spec-design`。CLI 命令以 `openspec --help` 为准。
+
+## 场景分流（先选 Skill）
+
+| 场景 | Skill | 全量 propose |
+|------|--------|----------------|
+| 新能力、改契约 | `project-spec` | 是 |
+| 缺陷（行为已错） | `project-spec-fix` | 否（`skip_specs`） |
+| 只改观感 | `project-spec-style` | 否 |
+| 先定视觉方向 | `project-spec-design` | 否，且本轮不写业务代码 |
+
+## 浓缩基线（必读）
+
+业务仓必须有：
+
+1. **事实基线** `docs/product/facts.md`：项目**实现**（现状、路径）+ 项目**方向**（近端要成为什么、明确不做）
+2. **决策记忆** `docs/product/decisions.md`：每次拍板的压缩条目（跨会话）
+3. **浓缩约束** `openspec/baseline.md`，否则 `docs/product/baseline.md`（不变量、禁止、验收命令，约 80 行）
+
+**没有事实基线或浓缩约束**：先按模板起草 → 标「待你确认」→ **STOP**，不得编码（特化场景同样）。  
+基线与 facts 只写已确认事实；不确定写「未确认」。禁止用聊天记忆代替 `decisions.md`。
+
+新能力的**给人读的落点**与 `requirements-refinement` 相同：
+
+- L1 规范：`docs/requirements/features/<id>/需求.md`
+- L2 设计：`docs/requirements/features/<id>/设计.md`（复杂需求必做）
+- L3 施工：`docs/requirements/features/<id>/实现方案.md`
+
+OpenSpec `changes/<name>/` 与上述文档必须同范围、同分层，禁止各写一套。
+
+复杂需求未完成 L2 并获确认：不得 apply、不得用文件清单代替设计。
+
+## 门禁（违反即 STOP）
+
+| ID | 规则 |
+|----|------|
+| G0 | 动手前读 `facts.md`、最近决策、浓缩基线；对照现有架构；冲突先问用户 |
+| G1 | propose 轮次只写规划产物，不改业务代码 |
+| G1a | 复杂需求：未完成已定稿 `设计.md` 不得写 L3、不得 apply；组合式须写明 UI/功能/算法、组合根与**切片契约** |
+| G2 | 未获用户「可以按方案实现 / apply」不得 apply |
+| G3 | 全量 change：每个 spec 场景映射 `tests.md`；**修缺陷**至少 1 条回归检查 |
+| G4 | 非显而易见的意图、不变量、权衡必须有注释（见 `comments` 规则） |
+| G5 | archive 前 `verification-gate` 通过，或用户书面接受风险 |
+| G6 | 会话结束：更新 handoff；本轮有拍板则追加 `docs/product/decisions.md` |
+| G7 | 用户反复强调的偏好：写入【规范待决断】，确认后才升为规则/Skill/基线/facts |
+| G8 | 禁止把推测写成已确认业务事实（含 facts 的实现与方向） |
+| G9 | 用户未要求不 commit / push |
+
+## 跨会话
+
+续作时先：读 `docs/product/facts.md` 与 `docs/product/decisions.md` 最近条目 → `openspec list` → 读进行中 change 的 `handoff.md` 与能力目录 `handoff.md`（若有）→ 再动手。  
+不要凭聊天记忆接着干。
+
+## 测试
+
+OpenSpec **全量**变更必须带 `tests.md`。修缺陷 / 改样式用精简 `tests.md` 或目视清单，禁止臆造 PASS。
+

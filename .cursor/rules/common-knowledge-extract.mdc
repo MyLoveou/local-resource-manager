@@ -1,0 +1,26 @@
+---
+description: "从会话与代码识别规则、规范与 Skill；确认前不得升为全局规则"
+alwaysApply: true
+---
+
+# 知识提炼
+
+命中下列信号时读 `knowledge-extract` Skill 并执行，不要只记在聊天里：
+
+- 用户说「记住」「以后都这样」「我反复强调」「不要再…」
+- 同一偏好在本会话出现 ≥2 次
+- 代码里稳定的分层、命名、错误处理、目录约定，但规则/基线没有
+- 某流程跳过就会出错，值得写成 Skill
+
+## 落点（须用户确认后才写入）
+
+| 类型 | 落点 |
+|------|------|
+| 全项目短约束 | `openspec/baseline.md` 或 `docs/product/baseline.md` |
+| 实现与方向 | `docs/product/facts.md` |
+| 历次拍板 | `docs/product/decisions.md`（压缩） |
+| 全局行为 | 本平台目录 `rules/` |
+| 栈/路径触发 | 带 globs 的项目规则 |
+| 可复述流程 | 本平台目录 `skills/` |
+
+未确认的只写入【规范待决断】。禁止把网上通用教条或臆造业务规则直接 alwaysApply。

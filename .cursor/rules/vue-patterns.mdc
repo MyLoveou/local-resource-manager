@@ -1,0 +1,38 @@
+---
+description: "Vue Patterns"
+globs: "**/*.vue, **/composables/**/*.ts, **/stores/**/*.ts"
+alwaysApply: false
+---
+
+# Vue Patterns
+
+> Extends `typescript-patterns` and `common-patterns`.
+
+## Composition API
+
+- **State**: `ref` for primitives; `reactive` for grouped object state; `computed` for derived values
+- **Props**: `defineProps` + `withDefaults`; validate with TypeScript interfaces
+- **Emits**: `defineEmits` with typed event names
+- **Expose**: `defineExpose` only when parent must call child methods
+
+## Composables
+
+- One concern per composable (`usePagination`, `useAuth`)
+- Return readonly state when consumers should not mutate directly
+- Cleanup side effects in `onUnmounted`
+
+## Pinia
+
+- Option stores or setup stores; avoid duplicating server state without sync strategy
+- Actions for async API; getters for derived store state
+- No direct mutation of other stores from components — use actions
+
+## Router
+
+- Lazy-load route components: `() => import('./views/Page.vue')`
+- Navigation guards for auth; keep guard logic in composables when complex
+
+## 组合
+
+- 页面组装功能结果。公式与权限判断不写进模板
+- 组件库按项目已选的来，按需引入。不为每个基础控件再包一层
