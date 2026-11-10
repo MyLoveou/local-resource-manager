@@ -22,7 +22,7 @@ class SaveIn(StrictApiModel):
     positive: str = ""
     negative: str = ""
     note: str | None = None
-    params: dict | None = None
+    params: dict | str | None = None
     categories: list[str] | None = None
     favorite: bool = False
     resource_id: int | None = None
@@ -35,7 +35,7 @@ class SavePatch(StrictApiModel):
     positive: str | None = None
     negative: str | None = None
     note: str | None = None
-    params: dict | None = None
+    params: dict | str | None = None
     categories: list[str] | None = None
     favorite: bool | None = None
     tags: list[str] | None = None

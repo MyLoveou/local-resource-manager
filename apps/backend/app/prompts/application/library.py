@@ -84,8 +84,14 @@ def library_payload() -> dict:
         for item in _read("tpls.json")
     ]
 
+    models = _read("models.json")
+    # 模型前缀以 ", " 结尾时与后续标签拼接会出现双重逗号
+    for model in models.values():
+        if isinstance(model, dict):
+            model["prefix"] = (model.get("prefix") or "").rstrip(" ,，")
+
     return {
-        "models": _read("models.json"),
+        "models": models,
         "categories": categories,
         "characters": characters,
         "presets": presets,
