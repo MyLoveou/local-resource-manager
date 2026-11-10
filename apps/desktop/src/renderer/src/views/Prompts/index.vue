@@ -232,6 +232,8 @@ const navGroups = computed(() => {
     { id: 'danbooru:general', name: '热门标签', icon: '📚' },
     { id: 'danbooru:artist', name: '画师', icon: '🎨' },
     { id: 'danbooru:character', name: '角色', icon: '🎭' },
+    { id: 'danbooru:copyright', name: '作品', icon: '📺' },
+    { id: 'danbooru:meta', name: '元信息', icon: '🏷' },
   ].map((item) => ({
     ...item,
     count: danbooru.value.filter((tag) => tag.cat === item.id.split(':')[1]).length,

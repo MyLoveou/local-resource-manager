@@ -17,6 +17,9 @@ DATA = Path("apps/backend/app/prompts/data")
 
 CATEGORIES = {"0": "general", "1": "artist", "3": "copyright", "4": "character", "5": "meta"}
 
+# 每类保留的条数；meta 总量很小，全收
+LIMITS = {"general": 3000, "artist": 3000, "character": 3000, "copyright": 1500, "meta": 400}
+
 NSFW_HINTS = {
     "nude", "naked", "nipple", "nipples", "pussy", "penis", "sex", "cum", "semen",
     "anal", "oral", "fellatio", "cunnilingus", "masturbation", "orgasm", "ejaculation",
@@ -50,7 +53,7 @@ def is_nsfw(tag: str) -> bool:
 def main() -> int:
     csv_path = Path(sys.argv[1])
     limit = int(sys.argv[2]) if len(sys.argv) > 2 else 3000
-    wanted = {"general", "artist", "character"}
+    wanted = set(LIMITS)
 
     zh: dict[str, str] = {}
     for category in json.loads((DATA / "tags.json").read_text(encoding="utf-8")):
@@ -80,7 +83,7 @@ def main() -> int:
     payload: list[dict] = []
     for name, rows in buckets.items():
         rows.sort(key=lambda item: item[1], reverse=True)
-        for tag, uses, aliases in rows[:limit]:
+        for tag, uses, aliases in rows[: LIMITS[name]]:
             payload.append(
                 {
                     "en": tag,
